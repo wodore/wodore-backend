@@ -81,6 +81,10 @@ services:
       DATABASE_URL: "postgresql://${POSTGRES_USER:-wodore}:\
         ${POSTGRES_PASSWORD:-wodore}@db:5432/${POSTGRES_DB:-wodore}"
       MARTIN_SYNC_MOUNT: /martin_sync
+      # Transitland passthrough auth (martin.yaml transitland-stops source):
+      # resolved from the env registry by martin_sync into the generated
+      # config; this env var is the no-martin_sync fallback path.
+      TRANSITLAND_API_KEY: ${TRANSITLAND_API_KEY:-}
       RUST_LOG: debug
     command: --config /martin_sync/config/martin.yaml --webui enable-for-all
   tile-router:

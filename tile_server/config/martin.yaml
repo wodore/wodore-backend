@@ -314,6 +314,48 @@ postgres:
 cache_control: public, max-age=604800
 passthrough:
   sources:
+    # Transitland v2 vector tiles (https://www.transit.land/
+    # documentation/vector-tiles) — the transport-stops overlay upstream.
+    # Auth is a server-side header (the apikey NEVER reaches clients:
+    # no style URL carries it); `${TRANSITLAND_API_KEY}` expands from
+    # Martin's process env (docker-compose/lane-martin pass it through;
+    # martin_sync additionally bakes the env-registry value into the
+    # GENERATED config). Upstream serves z0-z14 MVT, rebuilt daily.
+    # Source id is underscore-only ON PURPOSE: the tile-router's .mlt
+    # location and the CDN-Tag map match [A-Za-z0-9_,] first segments
+    # (hyphens would break MLT serving and purge tagging — see
+    # tile_server/tile-router.conf.template).
+    # Cache: 4 days max-age + 4 days stale-while-revalidate (upstream
+    # rebuilds daily — worst case a tile is ~4d old while its refresh
+    # is in flight); Martin's internal moka cache additionally shields
+    # the upstream within the same zoom bounds (no per-source TTL exists
+    # upstream, the HTTP layer owns freshness).
+    transitland_stops:
+      url: >-
+        https://transit.land/api/v2/tiles/stops/tiles/{z}/{x}/{y}.pbf
+      headers:
+        apikey: ${TRANSITLAND_API_KEY:-}
+      format: mvt
+      # z5 = the overlay floor (full-country views request z5 tiles
+      # and overzoom); z14 = the upstream ceiling (deeper zooms
+      # overzoom client-side, no further requests).
+      minzoom: 5
+      maxzoom: 14
+      cache:
+        minzoom: 5
+        maxzoom: 14
+      cache_control: >-
+        public, max-age=345600, stale-while-revalidate=345600
+      # MLT v1 like huts/availability: serve-time MVT→MLT conversion on
+      # the explicit .mlt URL space (the tile-router strips the suffix
+      # and sends `Accept: application/vnd.maplibre-tile`). No-op on
+      # Martin ≥ 1.16 where conversion is implicit; config-gated for
+      # older.
+      convert_to_mlt: auto
+      attribution: >-
+        <a href='https://www.transit.land/'>Transitland</a> ·
+        <a href='https://www.openstreetmap.org/copyright'>© OpenStreetMap
+        contributors</a>
     hillshade:
       url: >-
         https://elevation-tiles-prod.s3.amazonaws.com/normal/{z}/{x}/{y}.png

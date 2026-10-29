@@ -98,6 +98,7 @@ start)
             --network "$NETWORK" \
             -e DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST}:5432/${DB_NAME}" \
             -e MARTIN_SYNC_MOUNT=/martin_sync \
+            -e TRANSITLAND_API_KEY="${TRANSITLAND_API_KEY:-}" \
             -v "$(pwd)/martin_sync:/martin_sync:ro" \
             "$IMAGE" --config /martin_sync/config/martin.yaml --webui enable-for-all' >/dev/null
     # 2) tile-router — the published single origin (PORT_END), same template

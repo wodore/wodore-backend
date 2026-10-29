@@ -721,257 +721,269 @@ def _huts_style_subset() -> dict[str, Any]:
 HUTS_STYLE_SUBSET: dict[str, Any] = _huts_style_subset()
 
 
-# ── Transport stops overlay (external geojson) ────────────────────────
+# ── Transport stops overlay (Transitland vector tiles via Martin) ────
 
-#: The FULL profile (WebGL/MapLibre sessions) stays UNCLUSTERED
-#: (owner decision 2026-10): plain source, one circle layer — the
-#: pre-clustering document.
-TRANSPORT_STYLE: dict[str, Any] = {
-    "version": 8,
-    "name": "transport-stops",
-    "sources": {
-        "transport-stops": {
-            "type": "geojson",
-            "data": (
-                "https://raw.githubusercontent.com/wodore/bav-haltestellen/"
-                "main/static/bav_list.geojson"
-            ),
-            "promoteId": "id",
-        },
-    },
-    "glyphs": GLYPHS,
-    "layers": [
-        {
-            "id": "transport-stops",
-            "type": "circle",
-            "source": "transport-stops",
-            "layout": {"visibility": "visible"},
-            "paint": {
-                "circle-color": [
-                    "case",
-                    ["in", "train", ["get", "types"]],
-                    "#C60018",
-                    ["in", "bus", ["get", "types"]],
-                    "#2d327d",
-                    "#0079C7",
+#: The Martin source id (``passthrough.sources`` in
+#: ``tile_server/config/martin.yaml``): Martin proxies the Transitland
+#: v2 stops tileset, injects the ``apikey`` header server-side (the
+#: key NEVER reaches clients — no token in any served URL), converts
+#: MVT→MLT at serve time and answers with a 4-day stale-while-revalidate
+#: Cache-Control. Upstream schema
+#: (https://www.transit.land/documentation/vector-tiles): source-layer
+#: ``stops``, z0–z14 (below z12 a shrinking stop sample — server-side
+#: density control replaces the old client-side clustering), attributes
+#: ``stop_name``, ``location_type`` (0 stop/platform, 1 station,
+#: 2 entrance, 3 generic node, 4 boarding area) and ``route_types_basic``
+#: — the basic GTFS route types served as a JSON string, e.g.
+#: ``"[2, 3]"`` (rail + bus).
+TRANSPORT_SOURCE_ID = "transitland_stops"
+
+#: GTFS basic route type → ``transport`` category child — the tree the
+#: legend and the filter resolve from, and the rows whose ``color`` the
+#: seed bakes into the paint (see :func:`transport_style`). ALL TEN
+#: basic GTFS types are covered — exactly what Transitland's
+#: ``route_types_basic`` can carry (0 tram, 1 subway/metro, 2 rail,
+#: 3 bus, 4 ferry, 5 cable tram, 6 aerial lift, 7 funicular,
+#: 11 trolleybus, 12 monorail — extended codes like 700 arrive reduced
+#: to these). This code-side table is the AUTHORITATIVE fast path (no
+#: DB round-trip); ``categories.0022`` mirrors the same pairing into
+#: each mode child's ``extra`` (``gtfs_route_type``) as data-side
+#: documentation — parity is test-pinned. Paint priority is
+#: rarest/most infrastructural mode first:
+#: a multi-mode interchange reads as its most defining mode (rail >
+#: tram > metro > lifts > ferry > trolleybus > bus — the spiritual
+#: successor of the old BAV layer's train-before-bus rule). Category-less
+#: stops (``route_types_basic`` absent or empty) fall through to the
+#: neutral ``other`` color.
+TRANSPORT_MODES: tuple[tuple[str, int], ...] = (
+    ("train_station", 2),
+    ("tram_stop", 0),
+    ("metro_station", 1),
+    ("monorail", 12),
+    ("funicular", 7),
+    ("gondola", 6),
+    ("cable_car", 5),
+    ("ferry", 4),
+    ("trolleybus", 11),
+    ("bus_stop", 3),
+)
+
+#: Seed-time fallback palette (map_seed overlays the live category
+#: rows' ``color`` values; this covers fresh installs before the
+#: categories migration ran). "other" deliberately has no category —
+#: it is the uncategorized remainder, not a legend entry.
+TRANSPORT_FALLBACK_COLORS: dict[str, str] = {
+    "train_station": "#C60018",  # SBB red (the old layer's "Train")
+    "tram_stop": "#00838F",
+    "metro_station": "#7B1FA2",
+    "monorail": "#455A64",
+    "funicular": "#795548",
+    "gondola": "#D81B60",  # aerial lift
+    "cable_car": "#FF8F00",  # cable tram
+    "ferry": "#0079C7",  # the old layer's "Other" blue → ferry
+    "trolleybus": "#9E9D24",
+    "bus_stop": "#2d327d",  # Post blue (the old layer's "Bus")
+    "other": "#6D6D6C",
+}
+
+
+def _route_type_present(basic_type: int) -> list[Any]:
+    """Boolean expression: the stop's ``route_types_basic`` JSON string
+    carries the given basic GTFS type.
+
+    Transitland serializes the sorted distinct codes comma-space
+    separated (``"[2, 3]"``, ``"[3]"``, ``"[0, 2, 11]"``) — a code is
+    present iff the string contains one of the four EXACT positions:
+    ``"[<code>]"`` (only element), ``"[<code>, "`` (first of several),
+    ``", <code>, "`` (middle) or ``", <code>]"`` (last). The
+    position-delimited needles are unambiguous across ALL basic codes
+    — shorter ``"[<code>"``/``", <code>"`` prefixes would make metro (1)
+    false-match trolleybus (11) and monorail (12) strings.
+    No regex (MapLibre has none) and no ``any``/``all`` (not in the
+    subset whitelist) — a four-branch ``case`` folds the OR.
+    Subset walker-safe operators only (``case``/``in``/``get``).
+    """
+    haystack = ["get", "route_types_basic"]
+    return [
+        "case",
+        ["in", f"[{basic_type}]", haystack],
+        True,
+        ["in", f"[{basic_type}, ", haystack],
+        True,
+        ["in", f", {basic_type}, ", haystack],
+        True,
+        ["in", f", {basic_type}]", haystack],
+        True,
+        False,
+    ]
+
+
+def _transport_paint(colors: dict[str, str]) -> dict[str, Any]:
+    """Circle paint for the stops layer, category-colored.
+
+    Colors arrive resolved (DB category rows ∪ fallback): the legend is
+    category-driven and reads the same rows at serve time, so map and
+    legend cannot drift apart at seed time.
+    """
+    color_expr: list[Any] = ["case"]
+    for slug, basic_type in TRANSPORT_MODES:
+        color_expr += [_route_type_present(basic_type), colors[slug]]
+    color_expr.append(colors["other"])
+
+    def radius(small: float, large: float) -> list[Any]:
+        # Stations (location_type 1) render one notch larger than plain
+        # stops/platforms — the interchange hierarchy at a glance.
+        return [
+            "case",
+            ["==", ["get", "location_type"], 1],
+            large,
+            small,
+        ]
+
+    return {
+        "circle-color": color_expr,
+        "circle-stroke-color": "#F6F6F6",
+        "circle-stroke-width": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            10,
+            0,
+            12,
+            1,
+            16,
+            2,
+        ],
+        "circle-radius": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            7,
+            radius(2.5, 3.5),
+            12,
+            radius(4.5, 6.0),
+            16,
+            radius(8.0, 9.5),
+        ],
+        "circle-opacity": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            4,
+            0,
+            5,
+            0.3,
+            8,
+            0.6,
+            12,
+            1,
+        ],
+    }
+
+
+def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
+    """The transport-stops overlay style (full profile).
+
+    ``colors`` overlays :data:`TRANSPORT_FALLBACK_COLORS` (map_seed passes
+    the live ``transport`` category rows' colors). One vector source —
+    the Martin passthrough proxy of the Transitland stops tileset — MLT
+    URL space + ``encoding: mlt`` (pairing contract: a ``.mlt`` tiles
+    template always ships with the marker), z5–z14 with client-side
+    overzoom beyond. One circle layer: stops and stations only
+    (``location_type`` 0/1 — entrances, generic nodes and boarding
+    areas stay off the map), category-colored, station-sized, faded in
+    on zoom like the old BAV layer.
+    """
+    palette = {**TRANSPORT_FALLBACK_COLORS, **(colors or {})}
+    return {
+        "version": 8,
+        "name": "transport-stops",
+        "sources": {
+            TRANSPORT_SOURCE_ID: {
+                "type": "vector",
+                # Inline tiles (not the TileJSON link) like wd-huts: the
+                # URL self-manages no cache key and Martin's TileJSON
+                # would build its own tiles list anyway. The {{env:…}}
+                # token resolves to the tile-router origin at serve time.
+                "tiles": [
+                    "{{env:MARTIN_TILE_URL}}/"
+                    + TRANSPORT_SOURCE_ID
+                    + "/{z}/{x}/{y}.mlt"
                 ],
-                "circle-stroke-color": "#F6F6F6",
-                "circle-stroke-width": [
-                    "interpolate",
-                    ["linear"],
-                    ["zoom"],
-                    10,
-                    0,
-                    12,
-                    1,
-                    16,
-                    2,
-                ],
-                "circle-radius": [
-                    "interpolate",
-                    ["linear"],
-                    ["zoom"],
-                    7,
-                    [
-                        "case",
-                        ["in", "train", ["get", "types"]],
-                        3,
-                        ["in", "bus", ["get", "types"]],
-                        2,
-                        1,
-                    ],
-                    9,
-                    [
-                        "case",
-                        ["in", "train", ["get", "types"]],
-                        4,
-                        ["in", "bus", ["get", "types"]],
-                        3,
-                        3,
-                    ],
-                    16,
-                    [
-                        "case",
-                        ["in", "train", ["get", "types"]],
-                        9,
-                        ["in", "bus", ["get", "types"]],
-                        8,
-                        8,
-                    ],
-                ],
-                "circle-opacity": [
-                    "interpolate",
-                    ["linear"],
-                    ["zoom"],
-                    4,
-                    0,
-                    5,
-                    0.3,
-                    8,
-                    0.6,
-                    12,
-                    1,
-                ],
+                "encoding": "mlt",
+                # z5 = the overlay floor (full-country views); upstream
+                # serves to z14 and samples below z12 — deeper zooms
+                # overzoom client-side, no further requests.
+                "minzoom": 5,
+                "maxzoom": 14,
+                # Feature ids are unstable across Transitland feed
+                # versions; onestop_id is the stable feature key.
+                "promoteId": "onestop_id",
             },
         },
-    ],
-}
-
-
-#: Clustering for the SUBSET twin only (no-WebGL fallback sessions):
-#: the fallback renders the ~26k-stop list client-side and needs
-#: aggregated bubbles at the far zooms — the WebGL/MapLibre profile
-#: never reads these keys (owner decision 2026-10: clustering is a
-#: subset-profile feature).
-#:
-#: Clusters on z5/z6 only — MapLibre/supercluster semantics render
-#: clusters AT clusterMaxZoom and raw points above it, so 6 unclusters
-#: everything from z7 (verified empirically against the bav_list
-#: geojson: 26k stops, clusters at z5/z6, 0 at z7+).
-_TRANSPORT_CLUSTER_SOURCE: dict[str, Any] = {
-    "cluster": True,
-    "clusterMaxZoom": 6,
-    # Minimal aggregation ("almost as small as none cluster"): the
-    # smallest sensible screen radius — clusters form essentially only
-    # where stops (nearly) coincide (station platforms, interchange
-    # stops) or the far zoom squeezes the country together; the default
-    # radius (50) would lump whole regions.
-    "clusterRadius": 20,
-    # "Grouped by" category breakdown: per-cluster counts of the
-    # categories the unclustered paint colors on (train first, then
-    # bus, else other). Declared in MapLibre's expression form; the
-    # fallback's supercluster mirror computes the same counts via its
-    # map/reduce functions (supercluster 8 has no expression
-    # evaluator — the semantics are mirrored, not evaluated).
-    "clusterProperties": {
-        "train_count": [
-            "+",
-            ["case", ["in", "train", ["get", "types"]], 1, 0],
+        "glyphs": GLYPHS,
+        "layers": [
+            {
+                "id": "transport-stops",
+                "type": "circle",
+                "source": TRANSPORT_SOURCE_ID,
+                "source-layer": "stops",
+                "minzoom": 5,
+                "layout": {"visibility": "visible"},
+                "filter": [
+                    "match",
+                    ["get", "location_type"],
+                    [0, 1],
+                    True,
+                    False,
+                ],
+                "paint": _transport_paint(palette),
+            }
         ],
-        "bus_count": [
-            "+",
-            ["case", ["in", "bus", ["get", "types"]], 1, 0],
-        ],
-    },
-}
+    }
 
-#: Cluster render layers for the subset twin (z5–z6 only: minzoom 5 =
-#: the overlay floor, maxzoom 7 is exclusive so z7+ is raw — the
-#: bounds mirror clusterMaxZoom = 6 belt-and-braces). Colored by the
-#: same category semantics as the stops (any train → red, any bus →
-#: dark blue, else light blue) via the clusterProperties counts, sized
-#: by member count, faded by the overlay's own zoom ramp. Authored
-#: walker-clean: no ``layout.visibility`` (not subset-whitelisted) —
-#: the fallback renders bubbles from its own band gating. The count
-#: badge id suffix ``-cluster-count`` is the frontend's convention
-#: hook (isClusterCountLayer); the frontend user setting
-#: ``ui.overlayClusterCounts`` toggles ONLY the badge text
-#: (bubbles always render).
-_TRANSPORT_CLUSTER_LAYERS: list[dict[str, Any]] = [
-    {
-        "id": "transport-stops-clusters",
-        "type": "circle",
-        "source": "transport-stops",
-        "minzoom": 5,
-        "maxzoom": 7,
-        "filter": ["has", "point_count"],
-        "paint": {
-            "circle-color": [
-                "case",
-                [">", ["get", "train_count"], 0],
-                "#C60018",
-                [">", ["get", "bus_count"], 0],
-                "#2d327d",
-                "#0079C7",
-            ],
-            "circle-stroke-color": "#F6F6F6",
-            "circle-stroke-width": 1,
-            "circle-radius": [
-                "interpolate",
-                ["linear"],
-                ["get", "point_count"],
-                2,
-                5,
-                10,
-                7,
-                50,
-                9,
-                200,
-                11,
-                1000,
-                14,
-            ],
-            "circle-opacity": [
-                "interpolate",
-                ["linear"],
-                ["zoom"],
-                4,
-                0,
-                5,
-                0.3,
-                8,
-                0.6,
-                12,
-                1,
-            ],
-        },
-    },
-    {
-        "id": "transport-stops-cluster-count",
-        "type": "symbol",
-        "source": "transport-stops",
-        "minzoom": 5,
-        "maxzoom": 7,
-        "filter": ["has", "point_count"],
-        "layout": {
-            "text-field": ["get", "point_count_abbreviated"],
-            "text-font": ["Barlow Semi Condensed SemiBold", "Noto Sans Bold"],
-            "text-size": 11,
-        },
-        "paint": {
-            "text-color": "#F6F6F6",
-            "text-halo-color": "rgba(45, 50, 125, 0.45)",
-            "text-halo-width": 0.8,
-            "text-opacity": 1,
-        },
-    },
-]
 
+#: Module-level defaults (fallback palette) — tests import these; the
+#: seed re-builds both documents from the live category colors.
+TRANSPORT_STYLE: dict[str, Any] = transport_style()
 
 #: Source keys the subset twin drops from the full document
-#: (``promoteId``: clients key features by the geojson-provided id;
-#: not subset-whitelisted).
+#: (``promoteId``: clients key features by the tile-provided id; not
+#: subset-whitelisted).
 _TRANSPORT_SUBSET_SOURCE_EXCLUDES = frozenset({"promoteId"})
 
-#: Subset twin of TRANSPORT_STYLE (Leaflet fallback, profile=subset):
-#: the full document minus ``promoteId`` and the raw layer's default
-#: ``layout`` — plus the clustering source config and cluster render
-#: layers (the fallback's supercluster rendering reads those keys;
-#: see ``_TRANSPORT_CLUSTER_SOURCE`` above) and the raw layer's
-#: ``minzoom: 10`` floor + not-a-cluster ``filter`` (the BAV list is
-#: 20k+ stops and the fallback runs on low-spec devices — raw circles
-#: below z10 are invisible clutter; the floor predates clustering and
-#: z7–z9 stay empty on the fallback, by design). Derived on purpose:
-#: if the full style ever grows keys outside the subset whitelist, the
-#: seed gate fails loudly instead of the subset twin silently drifting.
-TRANSPORT_STYLE_SUBSET: dict[str, Any] = {
-    **deepcopy(TRANSPORT_STYLE),
-    "sources": {
-        source_id: {
-            key: value
-            for key, value in source.items()
-            if key not in _TRANSPORT_SUBSET_SOURCE_EXCLUDES
-        }
-        | deepcopy(_TRANSPORT_CLUSTER_SOURCE)
-        for source_id, source in TRANSPORT_STYLE["sources"].items()
-    },
-    "layers": [
-        {key: deepcopy(value) for key, value in layer.items() if key != "layout"}
-        | {"minzoom": 10, "filter": ["!", ["has", "point_count"]]}
-        for layer in TRANSPORT_STYLE["layers"]
-    ]
-    + deepcopy(_TRANSPORT_CLUSTER_LAYERS),
-}
+#: Subset twin of the transport style (Leaflet fallback, profile=
+#: subset): the full document minus ``promoteId`` and the raw layer's
+#: default ``layout``. No clustering anymore — the old geojson twin
+#: clustered the ~26k-stop BAV list client-side because the whole
+#: document was one fetched blob; vector tiles sample server-side
+#: (Transitland serves a shrinking stop sample below z12), so the
+#: fallback renders the same document the full profile serves.
+#: Derived on purpose: if the full style ever grows keys outside the
+#: subset whitelist, the seed gate fails loudly instead of the subset
+#: twin silently drifting.
+
+
+def transport_style_subset(colors: dict[str, str] | None = None) -> dict[str, Any]:
+    full = transport_style(colors)
+    return {
+        **full,
+        "sources": {
+            source_id: {
+                key: value
+                for key, value in source.items()
+                if key not in _TRANSPORT_SUBSET_SOURCE_EXCLUDES
+            }
+            for source_id, source in full["sources"].items()
+        },
+        "layers": [
+            {key: value for key, value in layer.items() if key != "layout"}
+            for layer in full["layers"]
+        ],
+    }
+
+
+TRANSPORT_STYLE_SUBSET: dict[str, Any] = transport_style_subset()
 
 
 def osm_raster_style() -> dict[str, Any]:
