@@ -173,18 +173,18 @@ class LinkSchema(pydantic.BaseModel):
 class GeoPlaceDetailSchema(GeoPlaceBaseSchema):
     """Unified place detail (place-detail-endpoint).
 
-    Required members: ``slug``, ``name``, ``detail_type`` (the type
+    Required members: ``slug``, ``name``, ``kind_slug`` (the type
     discriminator clients switch on), ``location``, ``importance``.
     Everything else is an optional member under the ``fields[places]``
     sparse-fieldset selection; detail blocks appear as sibling members
-    named exactly after their ``detail_type`` value (``amenity`` now,
-    ``admin``/``transport``/``natural`` later) and only for places of
-    that type with a detail row.
+    named exactly after their super-root (``amenity`` now,
+    ``admin``/``natural`` later) and only for places of that type
+    with a detail row.
     """
 
     description: str | None = None
     review_status: str | None = None
-    detail_type: str
+    kind_slug: str
     amenity: AmenityDetailSchema | None = None
     links: list[LinkSchema] | None = None
     # Required-but-nullable on the list schemas; optional members on

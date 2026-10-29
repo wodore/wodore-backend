@@ -498,9 +498,7 @@ class Command(BaseCommand):
         )
         for cat in categories:
             mapping_count = len(cat.mappings)
-            self.stdout.write(
-                f"  • {cat.category}: {mapping_count} mappings ({cat.detail_type})"
-            )
+            self.stdout.write(f"  • {cat.category}: {mapping_count} mappings")
         self.stdout.write(self.style.SUCCESS(f"{'=' * 60}\n"))
 
         # 1. Drop existing places if requested (standalone operation)
@@ -1535,55 +1533,91 @@ class Command(BaseCommand):
         )
 
     def _get_or_create_category(self, category_slug: str) -> Category | None:
-        """Get or create category by identifier (parent.slug format)."""
+        """Get or create category by identifier (parent.slug format).
+
+        Map-tree aware (geoplace-category-tree): single-part slugs
+        resolve to contract groups (children of super-roots under the
+        ``map`` namespace root); two-part slugs resolve children by
+        their stored identifier under the group. New groups are
+        created under their registry-assigned super-root (default
+        ``amenity``); stray pre-tree roots re-parent under theirs.
+        """
         category_cache = self._get_cache("category_cache")
 
         # Check cache first
         if category_slug in category_cache:
             return category_cache[category_slug]
 
-        # Use identifier field for lookup - much simpler!
-        # identifier format: "root.slug" or "parent.slug"
-        # Our category_slug format: "slug" or "parent.slug"
-        # Need to handle: category_slug="restaurant" should match identifier="root.restaurant"
         parts = category_slug.split(".")
 
         if len(parts) == 1:
-            # Root category: "restaurant" -> identifier="root.restaurant"
-            identifier = f"root.{parts[0]}"
-            parent = None
-            slug = parts[0]
+            category = self._get_or_create_contract_group(parts[0])
         else:
-            # Child category: "restaurant.cafe" -> identifier="restaurant.cafe"
-            identifier = category_slug
-            parent_slug = parts[0]
-            slug = parts[1]
-
-            # Ensure parent exists
-            parent, _ = Category.objects.get_or_create(
-                slug=parent_slug,
-                parent=None,
-                defaults={"name": parent_slug.replace("_", " ").title()},
-            )
-
-        # Try to get by identifier (most efficient)
-        try:
-            category = Category.objects.get(identifier=identifier)
-        except Category.DoesNotExist:
-            # Create new category
-            category = Category.objects.create(
-                slug=slug,
-                parent=parent,
-                name=slug.replace("_", " ").title(),
-            )
-        except Category.MultipleObjectsReturned:
-            # Data inconsistency - use first match
-            category = Category.objects.filter(identifier=identifier).first()
+            parent = self._get_or_create_contract_group(parts[0])
+            # Child: stored identifier is "group.child"
+            try:
+                category = Category.objects.get(identifier=category_slug)
+            except Category.DoesNotExist:
+                category = Category.objects.create(
+                    slug=parts[1],
+                    parent=parent,
+                    name=parts[1].replace("_", " ").title(),
+                )
+            except Category.MultipleObjectsReturned:
+                # Data inconsistency - use first match
+                category = Category.objects.filter(identifier=category_slug).first()
 
         # Cache for future use
         category_cache[category_slug] = category
 
         return category
+
+    def _get_or_create_contract_group(self, group_slug: str) -> Category:
+        """Contract group in the map tree (created under its super-root).
+
+        Existing groups resolve by tree position (child of a
+        super-root); unknown slugs create under the registry-assigned
+        super-root (kinds.py PLACE_KINDS, default amenity). Stray
+        pre-tree parentless roots re-parent — computed identifiers
+        refresh on save.
+        """
+        group_cache = self._get_cache("category_group_cache")
+        if group_slug in group_cache:
+            return group_cache[group_slug]
+
+        group = (
+            Category.objects.filter(slug=group_slug, parent__parent__slug="map").first()
+            or Category.objects.filter(slug=group_slug, parent__slug="map").first()
+        )
+        if group is None:
+            from server.apps.geometries.kinds import MAP_ROOT_SLUG, PLACE_KINDS
+
+            super_slug = (
+                PLACE_KINDS[group_slug].super_root
+                if group_slug in PLACE_KINDS
+                else "amenity"
+            )
+            map_root, _ = Category.objects.get_or_create(
+                slug=MAP_ROOT_SLUG, parent=None, defaults={"name": "Map"}
+            )
+            super_root, _ = Category.objects.get_or_create(
+                slug=super_slug,
+                parent=map_root,
+                defaults={"name": super_slug.replace("_", " ").title()},
+            )
+            stray = Category.objects.filter(slug=group_slug, parent=None).first()
+            if stray is not None:
+                stray.parent = super_root
+                stray.save(update_fields=["parent"])  # identifier refreshes
+                group = stray
+            else:
+                group = Category.objects.create(
+                    slug=group_slug,
+                    parent=super_root,
+                    name=group_slug.replace("_", " ").title(),
+                )
+        group_cache[group_slug] = group
+        return group
 
     def _parse_opening_hours(self, opening_hours_str: str | None) -> dict[str, Any]:
         """Parse OSM opening_hours format to our JSON schema."""
@@ -4029,7 +4063,6 @@ class Command(BaseCommand):
         self, data: dict[str, Any]
     ) -> tuple[GeoPlace, list[Category]]:
         """Prepare GeoPlace instance from amenity data."""
-        from server.apps.geometries.models import OperatingStatus
 
         # Get categories first (needed for slug fallback)
         categories = [
@@ -4052,7 +4085,9 @@ class Command(BaseCommand):
             name=name,
             location=Point(data["lon"], data["lat"], srid=4326),
             country_code=self._guess_country_code(Point(data["lon"], data["lat"])),
-            detail_type=OperatingStatus.OPEN.value,  # All amenities are open for now
+            # kind_slug is derived on write from the category tree
+            # (geoplace-category-tree) — this legacy path creates
+            # places before categories; the schema path derives it.
             importance=importance,  # Use calculated importance
             is_active=True,
             is_public=True,

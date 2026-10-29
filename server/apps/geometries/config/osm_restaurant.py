@@ -7,7 +7,6 @@ from .osm_base import CategoryMappings, OSMMapping
 
 RESTAURANT = CategoryMappings(
     category="restaurant",
-    detail_type="amenity",
     mappings=[
         OSMMapping(
             osm_filters=["amenity=restaurant"],

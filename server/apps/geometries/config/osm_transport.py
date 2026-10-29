@@ -8,7 +8,6 @@ from .osm_base import CategoryMappings, OSMMapping
 
 TRANSPORT = CategoryMappings(
     category="transport",
-    detail_type="transport",  # Uses TransportDetail
     enabled=False,
     mappings=[
         OSMMapping(

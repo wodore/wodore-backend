@@ -717,7 +717,10 @@ class Command(BaseCommand):
             is_public=hut.is_public,
             place_type_identifiers=place_types,
             operations=operations,
-            seasonality=seasonality,
+            # Orphaned seasonality guard (review P1): without a place
+            # type there is no kind anchor — the seasonality contract
+            # gate would reject the write.
+            seasonality=seasonality if place_types else None,
         )
 
     def _calculate_hut_importance(self, _hut: Hut) -> int:

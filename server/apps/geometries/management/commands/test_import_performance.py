@@ -634,7 +634,6 @@ class Command(BaseCommand):
                     "name": f"Bulk {i}",
                     "location": Point(8.5417, 47.3769),
                     "country_code": "CH",
-                    "detail_type": "amenity",
                     "is_active": True,
                 }
                 places_to_create.append(GeoPlace(**place_data))
@@ -806,7 +805,6 @@ class Command(BaseCommand):
                             schema.location.lon, schema.location.lat, srid=4326
                         ),
                         country_code=schema.country_code,
-                        detail_type=schema.detail_type.value,
                         is_active=schema.is_active,
                         is_public=schema.is_public,
                     )
@@ -1020,7 +1018,6 @@ class Command(BaseCommand):
                                 schema.location.lon, schema.location.lat, srid=4326
                             ),
                             country_code=schema.country_code,
-                            detail_type=schema.detail_type.value,
                             is_active=schema.is_active,
                             is_public=schema.is_public,
                         )

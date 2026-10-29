@@ -8,10 +8,12 @@ from ._associations import (
     GeoPlaceSourceAssociationAdmin,
 )
 from ._geoplace import GeoPlaceAdmin
+from ._kind_contract import CategoryKindContractAdmin
 
 __all__ = [
     "AdminDetailAdmin",
     "CategoryExtraSchemaAdmin",
+    "CategoryKindContractAdmin",
     "GeoPlaceAdmin",
     "GeoPlaceCategoryAdmin",
     "GeoPlaceExternalLinkAdmin",
