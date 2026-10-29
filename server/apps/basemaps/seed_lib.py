@@ -818,8 +818,9 @@ def _route_type_present(basic_type: int) -> list[Any]:
     ]
 
 
-def _transport_paint(colors: dict[str, str]) -> dict[str, Any]:
-    """Circle paint for the stops layer, category-colored.
+def _transport_color_expr(colors: dict[str, str]) -> list[Any]:
+    """Case chain: the stop's dominant mode color (TRANSPORT_MODES
+    priority order, neutral fallback last).
 
     Colors arrive resolved (DB category rows ∪ fallback): the legend is
     category-driven and reads the same rows at serve time, so map and
@@ -829,6 +830,75 @@ def _transport_paint(colors: dict[str, str]) -> dict[str, Any]:
     for slug, basic_type in TRANSPORT_MODES:
         color_expr += [_route_type_present(basic_type), colors[slug]]
     color_expr.append(colors["other"])
+    return color_expr
+
+
+#: Both layers render stops and stations only — entrances (2), generic
+#: nodes (3) and boarding areas (4) stay off the map.
+_TRANSPORT_STOP_FILTER: list[Any] = [
+    "match",
+    ["get", "location_type"],
+    [0, 1],
+    True,
+    False,
+]
+
+#: Mono sprite icons for the z14+ symbol layer (whole literal names —
+#: the sprite id prefix "wd:" matches the shared huts sprite id so the
+#: frontend unions the packs). Only modes whose category tree actually
+#: carries a symbol get their own icon (verified against the staging
+#: ``/sprite/transport`` pack); everything else — the lifts (cable_car,
+#: gondola, funicular), trolleybus, monorail and unmatched stops —
+#: falls back to the generic root silhouette.
+TRANSPORT_ICONS: dict[str, str] = {
+    "train_station": "wd:mono/transport.train_station",
+    "tram_stop": "wd:mono/transport.tram_stop",
+    "metro_station": "wd:mono/transport.metro_station",
+    "ferry": "wd:mono/transport.ferry",
+    "bus_stop": "wd:mono/transport.bus_stop",
+}
+TRANSPORT_ICON_FALLBACK = "wd:mono/root.transport"
+
+
+def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
+    """The transport-stops overlay style (single SUBSET-profile document).
+
+    ``colors`` overlays :data:`TRANSPORT_FALLBACK_COLORS` (map_seed passes
+    the live ``transport`` category rows' colors). One vector source —
+    the Martin passthrough proxy of the Transitland stops tileset — MLT
+    URL space + ``encoding: mlt`` (pairing contract: a ``.mlt`` tiles
+    template always ships with the marker), z11–z14 with client-side
+    overzoom beyond; nothing renders below z11 (owner decision: the
+    overlay is a close-up aid, not a country-scale wash).
+
+    Two layers, both filtered to stops and stations only
+    (``location_type`` 0/1 — entrances, generic nodes and boarding
+    areas stay off the map):
+
+    * z11–z13.99: SMALL category-colored circles (``maxzoom`` 14 is
+      exclusive — the icon layer takes over exactly at z14), stations
+      one notch larger than plain stops;
+    * z14+: MONO category icons from the Martin sprite pack
+      (``/sprite/transport``, merged client-side into the shared ``wd``
+      sprite id) — per-mode where the tree has a symbol, the generic
+      ``mono/root.transport`` silhouette for the rest.
+
+    Deliberately subset-clean end to end (owner decision: the full
+    profile gained nothing here — no feature-state, no day strips; a
+    subset document is a valid full style by construction, so ONE row
+    serves WebGL and fallback sessions alike). The icon-image case
+    chain returns whole literal sprite names — ``concat`` is not in
+    the subset whitelist. What a full-profile twin would add today:
+    nothing functional (``promoteId`` was the only full-only key and
+    nothing keyed features by id).
+    """
+    palette = {**TRANSPORT_FALLBACK_COLORS, **(colors or {})}
+
+    icon_image: list[Any] = ["case"]
+    for slug, basic_type in TRANSPORT_MODES:
+        icon = TRANSPORT_ICONS.get(slug, TRANSPORT_ICON_FALLBACK)
+        icon_image += [_route_type_present(basic_type), icon]
+    icon_image.append(TRANSPORT_ICON_FALLBACK)
 
     def radius(small: float, large: float) -> list[Any]:
         # Stations (location_type 1) render one notch larger than plain
@@ -840,61 +910,6 @@ def _transport_paint(colors: dict[str, str]) -> dict[str, Any]:
             small,
         ]
 
-    return {
-        "circle-color": color_expr,
-        "circle-stroke-color": "#F6F6F6",
-        "circle-stroke-width": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            10,
-            0,
-            12,
-            1,
-            16,
-            2,
-        ],
-        "circle-radius": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            7,
-            radius(2.5, 3.5),
-            12,
-            radius(4.5, 6.0),
-            16,
-            radius(8.0, 9.5),
-        ],
-        "circle-opacity": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            4,
-            0,
-            5,
-            0.3,
-            8,
-            0.6,
-            12,
-            1,
-        ],
-    }
-
-
-def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
-    """The transport-stops overlay style (full profile).
-
-    ``colors`` overlays :data:`TRANSPORT_FALLBACK_COLORS` (map_seed passes
-    the live ``transport`` category rows' colors). One vector source —
-    the Martin passthrough proxy of the Transitland stops tileset — MLT
-    URL space + ``encoding: mlt`` (pairing contract: a ``.mlt`` tiles
-    template always ships with the marker), z5–z14 with client-side
-    overzoom beyond. One circle layer: stops and stations only
-    (``location_type`` 0/1 — entrances, generic nodes and boarding
-    areas stay off the map), category-colored, station-sized, faded in
-    on zoom like the old BAV layer.
-    """
-    palette = {**TRANSPORT_FALLBACK_COLORS, **(colors or {})}
     return {
         "version": 8,
         "name": "transport-stops",
@@ -911,16 +926,19 @@ def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
                     + "/{z}/{x}/{y}.mlt"
                 ],
                 "encoding": "mlt",
-                # z5 = the overlay floor (full-country views); upstream
-                # serves to z14 and samples below z12 — deeper zooms
-                # overzoom client-side, no further requests.
-                "minzoom": 5,
+                # z11 = the overlay floor (nothing renders below);
+                # upstream serves to z14 — deeper zooms overzoom
+                # client-side, no further requests.
+                "minzoom": 11,
                 "maxzoom": 14,
-                # Feature ids are unstable across Transitland feed
-                # versions; onestop_id is the stable feature key.
-                "promoteId": "onestop_id",
             },
         },
+        "sprite": [
+            # Martin serves the DB-synced category sprite pack; the "wd"
+            # id matches the huts packs so the frontend unions them into
+            # one combined sprite URL (catalog-mapping mergeSpritePacks).
+            {"id": "wd", "url": "{{env:MARTIN_TILE_URL}}/sprite/transport"},
+        ],
         "glyphs": GLYPHS,
         "layers": [
             {
@@ -928,62 +946,75 @@ def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
                 "type": "circle",
                 "source": TRANSPORT_SOURCE_ID,
                 "source-layer": "stops",
-                "minzoom": 5,
-                "layout": {"visibility": "visible"},
-                "filter": [
-                    "match",
-                    ["get", "location_type"],
-                    [0, 1],
-                    True,
-                    False,
-                ],
-                "paint": _transport_paint(palette),
-            }
+                "minzoom": 11,
+                # exclusive: at z14 the mono icons take over
+                "maxzoom": 14,
+                "filter": _TRANSPORT_STOP_FILTER,
+                "paint": {
+                    "circle-color": _transport_color_expr(palette),
+                    "circle-stroke-color": "#F6F6F6",
+                    "circle-stroke-width": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        11,
+                        0,
+                        13,
+                        1,
+                    ],
+                    # SMALL zoomed-out dots: z11 barely-there, z13 still
+                    # modest — the icons carry the detail from z14.
+                    "circle-radius": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        11,
+                        radius(1.5, 2.0),
+                        13,
+                        radius(3.0, 4.0),
+                    ],
+                    "circle-opacity": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        11,
+                        0.7,
+                        12,
+                        1,
+                    ],
+                },
+            },
+            {
+                "id": "transport-stops-icons",
+                "type": "symbol",
+                "source": TRANSPORT_SOURCE_ID,
+                "source-layer": "stops",
+                "minzoom": 14,
+                "filter": _TRANSPORT_STOP_FILTER,
+                "layout": {
+                    # whole literal sprite names per mode (case chain) —
+                    # concat is not subset-whitelisted; unmapped modes
+                    # fall to the generic root silhouette
+                    "icon-image": icon_image,
+                    "icon-size": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        14,
+                        0.35,
+                        16,
+                        0.55,
+                    ],
+                    "icon-allow-overlap": True,
+                },
+            },
         ],
     }
 
 
-#: Module-level defaults (fallback palette) — tests import these; the
-#: seed re-builds both documents from the live category colors.
+#: Module-level default (fallback palette) — tests import this; the
+#: seed re-builds the document from the live category colors.
 TRANSPORT_STYLE: dict[str, Any] = transport_style()
-
-#: Source keys the subset twin drops from the full document
-#: (``promoteId``: clients key features by the tile-provided id; not
-#: subset-whitelisted).
-_TRANSPORT_SUBSET_SOURCE_EXCLUDES = frozenset({"promoteId"})
-
-#: Subset twin of the transport style (Leaflet fallback, profile=
-#: subset): the full document minus ``promoteId`` and the raw layer's
-#: default ``layout``. No clustering anymore — the old geojson twin
-#: clustered the ~26k-stop BAV list client-side because the whole
-#: document was one fetched blob; vector tiles sample server-side
-#: (Transitland serves a shrinking stop sample below z12), so the
-#: fallback renders the same document the full profile serves.
-#: Derived on purpose: if the full style ever grows keys outside the
-#: subset whitelist, the seed gate fails loudly instead of the subset
-#: twin silently drifting.
-
-
-def transport_style_subset(colors: dict[str, str] | None = None) -> dict[str, Any]:
-    full = transport_style(colors)
-    return {
-        **full,
-        "sources": {
-            source_id: {
-                key: value
-                for key, value in source.items()
-                if key not in _TRANSPORT_SUBSET_SOURCE_EXCLUDES
-            }
-            for source_id, source in full["sources"].items()
-        },
-        "layers": [
-            {key: value for key, value in layer.items() if key != "layout"}
-            for layer in full["layers"]
-        ],
-    }
-
-
-TRANSPORT_STYLE_SUBSET: dict[str, Any] = transport_style_subset()
 
 
 def osm_raster_style() -> dict[str, Any]:
