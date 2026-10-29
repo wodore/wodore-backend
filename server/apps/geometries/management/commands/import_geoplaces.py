@@ -36,6 +36,7 @@ from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.measure import D
 from django.core.management.base import BaseCommand, CommandParser
 
+from server.apps.categories.models import Category
 from server.apps.external_geonames.management.commands._country_groups import (
     expand_countries,
 )
@@ -48,7 +49,7 @@ from server.apps.geometries.schemas import (
     SeasonalityInput,
     SourceInput,
 )
-from server.apps.huts.models import Hut, HutTypeHelper
+from server.apps.huts.models import Hut
 from server.apps.organizations.models import Organization
 from server.core import UpdateCreateStatus
 
@@ -680,12 +681,23 @@ class Command(BaseCommand):
         elif reduced_fact:
             # No known closed type — the reduced mode resolves to the
             # accommodation default/unknown category (design D4).
-            place_types.append(
-                PlaceTypeInput(
-                    identifier=HutTypeHelper.get("unknown").identifier,
-                    classifier="mode.reduced",
+            # get_or_create under accommodation (HutTypeHelper may
+            # return a root-level category — kind guard rejects it).
+            accommodation_parent = Category.objects.filter(
+                slug="accommodation", parent__isnull=True
+            ).first()
+            if accommodation_parent is not None:
+                unknown_type, _created = Category.objects.get_or_create(
+                    slug="unknown",
+                    parent=accommodation_parent,
+                    defaults={"name": "Unbekannt"},
                 )
-            )
+                place_types.append(
+                    PlaceTypeInput(
+                        identifier=unknown_type.identifier,
+                        classifier="mode.reduced",
+                    )
+                )
         if reduced_fact or known_reduced:
             operations.append(
                 OperationInput(mode="mode.reduced", capacity=hut.capacity_closed)
