@@ -157,24 +157,58 @@ def base_result(place: GeoPlace, media_url: str) -> dict[str, Any]:
 
 
 def build_amenity_detail(place: GeoPlace) -> dict[str, Any] | None:
-    """Serialize the place's ``AmenityDetail`` into the wire block.
+    """Serialize the place's amenity block into the wire shape.
 
-    Returns ``None`` when the place has no detail row (callers seed
-    the member anyway so it stays a valid field-selection name) —
-    the amenity endpoint's former crash-prone inline mapping, moved
-    here once (place-detail-endpoint). Requires ``select_related``
-    when called (cached ``None`` on absent rows, no exception).
+    Served from the new homes (geoplace-kinds-operations-graph task
+    4.1): ``opening_hours`` from the standard-mode ``GeoPlaceOperation``
+    row, ``opening_months`` from ``GeoPlaceSeasonality`` (fuzzy →
+    share round-trip), ``operating_status`` defaults to ``open``
+    (the uniform constant the data carried — wire shape preserved).
+    Returns ``None`` when the place has no operation or seasonality
+    data (callers seed the member anyway so it stays a valid
+    field-selection name).
     """
-    detail = getattr(place, "amenity_detail", None)  # plugin-less inference gap
-    if detail is None:
+    from .models import Month
+
+    operation = (
+        place.operations.filter(mode__slug="standard")  # type: ignore  # reverse FK: plugin-less inference gap
+        .only("opening_hours")
+        .first()
+    )
+    seasonality = getattr(place, "seasonality", None)  # plugin-less inference gap
+
+    if operation is None and seasonality is None:
         return None
-    # Websites/links live at the place level (external links), overflow
-    # data on GeoPlace.extra, phone numbers as uri.phone links
-    # (external-link-uris) — none are part of this block.
+
+    # fuzzy vocabulary round-trip (share → fuzzy labels, wire shape)
+    share_to_fuzzy = {100: "yes", 75: "yesish", 50: "maybe", 25: "noish", 0: "no"}
+    month_names = [
+        "jan",
+        "feb",
+        "mar",
+        "apr",
+        "may",
+        "jun",
+        "jul",
+        "aug",
+        "sep",
+        "oct",
+        "nov",
+        "dec",
+    ]
+    opening_months: dict[str, str] = {}
+    if seasonality is not None:
+        for month in Month:
+            share = getattr(seasonality, f"month_{month.value:02d}")
+            if share is not None:
+                opening_months[month_names[month.value - 1]] = share_to_fuzzy.get(
+                    share, "maybe"
+                )
+
     return {
-        "operating_status": detail.operating_status,
-        "opening_months": detail.opening_months or {},
-        "opening_hours": detail.opening_hours or {},
+        "operating_status": "open",  # uniform constant, wire shape preserved
+        "opening_months": opening_months,
+        "opening_hours": (operation.opening_hours if operation else {}) or {},
     }
 
 

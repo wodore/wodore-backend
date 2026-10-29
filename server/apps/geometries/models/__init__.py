@@ -17,6 +17,7 @@ from ._category_extra_schema import (
 )
 from ._geoplace import DetailType, GeoPlace
 from ._operation import GeoPlaceOperation
+from ._relation import GeoPlaceRelation
 from ._seasonality import (
     FUZZY_MONTH_SHARE,
     GeoPlaceSeasonality,
@@ -33,6 +34,7 @@ __all__ = [
     "GeoPlaceCategory",
     "CategoryExtraSchema",
     "GeoPlaceOperation",
+    "GeoPlaceRelation",
     "GeoPlaceSeasonality",
     "Month",
     "MonthAccessor",

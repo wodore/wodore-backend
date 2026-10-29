@@ -393,8 +393,6 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         "categories__slug",
     )
 
-    autocomplete_fields = ("parent",)
-
     readonly_fields = (
         "slug",
         "name_i18n",

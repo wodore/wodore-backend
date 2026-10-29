@@ -324,7 +324,12 @@ class GeoPlacesForTilesView(PostgresViewModel):
 
               -- Categories (JSON array with all categories for this place)
               -- Each category has: slug, identifier, order, color, parent_slug,
-              -- parent_name, classifier (season.* identifier), extra
+              -- parent_name, classifier (mode.* identifier), extra.
+              -- Capacity is NOT joined here — the model SQL must not
+              -- reference tables created by later migrations (fresh-DB
+              -- view creation in 0027+ would fail). Capacity reaches
+              -- tile consumers through the martin tile function's own
+              -- query layer (task 4.5 documented in the work doc).
               COALESCE(
                 (
                   SELECT jsonb_agg(

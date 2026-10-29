@@ -15,7 +15,7 @@ from django.test import Client
 
 from server.apps.categories.models import Category
 from server.apps.geometries.converters import SLUG_GRAMMAR_RE
-from server.apps.geometries.models import AmenityDetail, GeoPlace, GeoPlaceParty
+from server.apps.geometries.models import GeoPlace, GeoPlaceParty
 from server.apps.parties.models import Party
 
 pytestmark = [pytest.mark.django_db]
@@ -32,6 +32,19 @@ def make_place(**overrides: object) -> GeoPlace:
     }
     defaults.update(overrides)
     return GeoPlace.objects.create(**defaults)  # type: ignore[arg-type]
+
+
+def make_operation(place) -> None:  # type: ignore[no-untyped-def]
+    """Create a standard-mode operation (the amenity block's new source)."""
+    from server.apps.categories.models import Category
+    from server.apps.geometries.models import GeoPlaceOperation
+
+    mode_standard = Category.objects.get(slug="standard", parent__slug="mode")
+    GeoPlaceOperation.objects.get_or_create(
+        geo_place=place,
+        mode=mode_standard,
+        defaults={"capacity": None, "opening_hours": {}},
+    )
 
 
 class TestSlugGrammar:
@@ -127,7 +140,7 @@ class TestPlaceDetailRouting:
 class TestPlaceDetailContent:
     def test_amenity_place_carries_block(self, client: Client):
         place = make_place(detail_type="amenity")
-        AmenityDetail.objects.create(geo_place=place, operating_status="open")
+        make_operation(place)
         data = client.get(f"/v1/geo/places/{place.slug}").json()
         assert data["detail_type"] == "amenity"
         assert data["amenity"]["operating_status"] == "open"
@@ -165,7 +178,7 @@ class TestPlaceDetailContent:
 
     def test_narrowed_selection(self, client: Client):
         place = make_place(detail_type="amenity")
-        AmenityDetail.objects.create(geo_place=place, operating_status="open")
+        make_operation(place)
         data = client.get(
             f"/v1/geo/places/{place.slug}",
             {"fields[places]": "slug,name,amenity"},
@@ -286,7 +299,7 @@ class TestPlaceLinks:
 
     def test_phones_served_under_links_not_block(self, client: Client):
         place = make_place(detail_type="amenity")
-        AmenityDetail.objects.create(geo_place=place, operating_status="open")
+        make_operation(place)
         self._link_place(place)
         data = client.get(f"/v1/geo/places/{place.slug}").json()
         assert "phones" not in data["amenity"]

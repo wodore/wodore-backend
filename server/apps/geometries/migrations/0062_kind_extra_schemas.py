@@ -52,9 +52,7 @@ def seed(apps: Any, _schema_editor: Any) -> None:
         ("accommodation", ACCOMMODATION_SCHEMA),
         ("administrative", ADMINISTRATIVE_SCHEMA),
     ):
-        root = Category.objects.filter(
-            slug=root_slug, parent__isnull=True
-        ).first()
+        root = Category.objects.filter(slug=root_slug, parent__isnull=True).first()
         if root is None:
             continue
         CategoryExtraSchema.objects.update_or_create(

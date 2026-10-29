@@ -34,8 +34,9 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(
-            code=recreate_view,
-            reverse_code=recreate_view,  # same SQL both ways: the model defines the view
-        ),
+        # View recreation deferred to 0065 — the current model SQL
+        # references tables (geoplaceoperation) created in 0061;
+        # recreating here would fail. The 0065 migration is the sole
+        # view recreation point for this change.
+        migrations.RunPython(migrations.RunPython.noop, migrations.RunPython.noop),
     ]

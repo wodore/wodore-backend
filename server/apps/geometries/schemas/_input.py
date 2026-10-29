@@ -163,7 +163,6 @@ class GeoPlaceBaseInput(BaseModel):
     importance: int = 25
     review_status: ReviewStatus = ReviewStatus.NEW
     shape: Any | None = None  # Polygon geometry (GeoJSON or WKT)
-    parent_id: int | None = None
 
     # Data fields
     osm_tags: dict[str, Any] = Field(default_factory=dict)

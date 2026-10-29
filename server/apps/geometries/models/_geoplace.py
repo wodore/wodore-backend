@@ -30,6 +30,8 @@ from ..converters import RESERVED_URL_SEGMENTS, SLUG_GRAMMAR_RE
 from ..kinds import place_detail_type
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
+
     from server.apps.geometries.schemas import (
         DedupOptions,
         GeoPlaceBaseInput,
@@ -38,6 +40,7 @@ if TYPE_CHECKING:
     )
 
     from ._associations import GeoPlaceSourceAssociation
+    from ._relation import GeoPlaceRelation
 
 
 # Substrings of database errors that are worth retrying (locks, deadlocks).
@@ -143,14 +146,6 @@ class GeoPlace(TimeStampedModel):
     )
     elevation = models.IntegerField(null=True, blank=True)
     country_code = CountryField(db_index=True)
-
-    parent = models.ForeignKey(
-        "self",
-        on_delete=models.RESTRICT,
-        null=True,
-        blank=True,
-        related_name="children",
-    )
 
     importance = models.SmallIntegerField(
         default=25,
@@ -513,7 +508,6 @@ class GeoPlace(TimeStampedModel):
             "elevation",
             "country_code",
             "importance",
-            "parent",
             "location",
             "shape",
             "osm_tags",
@@ -1164,10 +1158,6 @@ class GeoPlace(TimeStampedModel):
         if schema.slug:
             place_data["slug"] = schema.slug
 
-        # Add parent if provided
-        if schema.parent_id:
-            place_data["parent_id"] = schema.parent_id
-
         # Add shape if provided
         if schema.shape:
             if isinstance(schema.shape, str):
@@ -1562,6 +1552,51 @@ class GeoPlace(TimeStampedModel):
         if place_updated or categories_updated or detail_updated or operations_updated:
             return place, UpdateCreateStatus.updated
         return place, UpdateCreateStatus.no_change
+
+    def add_relation(
+        self,
+        to_place: GeoPlace,
+        relation_slug: str = "part_of",
+        **kwargs: Any,
+    ) -> GeoPlaceRelation:
+        """Idempotently add a semantic edge to another place (task 3.3).
+
+        Curated by default (confidence 1.0); pass ``confidence < 1.0``
+        for generated edges — re-runs replace them, curated edges win
+        (same triple, higher confidence preserved).
+        """
+        from ._relation import GeoPlaceRelation
+
+        relation_category = Category.objects.get(
+            slug=relation_slug, parent__slug="relations"
+        )
+        edge, _created = GeoPlaceRelation.objects.update_or_create(
+            from_place=self,
+            to_place=to_place,
+            relation=relation_category,
+            defaults=kwargs or {},
+        )
+        return edge
+
+    def get_related_places(
+        self,
+        relation_slug: str | None = None,
+        direction: str = "outgoing",
+    ) -> QuerySet[GeoPlace]:
+        """Places related by a given edge type (direction-aware)."""
+
+        qs = GeoPlace.objects.all()  # type: ignore[no-any-return]  # QuerySet typing drift
+        if direction == "outgoing":
+            filter_kwargs: dict[str, Any] = {
+                "outgoing_relations__from_place": self,
+            }
+            if relation_slug:
+                filter_kwargs["outgoing_relations__relation__slug"] = relation_slug
+            return qs.filter(**filter_kwargs).distinct()
+        filter_kwargs = {"incoming_relations__to_place": self}
+        if relation_slug:
+            filter_kwargs["incoming_relations__relation__slug"] = relation_slug
+        return qs.filter(**filter_kwargs).distinct()
 
     def add_source(
         self,
