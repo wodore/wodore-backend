@@ -276,11 +276,21 @@ class GeoSearchController(ApiController):
             RowNumber,
         )
 
-        request = self.request
         query = parsed_query
         q = query.q.strip()
         if not q:
             return []
+
+        if (query.lat is None) != (query.lon is None):
+            from http import HTTPStatus
+
+            raise APIError(
+                {
+                    "code": "invalid_parameter",
+                    "detail": "lat and lon must be passed together",
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
 
         default_language = settings.LANGUAGE_CODE
 
@@ -372,6 +382,64 @@ class GeoSearchController(ApiController):
                 )
         queryset = queryset.filter(candidate_q)
 
+        if qlen <= 4 and not query.deduplicate:
+            # Instant autocomplete path: keystroke queries are
+            # near-unique — effectively uncacheable — so the cold
+            # path must be cheap on its own. Index-served candidates,
+            # ZERO trigram computation: prefix matches first, then a
+            # rank of importance (+ optional proximity blend). The
+            # similarity pipeline below stays for fuzzy (>= 5 char)
+            # queries and deduplicate runs.
+            fast_prefix = Case(
+                When(_name_lower__startswith=q.lower(), then=Value(1.0)),
+                default=Value(0.0),
+                output_field=FloatField(),
+            )
+            fast_importance = Case(
+                When(importance__lt=0, then=Value(0.0)),
+                When(importance__gt=100, then=Value(1.0)),
+                default=Coalesce(F("importance"), Value(0)) / Value(100.0),
+                output_field=FloatField(),
+            )
+            fast_qs = queryset.annotate(
+                prefix_match=fast_prefix,
+                _fast_importance=fast_importance,
+            )
+            if query.lat is not None and query.lon is not None:
+                from django.contrib.gis.geos import Point
+
+                bias_point = Point(query.lon, query.lat, srid=4326)
+                fast_qs = fast_qs.annotate(
+                    _distance_m=Distance("location", bias_point)
+                ).annotate(
+                    _fast_proximity=ExpressionWrapper(
+                        Greatest(
+                            Value(0.0),
+                            Value(1.0) - F("_distance_m") / Value(100_000.0),
+                        ),
+                        output_field=FloatField(),
+                    )
+                )
+                fast_qs = fast_qs.annotate(
+                    rank_score=ExpressionWrapper(
+                        Value(0.5) * F("_fast_importance")
+                        + Value(0.5) * F("_fast_proximity"),
+                        output_field=FloatField(),
+                    )
+                )
+            else:
+                fast_qs = fast_qs.annotate(
+                    rank_score=F("_fast_importance"),
+                )
+            fast_qs = fast_qs.order_by("-prefix_match", "-rank_score", "_name_lower")
+            return self._search_result_dicts(  # type: ignore  # serialized dicts match schema shape at runtime
+                fast_qs,
+                query,
+                wants_categories,
+                wants_sources,
+                wants_parties,
+            )
+
         if requested_language != default_language:
             translated_name = Cast(
                 KeyTextTransform(f"name_{requested_language}", "i18n"),
@@ -445,16 +513,6 @@ class GeoSearchController(ApiController):
                 ),
                 output_field=FloatField(),
             )
-        elif (query.lat is None) != (query.lon is None):
-            from http import HTTPStatus
-
-            raise APIError(
-                {
-                    "code": "invalid_parameter",
-                    "detail": "lat and lon must be passed together",
-                },
-                status_code=HTTPStatus.BAD_REQUEST,
-            )
 
         if proximity_expr is not None:
             rank_score = ExpressionWrapper(
@@ -519,9 +577,28 @@ class GeoSearchController(ApiController):
             "-rank_score",
             "-fts_rank",
             "-similarity",
-        )[query.offset : query.offset + query.limit]
+        )
 
-        results = []
+        results = self._search_result_dicts(
+            queryset, query, wants_categories, wants_sources, wants_parties
+        )
+        return results  # type: ignore  # serialized dicts match schema shape at runtime
+
+    def _search_result_dicts(
+        self,
+        queryset: Any,
+        query: GeoSearchQuery,
+        wants_categories: bool,
+        wants_sources: bool,
+        wants_parties: bool,
+    ) -> list[dict[str, Any]]:
+        """Slice an ordered search queryset and build response dicts."""
+        from django.conf import settings
+
+        request = self.request
+        queryset = queryset[query.offset : query.offset + query.limit]
+
+        results: list[dict[str, Any]] = []
         media_url = settings.MEDIA_URL
         if not media_url.startswith("http"):
             media_url = request.build_absolute_uri(media_url)
@@ -540,7 +617,7 @@ class GeoSearchController(ApiController):
                 result["parties"] = build_parties_data(place, request) or []
             results.append(result)
 
-        return results  # type: ignore  # serialized dicts match schema shape at runtime
+        return results
 
 
 class GeoNearbyController(ApiController):

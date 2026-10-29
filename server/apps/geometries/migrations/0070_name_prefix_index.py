@@ -8,7 +8,11 @@ cannot extract trigrams from single characters at all).
 
 Partial (``is_public AND is_active``) to match the search base filter
 exactly; built CONCURRENTLY — non-atomic migration, same pattern as
-0069.
+0069. ``text_pattern_ops`` is required: under the database's non-C
+collation a plain btree on ``lower(name)`` cannot serve ``LIKE 'q%'``
+prefix ranges (the planner falls back to sequence scans — the same
+reason Django's auto-indexes carry ``varchar_pattern_ops`` ``_like``
+twins). Measured: 0.1 ms index scan vs 21 ms seq scan at 440k rows.
 """
 
 from django.db import migrations
@@ -16,7 +20,7 @@ from django.db import migrations
 INDEX_SQL = """
     CREATE INDEX CONCURRENTLY IF NOT EXISTS geoplaces_name_lower_prefix_idx
     ON geometries_geoplace
-    USING btree (lower(name))
+    USING btree (lower(name) text_pattern_ops)
     WHERE is_public = true AND is_active = true
 """
 
