@@ -69,6 +69,22 @@ _pk_sequences_reset_done = False
 
 
 @pytest.fixture(autouse=True)
+def _clear_geoplace_caches():
+    """Clear GeoPlace's process-wide lru caches before every test.
+
+    ``_resolve_category_from_identifier`` and ``_get_organization_by_slug"
+    cache across tests; stale entries from rolled-back transactions poison
+    subsequent tests regardless of module (kind-guard validation rejects
+    valid classifiers when a root-level category was cached for an
+    identifier that now resolves to an accommodation child).
+    """
+    from server.apps.geometries.models import GeoPlace
+
+    GeoPlace._resolve_category_from_identifier.cache_clear()
+    GeoPlace._get_organization_by_slug.cache_clear()
+
+
+@pytest.fixture(autouse=True)
 def _pk_sequences_reset(
     request: pytest.FixtureRequest, django_db_blocker: DjangoDbBlocker
 ):
