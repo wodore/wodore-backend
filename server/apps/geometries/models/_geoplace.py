@@ -1065,6 +1065,58 @@ class GeoPlace(TimeStampedModel):
         return categories
 
     @classmethod
+    def _write_operations(cls, place: GeoPlace, operations: Any) -> bool:
+        """Upsert GeoPlaceOperation rows per (place, mode) (task 2.3).
+
+        The mode identifier must resolve to a ``mode.*`` child;
+        same-mode re-writes refresh capacity/hours (the per-mode
+        capacity invariant holds by construction — one row per mode).
+        """
+        from ._operation import GeoPlaceOperation
+
+        changed_any = False
+        for entry in operations:
+            mode = cls._resolve_category_from_identifier(entry.mode)
+            if mode.parent is None or mode.parent.slug != "mode":
+                msg = f"Invalid operation mode identifier: {entry.mode}"
+                raise ValueError(msg)
+            defaults = {
+                "capacity": entry.capacity,
+                "opening_hours": entry.opening_hours or {},
+            }
+            existing = GeoPlaceOperation.objects.filter(
+                geo_place=place, mode=mode
+            ).first()
+            if existing is None:
+                GeoPlaceOperation.objects.create(geo_place=place, mode=mode, **defaults)
+                changed_any = True
+            elif (
+                existing.capacity != defaults["capacity"]
+                or existing.opening_hours != defaults["opening_hours"]
+            ):
+                GeoPlaceOperation.objects.filter(pk=existing.pk).update(**defaults)
+                changed_any = True
+        return changed_any
+
+    @classmethod
+    def _write_seasonality(cls, place: GeoPlace, seasonality: Any) -> bool:
+        """Upsert the place's GeoPlaceSeasonality row (task 2.3).
+
+        Absent months stay untouched (unknown = NULL preserved);
+        shares are range-checked by the accessor and the DB.
+        """
+        from ._seasonality import GeoPlaceSeasonality, Month
+
+        if seasonality is None:
+            return False
+        row, _created = GeoPlaceSeasonality.objects.get_or_create(geo_place=place)
+        for key, share in dict(seasonality.months).items():
+            month = key if isinstance(key, Month) else Month(int(key))
+            row.months[month] = share
+        row.save()
+        return True
+
+    @classmethod
     def _create_from_schema(
         cls,
         schema: GeoPlaceBaseInput,
@@ -1157,6 +1209,12 @@ class GeoPlace(TimeStampedModel):
                 ],
                 ignore_conflicts=True,
             )
+
+        # Typed operating facts + seasonality (task 2.3)
+        if schema.operations:
+            cls._write_operations(place, schema.operations)
+        if schema.seasonality is not None:
+            cls._write_seasonality(place, schema.seasonality)
 
         # Create detail model based on type (flattened structure)
         from ..schemas import DetailType
@@ -1348,6 +1406,16 @@ class GeoPlace(TimeStampedModel):
             update_fields.append("detail_type")
             place_updated = True
 
+        # Typed operating facts + seasonality (task 2.3) — own
+        # protection keys (admin edits mark them like categories).
+        operations_updated = False
+        if "operations" not in protected and schema.operations:
+            operations_updated = cls._write_operations(place, schema.operations)
+        if "seasonality" not in protected and schema.seasonality is not None:
+            operations_updated = (
+                cls._write_seasonality(place, schema.seasonality) or operations_updated
+            )
+
         # Update name translations
         if "name" not in protected:
             name_dict = schema.get_name_dict()
@@ -1419,8 +1487,12 @@ class GeoPlace(TimeStampedModel):
                 update_fields.append("osm_tags")
                 place_updated = True
 
-        # Update extra data (merge strategy)
+        # Update extra data (merge strategy) — validated against the
+        # kind-root schema first (task 2.6, same fail-open guardrails)
         if "extra" not in protected and schema.extra:
+            from ._category_extra_schema import validate_place_extra
+
+            validate_place_extra([spec.category for spec in place_types], schema.extra)
             if place.extra != schema.extra:
                 place.extra = {**place.extra, **schema.extra}
                 update_fields.append("extra")
@@ -1487,7 +1559,7 @@ class GeoPlace(TimeStampedModel):
                 detail_updated = True
 
         # Return appropriate status
-        if place_updated or categories_updated or detail_updated:
+        if place_updated or categories_updated or detail_updated or operations_updated:
             return place, UpdateCreateStatus.updated
         return place, UpdateCreateStatus.no_change
 

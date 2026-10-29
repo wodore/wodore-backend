@@ -100,19 +100,29 @@ def kind_for(category: Any) -> PlaceKind:
     return kind_for_root(root_slug)
 
 
-def place_detail_type(categories: Any) -> str:
-    """Derived ``detail_type`` for a place's categories.
+def kind_root_category(categories: Any) -> Any:
+    """The root category anchoring a place's kind.
 
-    Kind = the parent of the first category by ``(order, slug)`` —
-    deterministic, the rule ``GeoPlace.__str__`` uses.
+    The parent of the first category by ``(order, slug)`` —
+    deterministic, the rule ``GeoPlace.__str__`` uses. Root categories
+    anchor directly.
     """
     ordered = sorted(
         (c for c in categories if c is not None),
         key=lambda c: (c.order, c.slug),
     )
     if not ordered:
+        return None
+    first = ordered[0]
+    return first.parent if first.parent is not None else first
+
+
+def place_detail_type(categories: Any) -> str:
+    """Derived ``detail_type`` for a place's categories."""
+    root = kind_root_category(categories)
+    if root is None:
         return "none"
-    return kind_for(ordered[0]).detail_type
+    return kind_for(root).detail_type
 
 
 def assert_registry_valid() -> None:
