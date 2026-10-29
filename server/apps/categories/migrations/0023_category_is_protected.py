@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('categories', '0021_category_created_category_modified_and_more'),
+        ('categories', '0022_transport_mode_colors'),
     ]
 
     operations = [
