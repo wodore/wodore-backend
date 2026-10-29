@@ -23,6 +23,7 @@ Usage:
 
 from __future__ import annotations
 
+import re
 import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, override
@@ -35,6 +36,51 @@ from django.core.management.base import BaseCommand, CommandError, CommandParser
 
 if TYPE_CHECKING:
     from server.apps.categories.models import Category
+
+#: `${NAME}` / `${NAME:-default}` tokens in passthrough source headers —
+#: resolved through the env registry (DB value wins, process-env
+#: fallback) at sync time so a key stored in the EnvVar admin reaches
+#: Martin without any container-env plumbing. Unresolvable tokens stay
+#: verbatim: Martin expands them from its own process env as fallback
+#: (``:-`` defaults empty), so an unset registry row degrades to an
+#: unauthenticated upstream instead of a broken config.
+_HEADER_ENV_TOKEN_RE = re.compile(r"\$\{([A-Z][A-Z0-9_]*)(?::-[^}]*)?\}")
+
+
+def resolve_passthrough_headers(config: dict[str, Any]) -> list[str]:
+    """Substitute `${NAME}` tokens in ``passthrough.sources.*.headers``.
+
+    Scoped to header values on purpose: every other `${…}` in the config
+    (``${DATABASE_URL}``, ``${MARTIN_SYNC_MOUNT:-…}``) keeps Martin's own
+    env expansion — the env registry is an allowlist for API keys, not a
+    general substitution engine. Returns the names actually resolved
+    (for logging); never logs values.
+    """
+    from server.apps.envvars.registry import resolve
+    from server.apps.envvars.registry import rows as registry_rows
+
+    resolved_names: list[str] = []
+    sources = (config.get("passthrough") or {}).get("sources") or {}
+    if not isinstance(sources, dict):
+        return resolved_names
+    snapshot = registry_rows()
+    for source in sources.values():
+        if not isinstance(source, dict):
+            continue  # shorthand URL (string/list) — no headers
+        headers = source.get("headers")
+        if not isinstance(headers, dict):
+            continue
+        for name, value in headers.items():
+            if not isinstance(value, str) or "${" not in value:
+                continue
+            for match in _HEADER_ENV_TOKEN_RE.finditer(value):
+                resolved = resolve(match.group(1), snapshot)
+                if not resolved:
+                    continue  # unregistered/blank: leave for Martin's env expansion
+                value = value.replace(match.group(0), resolved)
+                resolved_names.append(match.group(1))
+            headers[name] = value
+    return resolved_names
 
 
 @register_command(group="Huts")
@@ -478,6 +524,20 @@ class Command(BaseCommand):
                         )
                     )
                     stats["errors"] += 1
+
+        # Resolve `${NAME}` tokens in passthrough source headers through
+        # the env registry (DB value wins, process-env fallback) — an API
+        # key stored in the EnvVar admin reaches the GENERATED (gitignored)
+        # config without container-env plumbing; Martin's own env expansion
+        # stays the fallback for unresolvable tokens.
+        resolved_env = resolve_passthrough_headers(config)
+        if resolved_env:
+            names = ", ".join(sorted(set(resolved_env)))
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"  ✓ Resolved passthrough header env tokens: {names}"
+                )
+            )
 
         # Generate sprite paths based on synced directories
         sprite_dirs = stats.get("sprite_dirs", [])

@@ -151,13 +151,25 @@ Services are defined in `docker-compose.yml`:
     suffix and asks Martin to convert at serve time (implicit on
     Martin ≥ 1.16; `convert_to_mlt` in martin.yaml covers older). Only the
     literal `.mlt` suffix selects MLT — extension-less/`.pbf`/`.mvt` stay MVT.
-    Opt-in is style-side (`encoding: mlt` + `.mlt` tiles template; the huts
-    and availability overlays opted in). nginx (tile-router/edge) is required for `.mlt` URLs — it
+    Opt-in is style-side (`encoding: mlt` + `.mlt` tiles template; the huts,
+    availability and transport overlays opted in). Source ids must be
+    underscore-only — the tile-router's `.mlt` location and the CDN-Tag map
+    match `[A-Za-z0-9_,]` first path segments (hyphens break MLT serving
+    and purge tagging). nginx (tile-router/edge) is required for `.mlt` URLs — it
     already is the single tile origin in dev and prod; lane Martin
     (`scripts/lane-martin.sh`) has no router in front, so `.mlt` works there
     only via extension-less URL + explicit `Accept: application/vnd.maplibre-tile`
     header. Adding a source = style opt-in (+ martin.yaml entry for
     Martin < 1.16) — no router change.
+  - **Transitland passthrough** (`transitland_stops` in martin.yaml): Martin
+    proxies the Transitland v2 stops tileset (transport-stops overlay) with a
+    server-side `apikey` header, serve-time MVT→MLT conversion and a 4-day
+    stale-while-revalidate `cache_control`. The `TRANSITLAND_API_KEY` lives in
+    the env registry (envvars EnvVar row — value in the DB, never committed);
+    `martin_sync` bakes it into the generated config
+    (`resolve_passthrough_headers`), compose/lane-martin pass the env var as
+    fallback. The key never appears in a client-visible URL. Full story:
+    `_work/261029_transitland_transport_layer.md`.
 - **Tile-router** (`tile_server/tile-router.conf.template`, nginx) - Port 8075
   - Single-origin tile routing: `/raster/*` → the mapproxy facades
     (rewritten to mapproxy's internal `/mapproxy/` prefix), `*.mlt` →
