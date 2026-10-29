@@ -21,6 +21,9 @@ resolution — they classify associations, never places.
 
 from __future__ import annotations
 
+import contextvars
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -114,17 +117,77 @@ def kind_root_category(categories: Any) -> Any:
     return first.parent if first.parent is not None else first
 
 
+_ContractState = tuple[Any, tuple[str, ...]]
+#: group pk → (contract row | None, allowed classifier slugs).
+#: Active only inside ``contract_cache()`` — batch imports pay one
+#: query per distinct contract group instead of 2-3 per place
+#: (admin/API paths stay uncached: admin edits apply immediately).
+_contract_cache: contextvars.ContextVar[dict[int, _ContractState] | None] = (
+    contextvars.ContextVar("wodore_contract_cache", default=None)
+)
+
+
+@contextmanager
+def contract_cache() -> Iterator[None]:
+    """Batch-scope kind-contract cache for import loops.
+
+    Wrap an import loop: contract lookups (row + allowed classifiers)
+    are fetched once per distinct contract group. Correctness: the
+    cache lives only inside the ``with`` block — no admin-edit race
+    beyond the batch's own lifetime.
+    """
+    token = _contract_cache.set({})
+    try:
+        yield
+    finally:
+        _contract_cache.reset(token)
+
+
+def _contract_state_for_group(group: Any) -> _ContractState:
+    from .models._kind_contract import CategoryKindContract
+
+    cache = _contract_cache.get()
+    key = group.pk
+    if cache is not None and key in cache:
+        return cache[key]
+    contract = CategoryKindContract.objects.filter(category=group).first()
+    allowed = (
+        tuple(contract.allowed_classifiers.values_list("slug", flat=True))
+        if contract is not None
+        else ()
+    )
+    state: _ContractState = (contract, allowed)
+    if cache is not None:
+        cache[key] = state
+    return state
+
+
 def contract_for_group(group: Any) -> Any:
     """The DB contract for a contract-group category (or ``None``).
 
     ``None`` is the empty contract — no classifiers, no operations,
-    no seasonality. Admin edits apply immediately — no caching.
+    no seasonality. Admin edits apply immediately — no process-level
+    caching (a batch-scope cache may serve imports, see
+    ``contract_cache()``).
     """
     if group is None:
         return None
-    from .models._kind_contract import CategoryKindContract
+    return _contract_state_for_group(group)[0]
 
-    return CategoryKindContract.objects.filter(category=group).first()
+
+def kind_contract_state(category: Any) -> _ContractState:
+    """(contract | None, allowed classifier slugs) for a kind category.
+
+    Single round-trip per group (cached under ``contract_cache()``) —
+    ``validate_attributes`` needs both parts and must not pay one
+    query each.
+    """
+    if category is None:
+        return None, ()
+    parent = getattr(category, "parent", None)
+    if parent is None:
+        return None, ()
+    return _contract_state_for_group(parent)
 
 
 def kind_contract_for(category: Any) -> Any:
@@ -134,14 +197,9 @@ def kind_contract_for(category: Any) -> Any:
     group in the map tree) and returns its ``CategoryKindContract``,
     or ``None`` when the category has no parent or the group carries
     no contract row (empty contract: no classifiers, no operations,
-    no seasonality). Admin edits apply immediately — no caching.
+    no seasonality).
     """
-    if category is None:
-        return None
-    parent = getattr(category, "parent", None)
-    if parent is None:
-        return None
-    return contract_for_group(parent)
+    return kind_contract_state(category)[0]
 
 
 def place_kind_slug(categories: Any) -> str:

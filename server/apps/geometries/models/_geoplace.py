@@ -955,7 +955,7 @@ class GeoPlace(TimeStampedModel):
         return Organization.objects.get(slug=slug)
 
     @staticmethod
-    @lru_cache(maxsize=512)
+    @lru_cache(maxsize=4096)  # global identifier space (group.child pairs)
     def _resolve_category_from_identifier(identifier: str) -> Category:
         """Resolve Category from identifier with fallbacks for legacy trees."""
         parts = identifier.split(".")

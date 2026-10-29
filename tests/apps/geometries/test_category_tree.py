@@ -194,6 +194,52 @@ class TestKindSlugDerivation:
         assert place_kind_slug([mode_std, hut]) == KIND_AMENITY
 
 
+class TestContractCache:
+    """Batch-scope cache: one round-trip per group per batch."""
+
+    def test_batch_cache_cuts_queries(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from server.apps.geometries.kinds import contract_cache, kind_contract_state
+
+        hut, _ = Category.objects.get_or_create(
+            slug="cache-hut", parent=_accommodation(), defaults={"name": "C"}
+        )
+
+        # uncached: every call pays the contract + M2M queries
+        with CaptureQueriesContext(connection) as uncached:
+            kind_contract_state(hut)
+            kind_contract_state(hut)
+        n_uncached = len(uncached)
+
+        with contract_cache():
+            with CaptureQueriesContext(connection) as cached:
+                kind_contract_state(hut)
+                kind_contract_state(hut)
+                kind_contract_state(hut)
+        n_cached = len(cached)
+
+        assert n_uncached == 4  # 2 queries per call
+        assert n_cached == 2  # one round-trip total, rest served from cache
+
+    def test_cache_ends_with_context(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from server.apps.geometries.kinds import contract_cache, kind_contract_state
+
+        hut, _ = Category.objects.get_or_create(
+            slug="cache-hut", parent=_accommodation(), defaults={"name": "C"}
+        )
+        with contract_cache():
+            kind_contract_state(hut)
+        # outside the batch: queries again (admin edits apply immediately)
+        with CaptureQueriesContext(connection) as after:
+            kind_contract_state(hut)
+        assert len(after) == 2
+
+
 class TestIdentifierResolution:
     def test_resolve_slug_two_part_via_identifier(self):
         category, paths = Category.objects.resolve_slug("accommodation.hut")

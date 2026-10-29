@@ -331,16 +331,11 @@ class GeoPlaceCategory(TimeStampedModel):
         ``CategoryExtraSchema`` (no schema → free-form; corrupt
         stored schema → fail open, logged).
         """
-        from ..kinds import kind_contract_for
+        from ..kinds import kind_contract_state
 
         if classifier is not None:
             parent = classifier.parent
-            contract = kind_contract_for(category)
-            allowed = (
-                list(contract.allowed_classifiers.values_list("slug", flat=True))
-                if contract is not None
-                else []
-            )
+            _contract, allowed = kind_contract_state(category)
             if parent is None or parent.slug not in allowed:
                 raise ValidationError(
                     {
