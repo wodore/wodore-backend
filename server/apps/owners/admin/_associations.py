@@ -1,7 +1,8 @@
 from typing import ClassVar
 
 from django.contrib import admin
-from django.utils.safestring import SafeString, mark_safe
+from django.utils.html import format_html
+from django.utils.safestring import SafeString
 from django.utils.translation import gettext_lazy as _
 
 from unfold.decorators import display
@@ -60,7 +61,7 @@ class OwnerHutAssociationsAdmin(ModelAdmin):
 
     @display(description=_("Slug"))
     def slug_small(self, obj: OwnerHutProxy) -> SafeString:  # new
-        return mark_safe(f'<span class="text-gray-500">{obj.slug}</span>')
+        return format_html('<span class="text-gray-500">{}</span>', obj.slug)
 
     @display(description=_("Owner"), header=True)
     def owner_title(self, obj: OwnerHutProxy) -> tuple[str, str]:  # new
@@ -68,7 +69,9 @@ class OwnerHutAssociationsAdmin(ModelAdmin):
         if owner:
             return (
                 owner.name_i18n,
-                mark_safe(f'<a href="{owner.url}" target="_blank">{owner.url}</a>'),
+                format_html(
+                    '<a href="{}" target="_blank">{}</a>', owner.url, owner.url
+                ),
             )  # , mark_safe(f'<img src = "{obj.type.symbol_primitive.url}" width = "24"/>')
         return ("-", "")
 
@@ -77,12 +80,13 @@ class OwnerHutAssociationsAdmin(ModelAdmin):
         return (
             obj.name_i18n,
             obj.hut_type_open.name_i18n,
-            mark_safe(
+            format_html(
                 # latent bug kept as-is (typing ratchet must not change runtime
                 # behavior): Symbol has no `url` attribute, so this raises
                 # AttributeError whenever the column renders — models live
                 # outside this app and are out of ratchet scope.
-                f'<img src = "{obj.hut_type_open.symbol_primitive.url}" width = "24"/>'  # type: ignore  # latent AttributeError: Symbol has no `url` attr (string-ref FK, models out of scope)
+                '<img src = "{}" width = "24"/>',
+                obj.hut_type_open.symbol_primitive.url,  # type: ignore  # latent AttributeError: Symbol has no `url` attr (string-ref FK, models out of scope)
             ),
         )
 

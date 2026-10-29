@@ -2800,7 +2800,7 @@ msgid "Image and Hut Association"
 msgstr ""
 
 #: server/apps/huts/models/_associations.py:103
-msgid "Organization dependend properties."
+msgid "Organization dependent properties."
 msgstr ""
 
 #: server/apps/huts/models/_associations.py:111
