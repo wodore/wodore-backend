@@ -85,11 +85,47 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="CategoryKindContract",
             fields=[
-                ("id", models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
-                ("created", server.core.models._AutoCreatedField(default=django.utils.timezone.now, editable=False, verbose_name="created")),
-                ("modified", server.core.models._AutoLastModifiedField(default=django.utils.timezone.now, editable=False, verbose_name="modified")),
-                ("has_operations", models.BooleanField(default=False, help_text="Places under this group may carry operation rows", verbose_name="Has operations")),
-                ("has_seasonality", models.BooleanField(default=False, help_text="Places under this group may carry seasonality rows", verbose_name="Has seasonality")),
+                (
+                    "id",
+                    models.AutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "created",
+                    server.core.models._AutoCreatedField(
+                        default=django.utils.timezone.now,
+                        editable=False,
+                        verbose_name="created",
+                    ),
+                ),
+                (
+                    "modified",
+                    server.core.models._AutoLastModifiedField(
+                        default=django.utils.timezone.now,
+                        editable=False,
+                        verbose_name="modified",
+                    ),
+                ),
+                (
+                    "has_operations",
+                    models.BooleanField(
+                        default=False,
+                        help_text="Places under this group may carry operation rows",
+                        verbose_name="Has operations",
+                    ),
+                ),
+                (
+                    "has_seasonality",
+                    models.BooleanField(
+                        default=False,
+                        help_text="Places under this group may carry seasonality rows",
+                        verbose_name="Has seasonality",
+                    ),
+                ),
             ],
             options={
                 "verbose_name": "Category Kind Contract",
@@ -100,16 +136,41 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="categorykindcontract",
             name="category",
-            field=models.OneToOneField(help_text="The contract-group category (e.g. accommodation for accommodation.hut) this contract applies to", on_delete=django.db.models.deletion.CASCADE, related_name="kind_contract", to="categories.category", verbose_name="Contract group"),
+            field=models.OneToOneField(
+                help_text="The contract-group category (e.g. accommodation for accommodation.hut) this contract applies to",
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="kind_contract",
+                to="categories.category",
+                verbose_name="Contract group",
+            ),
         ),
         migrations.AddField(
             model_name="categorykindcontract",
             name="allowed_classifiers",
-            field=models.ManyToManyField(blank=True, help_text="Classifier vocabulary roots (mode, role, …) permitted on associations under this group", limit_choices_to=models.Q(("parent__isnull", True), models.Q(("slug", "map"), _negated=True)), related_name="kind_contracts", to="categories.category", verbose_name="Allowed classifiers"),
+            field=models.ManyToManyField(
+                blank=True,
+                help_text="Classifier vocabulary roots (mode, role, …) permitted on associations under this group",
+                limit_choices_to=models.Q(
+                    ("parent__isnull", True), models.Q(("slug", "map"), _negated=True)
+                ),
+                related_name="kind_contracts",
+                to="categories.category",
+                verbose_name="Allowed classifiers",
+            ),
         ),
         pgtrigger.migrations.AddTrigger(
             model_name="categorykindcontract",
-            trigger=pgtrigger.compiler.Trigger(name="upd_mod_42f1772c", sql=pgtrigger.compiler.UpsertTriggerSql(func="NEW.modified = NOW(); RETURN NEW;", hash="1ccbe99d7b7f1371782e313ee2fb6ccf2851791e", operation="UPDATE", pgid="pgtrigger_upd_mod_42f1772c_b0d9d", table="geometries_categorykindcontract", when="BEFORE")),
+            trigger=pgtrigger.compiler.Trigger(
+                name="upd_mod_42f1772c",
+                sql=pgtrigger.compiler.UpsertTriggerSql(
+                    func="NEW.modified = NOW(); RETURN NEW;",
+                    hash="1ccbe99d7b7f1371782e313ee2fb6ccf2851791e",
+                    operation="UPDATE",
+                    pgid="pgtrigger_upd_mod_42f1772c_b0d9d",
+                    table="geometries_categorykindcontract",
+                    when="BEFORE",
+                ),
+            ),
         ),
         migrations.RemoveConstraint(
             model_name="geoplace",
@@ -127,12 +188,24 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name="geoplace",
             name="kind_slug",
-            field=models.CharField(db_index=True, default="none", help_text="Super-root identifier of the place's kind (derived)", max_length=100, verbose_name="Kind Slug"),
+            field=models.CharField(
+                db_index=True,
+                default="none",
+                help_text="Super-root identifier of the place's kind (derived)",
+                max_length=100,
+                verbose_name="Kind Slug",
+            ),
         ),
         migrations.AddIndex(
             model_name="geoplace",
-            index=models.Index(fields=["kind_slug"], name="geometries__kind_sl_c6f402_idx"),
+            index=models.Index(
+                fields=["kind_slug"], name="geometries__kind_sl_c6f402_idx"
+            ),
         ),
         migrations.RunPython(convert_kind_slugs, reverse_kind_slugs),
-        migrations.RunPython(recreate_tiles_view, recreate_tiles_view),
+        # Reverse DROPS the view (not recreate): recreating would
+        # re-attach kind_slug SQL, then RenameField's reversal renames
+        # the column back to detail_type — a view over a missing
+        # column. 0065's reverse recreates the detail_type-era view.
+        migrations.RunPython(recreate_tiles_view, drop_tiles_view),
     ]

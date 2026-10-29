@@ -114,6 +114,19 @@ def kind_root_category(categories: Any) -> Any:
     return first.parent if first.parent is not None else first
 
 
+def contract_for_group(group: Any) -> Any:
+    """The DB contract for a contract-group category (or ``None``).
+
+    ``None`` is the empty contract — no classifiers, no operations,
+    no seasonality. Admin edits apply immediately — no caching.
+    """
+    if group is None:
+        return None
+    from .models._kind_contract import CategoryKindContract
+
+    return CategoryKindContract.objects.filter(category=group).first()
+
+
 def kind_contract_for(category: Any) -> Any:
     """The DB contract for a place's anchoring category.
 
@@ -128,13 +141,7 @@ def kind_contract_for(category: Any) -> Any:
     parent = getattr(category, "parent", None)
     if parent is None:
         return None
-    from .models._kind_contract import CategoryKindContract
-
-    return (
-        CategoryKindContract.objects.filter(category=parent)
-        .select_related("category")
-        .first()
-    )
+    return contract_for_group(parent)
 
 
 def place_kind_slug(categories: Any) -> str:

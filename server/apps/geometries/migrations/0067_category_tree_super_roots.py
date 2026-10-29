@@ -91,17 +91,15 @@ def seed_tree(apps: Any, _schema_editor: Any) -> None:
     #    their stored identifiers (children are unaffected).
     for group_slug, super_slug in SUPER_ROOT_ASSIGNMENT.items():
         super_root = super_roots[super_slug]
-        updated = Category.objects.filter(
-            slug=group_slug, parent=None
-        ).update(parent=super_root, identifier=f"{super_slug}.{group_slug}")
+        updated = Category.objects.filter(slug=group_slug, parent=None).update(
+            parent=super_root, identifier=f"{super_slug}.{group_slug}"
+        )
         # Stray group already re-parented (idempotent re-run): refresh
         # its identifier only when it sits under the wrong identifier.
         if not updated:
-            Category.objects.filter(
-                slug=group_slug, parent=super_root
-            ).exclude(identifier=f"{super_slug}.{group_slug}").update(
+            Category.objects.filter(slug=group_slug, parent=super_root).exclude(
                 identifier=f"{super_slug}.{group_slug}"
-            )
+            ).update(identifier=f"{super_slug}.{group_slug}")
 
     # 3. Seed kind contracts from the registry copy.
     for group_slug, (classifier_slugs, has_ops, has_season) in CONTRACT_SEED.items():
@@ -118,9 +116,7 @@ def seed_tree(apps: Any, _schema_editor: Any) -> None:
             },
         )
         for vocab_slug in classifier_slugs:
-            vocab_root = Category.objects.filter(
-                slug=vocab_slug, parent=None
-            ).first()
+            vocab_root = Category.objects.filter(slug=vocab_slug, parent=None).first()
             if vocab_root is not None:
                 contract.allowed_classifiers.add(vocab_root)
 

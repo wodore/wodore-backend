@@ -324,16 +324,23 @@ class GeoPlaceCategory(TimeStampedModel):
         import all funnel through here — Django calls ``clean()`` on
         none of the latter two paths. The classifier must be a child
         of one of the **kind's allowed classifier subtrees**
-        (``PLACE_KINDS`` — today ``mode`` for accommodation only);
+        (``CategoryKindContract.allowed_classifiers`` — the DB
+        contract on the kind's group, admin-editable; a missing
+        contract allows none);
         ``extra`` is validated against the category subtree's
         ``CategoryExtraSchema`` (no schema → free-form; corrupt
         stored schema → fail open, logged).
         """
-        from ..kinds import kind_for
+        from ..kinds import kind_contract_for
 
         if classifier is not None:
             parent = classifier.parent
-            allowed = kind_for(category).classifiers
+            contract = kind_contract_for(category)
+            allowed = (
+                list(contract.allowed_classifiers.values_list("slug", flat=True))
+                if contract is not None
+                else []
+            )
             if parent is None or parent.slug not in allowed:
                 raise ValidationError(
                     {

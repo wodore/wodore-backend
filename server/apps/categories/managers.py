@@ -80,9 +80,14 @@ class CategoryQuerySet(MultilingualQuerySet):
                 parent = qs.get(slug=parent_slug, parent__isnull=True)
                 category = qs.get(slug=child_slug, parent=parent)
                 return category, []
-            except self.model.DoesNotExist:
-                return None, []
-            except self.model.MultipleObjectsReturned:
+            except (self.model.DoesNotExist, self.model.MultipleObjectsReturned):
+                pass
+            # Depth-agnostic fallback (map tree): match by the stored
+            # identifier column — contract groups have parents under
+            # super-roots, so the root-level parent lookup misses.
+            try:
+                return qs.get(identifier=f"{parent_slug}.{child_slug}"), []
+            except (self.model.DoesNotExist, self.model.MultipleObjectsReturned):
                 return None, []
 
     def find_by_slug(

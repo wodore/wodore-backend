@@ -27,7 +27,14 @@ from server.core.models import TimeStampedModel
 from server.core.utils import UpdateCreateStatus
 
 from ..converters import RESERVED_URL_SEGMENTS, SLUG_GRAMMAR_RE
-from ..kinds import KIND_ADMIN, KIND_AMENITY, KIND_NONE, place_kind_slug
+from ..kinds import (
+    KIND_ADMIN,
+    KIND_AMENITY,
+    KIND_NONE,
+    contract_for_group,
+    kind_root_category,
+    place_kind_slug,
+)
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -966,6 +973,13 @@ class GeoPlace(TimeStampedModel):
                 return Category.objects.get(identifier=identifier)
 
         parent_slug, child_slug = parts[0], parts[1]
+        # Stored-identifier column first — depth-agnostic and indexed
+        # (contract groups gained parents under super-roots in the
+        # map tree, so root-level parent lookups miss).
+        try:
+            return Category.objects.get(identifier=f"{parent_slug}.{child_slug}")
+        except (Category.DoesNotExist, Category.MultipleObjectsReturned):
+            pass
         try:
             parent = Category.objects.get(slug=parent_slug, parent=None)
             return Category.objects.get(slug=child_slug, parent=parent)
@@ -975,7 +989,9 @@ class GeoPlace(TimeStampedModel):
             ).first()
             if category:
                 return category
-            return Category.objects.get(identifier=identifier)
+            raise Category.DoesNotExist(
+                f"Unknown category identifier: {identifier}"
+            ) from None
 
     @classmethod
     def _resolve_place_types(
@@ -1043,14 +1059,32 @@ class GeoPlace(TimeStampedModel):
         return categories
 
     @classmethod
-    def _write_operations(cls, place: GeoPlace, operations: Any) -> bool:
+    def _write_operations(
+        cls, place: GeoPlace, operations: Any, place_types: list[PlaceTypeSpec]
+    ) -> bool:
         """Upsert GeoPlaceOperation rows per (place, mode) (task 2.3).
+
+        Gated by the kind contract (task 2.2): the place's contract
+        group must enable operations — a group without a contract (or
+        with ``has_operations`` off) rejects the write.
 
         The mode identifier must resolve to a ``mode.*`` child;
         same-mode re-writes refresh capacity/hours (the per-mode
         capacity invariant holds by construction — one row per mode).
         """
         from ._operation import GeoPlaceOperation
+
+        contract = contract_for_group(
+            kind_root_category([spec.category for spec in place_types])
+        )
+        if contract is None or not contract.has_operations:
+            raise ValidationError(
+                {
+                    "operations": _(
+                        "Places under this kind's group carry no operations contract."
+                    )
+                }
+            )
 
         changed_any = False
         for entry in operations:
@@ -1077,14 +1111,30 @@ class GeoPlace(TimeStampedModel):
         return changed_any
 
     @classmethod
-    def _write_seasonality(cls, place: GeoPlace, seasonality: Any) -> bool:
+    def _write_seasonality(
+        cls, place: GeoPlace, seasonality: Any, place_types: list[PlaceTypeSpec]
+    ) -> bool:
         """Upsert the place's GeoPlaceSeasonality row (task 2.3).
+
+        Gated by the kind contract (task 2.2): the place's contract
+        group must enable seasonality.
 
         Absent months stay untouched (unknown = NULL preserved);
         shares are range-checked by the accessor and the DB.
         """
         from ._seasonality import GeoPlaceSeasonality, Month
 
+        contract = contract_for_group(
+            kind_root_category([spec.category for spec in place_types])
+        )
+        if contract is None or not contract.has_seasonality:
+            raise ValidationError(
+                {
+                    "seasonality": _(
+                        "Places under this kind's group carry no seasonality contract."
+                    )
+                }
+            )
         if seasonality is None:
             return False
         row, _created = GeoPlaceSeasonality.objects.get_or_create(geo_place=place)
@@ -1186,9 +1236,9 @@ class GeoPlace(TimeStampedModel):
 
         # Typed operating facts + seasonality (task 2.3)
         if schema.operations:
-            cls._write_operations(place, schema.operations)
+            cls._write_operations(place, schema.operations, place_types)
         if schema.seasonality is not None:
-            cls._write_seasonality(place, schema.seasonality)
+            cls._write_seasonality(place, schema.seasonality, place_types)
 
         # Create detail model based on type (flattened structure)
         if derived_kind_slug == KIND_AMENITY and schema.operating_status:
@@ -1383,9 +1433,11 @@ class GeoPlace(TimeStampedModel):
         ops_changed = False
         seasonality_changed = False
         if "operations" not in protected and schema.operations:
-            ops_changed = cls._write_operations(place, schema.operations)
+            ops_changed = cls._write_operations(place, schema.operations, place_types)
         if "seasonality" not in protected and schema.seasonality is not None:
-            seasonality_changed = cls._write_seasonality(place, schema.seasonality)
+            seasonality_changed = cls._write_seasonality(
+                place, schema.seasonality, place_types
+            )
         operations_updated = ops_changed or seasonality_changed
 
         # Update name translations

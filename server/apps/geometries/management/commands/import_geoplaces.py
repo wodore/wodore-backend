@@ -683,9 +683,13 @@ class Command(BaseCommand):
             # accommodation default/unknown category (design D4).
             # get_or_create under accommodation (HutTypeHelper may
             # return a root-level category — kind guard rejects it).
-            accommodation_parent = Category.objects.filter(
-                slug="accommodation", parent__isnull=True
-            ).first()
+            # accommodation lives under the amenity super-root in the
+            # map tree (identifier amenity.accommodation) — the
+            # parentless lookup misses (task 2.5).
+            accommodation_parent = (
+                Category.objects.filter(identifier="amenity.accommodation").first()
+                or Category.objects.filter(slug="accommodation").first()
+            )
             if accommodation_parent is not None:
                 unknown_type, _created = Category.objects.get_or_create(
                     slug="unknown",
