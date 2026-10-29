@@ -469,17 +469,28 @@ class TransportVectorContractTests(SimpleTestCase):
         assert set(src) == {"type", "tiles", "encoding", "minzoom", "maxzoom"}
 
     def test_sprite_pack_referenced_for_the_icons(self) -> None:
-        sprite = TRANSPORT_STYLE["sprite"]
-        assert sprite == [
-            {"id": "wd", "url": "{{env:MARTIN_TILE_URL}}/sprite/transport"}
-        ]
-        # per-mode icons only for modes with a category symbol, the
-        # generic root silhouette as fallback
         from server.apps.basemaps.seed_lib import (
             TRANSPORT_ICON_FALLBACK,
             TRANSPORT_ICONS,
+            TRANSPORT_SPRITE_ID,
         )
 
+        # OWN sprite id, unique per layer: frontend sprite ids are
+        # add-once (first URL wins) — a shared "wd" id let the huts
+        # pack shadow this one and the icons silently resolved to
+        # nothing (stops vanished at z14+). Every icon name must carry
+        # exactly this id's prefix.
+        assert TRANSPORT_SPRITE_ID == "wd-transport"
+        assert TRANSPORT_SPRITE_ID != "wd"
+        sprite = TRANSPORT_STYLE["sprite"]
+        assert sprite == [
+            {
+                "id": TRANSPORT_SPRITE_ID,
+                "url": "{{env:MARTIN_TILE_URL}}/sprite/transport",
+            }
+        ]
+        # per-mode icons only for modes with a category symbol, the
+        # generic root silhouette as fallback
         assert set(TRANSPORT_ICONS) == {
             "train_station",
             "tram_stop",
@@ -487,7 +498,9 @@ class TransportVectorContractTests(SimpleTestCase):
             "ferry",
             "bus_stop",
         }
-        assert TRANSPORT_ICON_FALLBACK == "wd:mono/root.transport"
+        prefix = TRANSPORT_SPRITE_ID + ":"
+        assert all(icon.startswith(prefix) for icon in TRANSPORT_ICONS.values())
+        assert TRANSPORT_ICON_FALLBACK == prefix + "mono/root.transport"
 
     def test_circle_layer_contract(self) -> None:
         circle = TRANSPORT_STYLE["layers"][0]
