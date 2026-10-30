@@ -510,10 +510,14 @@ class TransportVectorContractTests(SimpleTestCase):
         # nothing below z11; icons take over exactly at z14 (exclusive)
         assert circle["minzoom"] == 11
         assert circle["maxzoom"] == 14
+        # zoomed out: ONE marker per stop group — parent stations plus
+        # standalone (parentless) stops; parented platforms hide behind
+        # their station (case-folded OR: any/all not subset-whitelisted)
         assert circle["filter"] == [
-            "match",
-            ["get", "location_type"],
-            [0, 1],
+            "case",
+            ["==", ["get", "location_type"], 1],
+            True,
+            ["!", ["has", "parent_station"]],
             True,
             False,
         ]
@@ -530,7 +534,10 @@ class TransportVectorContractTests(SimpleTestCase):
         assert icons["id"] == "transport-stops-icons"
         assert icons["type"] == "symbol"
         assert icons["minzoom"] == 14
-        assert icons["filter"] == TRANSPORT_STYLE["layers"][0]["filter"]
+        # zoomed in: boarding positions only — the parent station would
+        # sit redundantly mid-road between its platforms (the reported
+        # "3 icons for 2 bus stops")
+        assert icons["filter"] == ["==", ["get", "location_type"], 0]
         layout = icons["layout"]
         assert layout["icon-allow-overlap"] is True
         assert layout["icon-size"][3] == 14  # ramp starts at the handover

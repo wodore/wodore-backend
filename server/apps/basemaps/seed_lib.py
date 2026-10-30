@@ -833,15 +833,33 @@ def _transport_color_expr(colors: dict[str, str]) -> list[Any]:
     return color_expr
 
 
-#: Both layers render stops and stations only — entrances (2), generic
-#: nodes (3) and boarding areas (4) stay off the map.
-_TRANSPORT_STOP_FILTER: list[Any] = [
-    "match",
-    ["get", "location_type"],
-    [0, 1],
+#: Zoom-dependent parent-station handling (owner decision 2026-10-30):
+#: a stop GROUP is a parent station (``location_type`` 1, the named
+#: stop area, e.g. "Liebefeld, Neuhausplatz") plus its boarding
+#: platforms (``location_type`` 0, each carrying a ``parent_station``
+#: link up — shown as 3 icons for 2 bus stops before this). Zoomed OUT
+#: one marker per group is wanted → stations + standalone (parentless)
+#: stops; zoomed IN the physical positions are wanted → platforms
+#: only (the parent would sit redundantly mid-road between them).
+#: Entrances (2), generic nodes (3) and boarding areas (4) never show.
+#:
+#: Circles (z11–z13.99): station OR standalone stop — parented
+#: platforms are represented by their station at these zooms. A
+#: case-folded OR (``any`` is not in the subset whitelist).
+_TRANSPORT_CIRCLE_FILTER: list[Any] = [
+    "case",
+    ["==", ["get", "location_type"], 1],
+    True,
+    ["!", ["has", "parent_station"]],
     True,
     False,
 ]
+
+#: Icons (z14+): boarding positions only. Stations vanish here by
+#: design; a station modeled WITHOUT platforms (rare — feeds model
+#: boarding positions explicitly) would drop out above z14 — accepted,
+#: documented trade-off.
+_TRANSPORT_ICON_FILTER: list[Any] = ["==", ["get", "location_type"], 0]
 
 #: Mono sprite icons for the z14+ symbol layer (whole literal names).
 #: The sprite id is UNIQUE PER LAYER on purpose (``wd-transport``, in
@@ -964,7 +982,10 @@ def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
                 "minzoom": 11,
                 # exclusive: at z14 the mono icons take over
                 "maxzoom": 14,
-                "filter": _TRANSPORT_STOP_FILTER,
+                # zoomed out: one marker per stop GROUP (stations +
+                # standalone stops; parented platforms hide behind their
+                # station — see _TRANSPORT_CIRCLE_FILTER)
+                "filter": _TRANSPORT_CIRCLE_FILTER,
                 "paint": {
                     "circle-color": _transport_color_expr(palette),
                     "circle-stroke-color": "#F6F6F6",
@@ -1005,7 +1026,9 @@ def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
                 "source": TRANSPORT_SOURCE_ID,
                 "source-layer": "stops",
                 "minzoom": 14,
-                "filter": _TRANSPORT_STOP_FILTER,
+                # zoomed in: boarding positions only — the parent station
+                # would sit redundantly mid-road between its platforms
+                "filter": _TRANSPORT_ICON_FILTER,
                 "layout": {
                     # whole literal sprite names per mode (case chain) —
                     # concat is not subset-whitelisted; unmapped modes

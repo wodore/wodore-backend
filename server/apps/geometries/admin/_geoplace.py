@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, ClassVar, override
+from typing import TYPE_CHECKING, Any, ClassVar, cast, override
 
 from django_admin_runner.admin import CommandRunnerModelAdminMixin
 
@@ -113,7 +113,7 @@ class GeoPlaceSourceAssociationInline(unfold_admin.TabularInline):
     def has_add_permission(self, request: HttpRequest, obj: Any) -> bool:  # type: ignore  # inline-admin default-param drift, plugin-less
         return False
 
-    def has_delete_permission(self, request, obj):  # type: ignore  # inline-admin default-param drift, plugin-less
+    def has_delete_permission(self, _request, _obj):  # type: ignore  # inline-admin default-param drift, plugin-less
         return False
 
     @display(description=_("Extra Data"))
@@ -153,7 +153,7 @@ class GeoPlaceExternalLinkInline(unfold_admin.TabularInline):
     def has_add_permission(self, request: HttpRequest, obj: Any) -> bool:  # type: ignore  # inline-admin default-param drift, plugin-less
         return True
 
-    def has_delete_permission(self, request, obj):  # type: ignore  # inline-admin default-param drift, plugin-less
+    def has_delete_permission(self, _request, _obj):  # type: ignore  # inline-admin default-param drift, plugin-less
         return True
 
 
@@ -198,10 +198,14 @@ class GeoPlaceCategoryInlineForm(forms.ModelForm[GeoPlaceCategory]):
         super().__init__(*args, **kwargs)
         from unfold.widgets import UnfoldAdminJSONSchemaWidget
 
-        from server.apps.geometries.models import resolve_extra_schema
+        from server.apps.geometries.models import GeoPlaceCategory, resolve_extra_schema
 
-        if self.instance.category_id:
-            schema_row = resolve_extra_schema(self.instance.category)
+        # Narrow the generic ModelForm instance (its ``instance`` types
+        # as the abstract base — the FK-id attribute is only known on
+        # the concrete model).
+        instance = cast(GeoPlaceCategory, self.instance)
+        if instance.category_id:
+            schema_row = resolve_extra_schema(instance.category)
             if schema_row is not None and schema_row.schema:
                 self.fields["extra"].widget = UnfoldAdminJSONSchemaWidget(
                     attrs={"schema": schema_row.schema}
@@ -261,7 +265,7 @@ class GeoPlaceCategoryInline(unfold_admin.TabularInline):
     def has_add_permission(self, request: HttpRequest, obj: Any) -> bool:  # type: ignore  # inline-admin default-param drift, plugin-less
         return True
 
-    def has_delete_permission(self, request, obj):  # type: ignore  # inline-admin default-param drift, plugin-less
+    def has_delete_permission(self, _request, _obj):  # type: ignore  # inline-admin default-param drift, plugin-less
         return True
 
 
@@ -440,7 +444,7 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
             )
         )
 
-    def get_inlines(self, request, obj):  # type: ignore  # admin hook signature drift vs stubs
+    def get_inlines(self, _request, _obj):  # type: ignore  # admin hook signature drift vs stubs
         """Return inlines for admin."""
         return [
             GeoPlaceCategoryInline,
