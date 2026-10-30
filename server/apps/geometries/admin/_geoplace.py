@@ -342,8 +342,9 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
 
     # domain derives on write from the category tree
-    # (geoplace-category-tree) — never hand-edited
-    readonly_fields = ("domain",)
+    # (geoplace-category-tree) — never hand-edited; kind_display is
+    # the derived anchor category (first by order/slug)
+    readonly_fields = ("domain", "kind_display")
 
     list_display = (
         "category_icon",
@@ -599,6 +600,17 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         """Display categories with parents if available."""
         categories = list(obj.categories.all())
         return _format_categories_list(categories)
+
+    @display(description=_("Kind"))
+    def kind_display(self, obj: GeoPlace) -> str:
+        """The anchoring kind category (first by order/slug) — derived.
+
+        Not a stored column: the kind IS the first category
+        association (the same anchor ``domain`` derives its super-root
+        from). Editable via the Categories inline below.
+        """
+        first = obj.categories.order_by("order", "slug").first()
+        return first.identifier if first else "—"
 
     @display(description=_("Elevation"))
     def elevation_display(self, obj: GeoPlace) -> str:

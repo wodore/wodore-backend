@@ -254,6 +254,7 @@ class GeoPlaceCategory(TimeStampedModel):
     #: Runtime FK id attribute (None while unsaved) — pyrefly does not
     #: synthesize ``<fk>_id`` attributes; explicit annotation per the
     #: repo idiom (see _category_extra_schema.py).
+    geo_place_id: int
     category_id: int | None
     classifier = models.ForeignKey(
         Category,

@@ -200,12 +200,14 @@ class GeoPlace(TimeStampedModel):
     domain = models.CharField(
         max_length=100,
         default=DOMAIN_NONE,
-        # indexed via Meta (geometries__kind_sl_c6f402_idx); db_index
-        # would create a duplicate auto index (the rename from
-        # detail_type carried the old auto pair along — dropped in
-        # 0069, geoplace-read-performance)
-        verbose_name=_("Kind Slug"),
-        help_text=_("Super-root identifier of the place's kind (derived)"),
+        # indexed via Meta (geoplace_domain_idx); db_index would
+        # create a duplicate auto index (the rename from detail_type
+        # carried the old auto pair along — dropped in 0069,
+        # geoplace-read-performance)
+        verbose_name=_("Domain"),
+        help_text=_(
+            "Super-root tier of the place (derived) — amenity / admin / natural / none"
+        ),
     )
 
     # Protected fields (manual edits)
