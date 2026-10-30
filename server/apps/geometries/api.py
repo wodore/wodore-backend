@@ -550,7 +550,17 @@ class GeoSearchController(ApiController):
                 KeyTextTransform(f"name_{requested_language}", "i18n"),
                 output_field=CharField(),
             )
-            primary_similarity = TrigramSimilarity(translated_name, q)
+            # Coalesce to the base name: an untranslated place must
+            # score at FULL similarity — the bare translated expression
+            # is NULL there, leaving only the 0.3x blend arm
+            # (0.3 * 0.667 = 0.20 < 0.25) so progressive typing like
+            # "reitna" -> "Reitnau" could never clear a threshold
+            # (staging report). With the translation present it stays
+            # primary; the 0.3x arm then only demotes cross-lingual
+            # matches for RANKING, never gates them out.
+            primary_similarity = TrigramSimilarity(
+                Coalesce(translated_name, "name", output_field=CharField()), q
+            )
         else:
             primary_similarity = TrigramSimilarity("name", q)
 
