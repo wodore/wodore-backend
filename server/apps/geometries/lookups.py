@@ -27,4 +27,15 @@ class ILike(Lookup):
         return f"{lhs} ILIKE {rhs}", params
 
 
+def escape_like(value: str) -> str:
+    """Escape LIKE/ILIKE metacharacters in a literal search string.
+
+    ``%``/``_``/backslash in user input must not act as wildcards —
+    unlike Django's builtin ``contains`` family (PatternLookup, which
+    escapes), a custom Lookup gets the pattern verbatim (Opus review
+    F2).
+    """
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 CharField.register_lookup(ILike)

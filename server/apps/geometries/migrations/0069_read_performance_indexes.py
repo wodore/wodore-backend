@@ -35,8 +35,6 @@ GEOGRAPHY_INDEX_REVERSE_SQL = (
     "DROP INDEX CONCURRENTLY IF EXISTS geoplaces_location_geography_gist_idx"
 )
 
-TRIGRAM_THRESHOLD_SQL = "ALTER DATABASE SET pg_trgm.similarity_threshold = '0.1'"
-
 
 def set_trigram_threshold(_apps: Any, _schema_editor: Any) -> None:
     from psycopg import sql

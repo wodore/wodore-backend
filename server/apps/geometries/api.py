@@ -37,6 +37,7 @@ from server.apps.translations import LanguageQuery
 
 from .converters import GeoPlaceSlugConverter  # noqa: F401  # registers <geoplace:slug>
 from .kinds import DOMAIN_AMENITY
+from .lookups import escape_like
 from .models import GeoPlace, GeoPlaceCategory
 from .schemas import (
     GeoPlaceDetailSchema,
@@ -442,13 +443,18 @@ class GeoSearchController(ApiController):
             if requested_language != default_language:
                 candidate_q |= Q(_candidate_name_lower__startswith=q.lower())
         elif qlen <= 4:
-            candidate_q = prefix_q | Q(name__ilike=f"%{q}%")
+            # Containment patterns escape LIKE metacharacters — the
+            # custom ilike lookup takes the pattern verbatim, unlike
+            # the builtin startswith arm (PatternLookup escapes)
+            contained = f"%{escape_like(q)}%"
+            candidate_q = prefix_q | Q(name__ilike=contained)
             if requested_language != default_language:
-                candidate_q |= Q(_candidate_name__ilike=f"%{q}%")
+                candidate_q |= Q(_candidate_name__ilike=contained)
         else:
-            candidate_q = Q(name__ilike=f"%{q}%") | Q(name__trigram_similar=q)
+            contained = f"%{escape_like(q)}%"
+            candidate_q = Q(name__ilike=contained) | Q(name__trigram_similar=q)
             if requested_language != default_language:
-                candidate_q |= Q(_candidate_name__ilike=f"%{q}%") | Q(
+                candidate_q |= Q(_candidate_name__ilike=contained) | Q(
                     _candidate_name__trigram_similar=q
                 )
         queryset = queryset.filter(candidate_q)
@@ -652,7 +658,7 @@ class GeoSearchController(ApiController):
         )
 
         results = self._search_result_dicts(
-            queryset, query, wants_categories, wants_sources, wants_parties
+            queryset, query, wants_categories, wants_sources, wants_parties, wants_kind
         )
         return results  # type: ignore  # serialized dicts match schema shape at runtime
 
