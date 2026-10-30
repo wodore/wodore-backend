@@ -510,10 +510,14 @@ class TransportVectorContractTests(SimpleTestCase):
         # nothing below z11; icons take over exactly at z14 (exclusive)
         assert circle["minzoom"] == 11
         assert circle["maxzoom"] == 14
+        # zoomed out: ONE marker per stop group — parent stations plus
+        # standalone (parentless) stops; parented platforms hide behind
+        # their station (case-folded OR: any/all not subset-whitelisted)
         assert circle["filter"] == [
-            "match",
-            ["get", "location_type"],
-            [0, 1],
+            "case",
+            ["==", ["get", "location_type"], 1],
+            True,
+            ["!", ["has", "parent_station"]],
             True,
             False,
         ]
@@ -526,14 +530,28 @@ class TransportVectorContractTests(SimpleTestCase):
         assert radius[6] == ["case", ["==", ["get", "location_type"], 1], 4.0, 3.0]
 
     def test_icon_layer_contract(self) -> None:
-        icons = TRANSPORT_STYLE["layers"][1]
-        assert icons["id"] == "transport-stops-icons"
-        assert icons["type"] == "symbol"
-        assert icons["minzoom"] == 14
-        assert icons["filter"] == TRANSPORT_STYLE["layers"][0]["filter"]
-        layout = icons["layout"]
-        assert layout["icon-allow-overlap"] is True
-        assert layout["icon-size"][3] == 14  # ramp starts at the handover
+        """Two icon bands: one icon per stop GROUP through z16.99
+        (neighborhood declutter — the same filter as the circles),
+        platform detail from z17 (exclusive handover)."""
+        group = TRANSPORT_STYLE["layers"][1]
+        assert group["id"] == "transport-stops-icons"
+        assert group["type"] == "symbol"
+        assert group["minzoom"] == 14
+        assert group["maxzoom"] == 17
+        # still one icon per stop group at neighborhood zooms
+        assert group["filter"] == TRANSPORT_STYLE["layers"][0]["filter"]
+        assert group["layout"]["icon-allow-overlap"] is True
+        assert group["layout"]["icon-size"][3] == 14
+
+        detail = TRANSPORT_STYLE["layers"][2]
+        assert detail["id"] == "transport-stops-icons-detail"
+        assert detail["minzoom"] == 17
+        # platform detail only — the parent station would sit
+        # redundantly mid-road between its platforms (the reported
+        # "3 icons for 2 bus stops")
+        assert detail["filter"] == ["==", ["get", "location_type"], 0]
+        assert detail["layout"]["icon-allow-overlap"] is True
+        assert detail["layout"]["icon-size"][3] == 17  # ramp continues
 
     def test_icon_image_case_chain_uses_literal_names(self) -> None:
         """Per-mode whole literal sprite names (concat is not in the
@@ -816,10 +834,13 @@ class TestSeedTagging:
         assert [layer["id"] for layer in row.style["layers"]] == [
             "transport-stops",
             "transport-stops-icons",
+            "transport-stops-icons-detail",
         ]
         assert row.style["layers"][0]["minzoom"] == 11
         assert row.style["layers"][0]["maxzoom"] == 14
         assert row.style["layers"][1]["minzoom"] == 14
+        assert row.style["layers"][1]["maxzoom"] == 17
+        assert row.style["layers"][2]["minzoom"] == 17
         # slug-level config (filter) rides the row
         assert row.config is not None
         assert "filters" in row.config

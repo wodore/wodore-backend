@@ -10,6 +10,7 @@ import typing as t
 from typing import override
 
 from django.contrib import admin, messages
+from django.contrib.admin.options import ActionLocation
 from django.core.exceptions import ImproperlyConfigured, PermissionDenied
 from django.db.models import QuerySet
 from django.http import HttpRequest, HttpResponseNotAllowed
@@ -98,13 +99,21 @@ class LLMAdminMixin(admin.ModelAdmin[t.Any]):
 
     # -- changelist actions ------------------------------------------------
 
-    def get_actions(self, request) -> dict[str, t.Any]:  # type: ignore  # admin hook signature drift vs stubs
+    @override
+    def get_actions(
+        self,
+        request: HttpRequest,
+        action_location: ActionLocation = ActionLocation.CHANGE_LIST,
+    ) -> dict[str, t.Any]:
         """Hide the LLM bulk actions when the API is unconfigured.
 
         Filters the inherited actions instead of returning an empty dict so
-        built-ins like ``delete_selected`` survive.
+        built-ins like ``delete_selected`` survive. Signature matches the
+        Django 5.1+ base hook (``action_location`` keyword) — the old
+        2-param override tripped the RemovedInDjango70 deprecation and
+        MRO signature-checker mismatches.
         """
-        actions = super().get_actions(request)
+        actions = super().get_actions(request, action_location=action_location)
         if not translations_api_enabled():
             actions.pop("translate_selected", None)
             actions.pop("assess_selected", None)
