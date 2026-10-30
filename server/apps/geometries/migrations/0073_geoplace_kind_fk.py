@@ -7,9 +7,9 @@ source of truth for classifiers/extras (D1); the FK is the
 denormalized anchor, re-derived on every write path alongside
 ``domain``.
 
-The ``AlterField`` on ``domain`` rides along: it captures the
-verbose_name/help_text corrections from the admin-label fix (no DB
-change).
+The ``AlterField`` on ``domain`` (verbose_name/help_text) ships in
+its own migration on the base branch (#464) — this one chains onto
+it.
 
 Backfill: a single-statement UPDATE with a correlated subquery —
 the per-row trigger overhead needs the lifted statement timeout
@@ -52,7 +52,9 @@ def null_kind(_apps: Any, schema_editor: Any) -> None:
 class Migration(migrations.Migration):
     dependencies = [
         ("categories", "0023_category_is_protected"),
-        ("geometries", "0072_kind_slug_to_domain"),
+        # chains onto the label migration (#464) — both would otherwise
+        # leaf off 0072 and Django refuses multiple leaf nodes
+        ("geometries", "0073_domain_verbose_label"),
     ]
 
     operations = [
@@ -67,16 +69,6 @@ class Migration(migrations.Migration):
                 related_name="places_anchored",
                 to="categories.category",
                 verbose_name="Kind",
-            ),
-        ),
-        migrations.AlterField(
-            model_name="geoplace",
-            name="domain",
-            field=models.CharField(
-                default="none",
-                help_text="Super-root tier of the place (derived) — amenity / admin / natural / none",
-                max_length=100,
-                verbose_name="Domain",
             ),
         ),
         migrations.RunPython(backfill_kind, null_kind),
