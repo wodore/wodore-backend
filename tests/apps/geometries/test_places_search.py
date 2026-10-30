@@ -62,16 +62,49 @@ class TestPlacesSearchApi:
 
     def test_wildcards_are_literal(self, client: Client):
         """Opus review F2: % and _ in the query must not act as LIKE
-        wildcards — the containment arm escapes metacharacters."""
+        wildcards — the containment arm escapes metacharacters.
+
+        threshold=0.9 isolates the LIKE arms: fuzzy similarity
+        LEGITIMATELY matches 'A_berg'~'Axxberg' at ~0.36 (pg_trgm
+        treats '_' as a word separator — that is typo matching, not
+        wildcard semantics). Before the Coalesce fix the untranslated
+        blend ceiling hid those matches at 0.3x; this test now pins
+        LIKE-escaping alone."""
         self._make_place("Axxberg", "axxberg-t2")
         # underscore: 'A_berg' must NOT match 'Axxberg' (single-char wildcard)
-        response = client.get("/v1/geo/places/search", {"q": "A_berg"})
+        response = client.get(
+            "/v1/geo/places/search", {"q": "A_berg", "threshold": "0.9"}
+        )
         assert response.status_code == 200
         assert all(r["slug"] != "axxberg-t2" for r in response.json())
         # percent: 'A%berg' must NOT match 'Axxberg' (any-chars wildcard)
-        response = client.get("/v1/geo/places/search", {"q": "A%berg"})
+        response = client.get(
+            "/v1/geo/places/search", {"q": "A%berg", "threshold": "0.9"}
+        )
         assert response.status_code == 200
         assert all(r["slug"] != "axxberg-t2" for r in response.json())
         # control: the literal name matches
         response = client.get("/v1/geo/places/search", {"q": "Axxberg"})
         assert any(r["slug"] == "axxberg-t2" for r in response.json())
+
+    def test_untranslated_place_findable_via_other_language(
+        self, client: Client
+    ) -> None:
+        """Regression (staging report): ``lang=en`` against a place
+        without ``name_en`` must still match at threshold 0.25. The
+        pre-fix blend left only the 0.3x arm — 0.3 * 0.667 = 0.20 —
+        so progressive typing ("reitna" -> "Reitnau") could never
+        clear the threshold until the name was fully typed."""
+        self._make_place("Reitnauberg", "reitnauberg-reg")
+        response = client.get(
+            "/v1/geo/places/search",
+            {
+                "q": "reitna",
+                "lang": "en",
+                "threshold": "0.25",
+                "fields[places]": "slug",
+            },
+        )
+        assert response.status_code == 200, response.content
+        slugs = {e["slug"] for e in response.json()}
+        assert "reitnauberg-reg" in slugs, response.content

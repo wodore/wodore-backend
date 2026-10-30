@@ -167,14 +167,32 @@ class TestPlaceDetailContent:
     def test_default_response_carries_categories(
         self, seed_data: dict[str, int], client: Client
     ):
-        place = (
-            GeoPlace.objects.filter(is_active=True, is_public=True)
-            .exclude(categories=None)
-            .first()
+        # geoplace-kind-fk: the anchor kind row moved to the `kind`
+        # member; categories lists SUB-categories only — build a place
+        # with a second (sub) category so the member is non-empty.
+        from server.apps.geometries.models import GeoPlaceCategory
+
+        place = make_place(domain="amenity")
+        accommodation = Category.objects.get(
+            slug="accommodation", parent__slug="amenity"
         )
-        assert place is not None
+        hut_cat, _ = Category.objects.get_or_create(
+            slug="detail-hut", parent=accommodation, defaults={"name": "Hütte"}
+        )
+        sub_cat, _ = Category.objects.get_or_create(
+            slug="detail-shelter",
+            parent=accommodation,
+            defaults={"name": "Notlager"},
+        )
+        GeoPlaceCategory.objects.create(geo_place=place, category=hut_cat)
+        GeoPlaceCategory.objects.create(geo_place=place, category=sub_cat)
+        place.refresh_from_db()
+
         data = client.get(f"/v1/geo/places/{place.slug}").json()
+        assert data["kind"]["identifier"] == "accommodation.detail-hut"
         assert data["categories"]
+        # the anchor never appears in categories (it lives in `kind`)
+        assert [c["slug"] for c in data["categories"]] == ["detail-shelter"]
 
     def test_narrowed_selection(self, client: Client):
         place = make_place(domain="amenity")
@@ -232,11 +250,25 @@ class TestPlaceDetailContent:
         self, seed_data: dict[str, int], client: Client
     ):
         """Review finding #2: nested required fields stay (no pydantic 500)."""
-        place = (
-            GeoPlace.objects.filter(is_active=True, is_public=True)
-            .exclude(categories=None)
-            .first()
+        # geoplace-kind-fk: build a place with a sub-category so the
+        # member is non-empty (the anchor lives in `kind`).
+        from server.apps.geometries.models import GeoPlaceCategory
+
+        place = make_place(domain="amenity")
+        accommodation = Category.objects.get(
+            slug="accommodation", parent__slug="amenity"
         )
+        hut_cat, _ = Category.objects.get_or_create(
+            slug="detail-hut", parent=accommodation, defaults={"name": "Hütte"}
+        )
+        sub_cat, _ = Category.objects.get_or_create(
+            slug="detail-shelter",
+            parent=accommodation,
+            defaults={"name": "Notlager"},
+        )
+        GeoPlaceCategory.objects.create(geo_place=place, category=hut_cat)
+        GeoPlaceCategory.objects.create(geo_place=place, category=sub_cat)
+        place.refresh_from_db()
         assert place is not None
         data = client.get(
             f"/v1/geo/places/{place.slug}",

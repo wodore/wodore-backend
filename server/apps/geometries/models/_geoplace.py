@@ -31,6 +31,7 @@ from ..kinds import (
     DOMAIN_ADMIN,
     DOMAIN_AMENITY,
     DOMAIN_NONE,
+    anchor_category,
     contract_for_group,
     kind_root_category,
     place_domain,
@@ -207,6 +208,25 @@ class GeoPlace(TimeStampedModel):
         verbose_name=_("Domain"),
         help_text=_(
             "Super-root tier of the place (derived) — amenity / admin / natural / none"
+        ),
+    )
+
+    # Kind — the anchoring main category (first association by
+    # (order, slug), derived on write alongside `domain`). Stored as
+    # an indexed FK; the association table stays the source of truth
+    # for classifiers/extras (geoplace-kind-fk D1).
+    kind_id: int | None
+
+    kind = models.ForeignKey(
+        "categories.Category",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="places_anchored",
+        verbose_name=_("Kind"),
+        help_text=_(
+            "The anchoring main category (derived: first association "
+            "by order, slug) — categories inline edits re-anchor on save"
         ),
     )
 
@@ -1171,9 +1191,10 @@ class GeoPlace(TimeStampedModel):
         name_dict = schema.get_name_dict()
         description_dict = schema.get_description_dict()
 
-        # domain is derived on write from the category tree
-        # (geoplace-category-tree D3) — the input schema no longer
-        # declares it.
+        # domain + kind derived on write from the category tree
+        # (geoplace-kind-fk D4 — one derivation step, two stored
+        # facts). The input schema declares neither.
+        anchor = anchor_category([spec.category for spec in place_types])
         derived_domain = place_domain([spec.category for spec in place_types])
 
         # Build place data
@@ -1183,6 +1204,7 @@ class GeoPlace(TimeStampedModel):
             "location": location,
             "country_code": schema.country_code,
             "domain": derived_domain,
+            "kind": anchor,
             "elevation": schema.elevation,
             "importance": schema.importance,
             "review_status": schema.review_status.value,
@@ -1425,12 +1447,17 @@ class GeoPlace(TimeStampedModel):
                     assoc.save(update_fields=["extra", "modified"])
                     categories_updated = True
 
-        # domain derived on write from the category tree
-        # (geoplace-category-tree D3).
+        # domain + kind derived on write from the category tree
+        # (geoplace-kind-fk D4).
+        anchor = anchor_category([spec.category for spec in place_types])
         derived_domain = place_domain([spec.category for spec in place_types])
         if "domain" not in protected and place.domain != derived_domain:
             place.domain = derived_domain
             update_fields.append("domain")
+            place_updated = True
+        if "kind" not in protected and place.kind_id != (anchor.pk if anchor else None):
+            place.kind = anchor
+            update_fields.append("kind")
             place_updated = True
 
         # Typed operating facts + seasonality (task 2.3) — own

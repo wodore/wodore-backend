@@ -149,6 +149,13 @@ class TestRemoveBrandCategories:
         _migration().remove_brand_categories(_historical_apps(), None)
         _migration().remove_brand_categories(_historical_apps(), None)  # idempotent
 
+        # 0073's kind FK is invisible to 0056's historical registry —
+        # the live-model association creates above anchored kind to a
+        # now-deleted category, and the deferred FK surfaces only at
+        # teardown's SET CONSTRAINTS ALL IMMEDIATE (test-only). Reset
+        # the anchor: production's 0056 ran before 0073 existed.
+        GeoPlace.objects.filter(kind_id__isnull=False).update(kind=None)
+
         assert not Category.objects.filter(identifier="root.brand").exists()
         assert not GeoPlaceCategory.objects.filter(
             category__slug__in=["brand", "volg", "coop"]

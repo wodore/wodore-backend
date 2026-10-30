@@ -100,6 +100,20 @@ DOMAIN_VOCABULARY_ROOTS: frozenset[str] = frozenset(
 )
 
 
+def anchor_category(categories: Any) -> Any:
+    """The anchoring kind category — first by ``(order, slug)``.
+
+    The exact rule ``GeoPlace.__str__`` and the tiles JSON ordering
+    use; ``GeoPlace.kind`` stores it (geoplace-kind-fk),
+    ``kind_root_category`` resolves its contract group.
+    """
+    ordered = sorted(
+        (c for c in categories if c is not None),
+        key=lambda c: (c.order, c.slug),
+    )
+    return ordered[0] if ordered else None
+
+
 def kind_root_category(categories: Any) -> Any:
     """The contract-group category anchoring a place's kind.
 

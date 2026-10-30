@@ -41,6 +41,7 @@ from server.apps.external_geonames.management.commands._country_groups import (
     expand_countries,
 )
 from server.apps.external_geonames.models import Feature, GeoName
+from server.apps.geometries.kinds import anchor_category, place_domain
 from server.apps.geometries.models import GeoPlace
 from server.apps.geometries.schemas import (
     GeoPlaceBaseInput,
@@ -840,6 +841,13 @@ class Command(BaseCommand):
             is_modified=False,
         )
         place.categories.add(geoname.feature.category)
+        # m2m .add() writes through bulk_create — no post_save fires,
+        # so the rederive receiver (models/_associations.py) never
+        # runs on this path; derive explicitly (Opus review #3)
+        categories = list(place.categories.all())
+        place.kind = anchor_category(categories)
+        place.domain = place_domain(categories)
+        place.save(update_fields=["kind", "domain", "modified"])
         return place
 
     def _update_place(self, place: GeoPlace, geoname: GeoName, importance: int) -> bool:
@@ -857,6 +865,7 @@ class Command(BaseCommand):
 
         # Check if any fields actually changed
         changed = False
+        update_fields = ["name", "location", "elevation", "importance", "modified"]
         truncated_name = self._truncate_name(geoname.name)
         if place.name != truncated_name:
             place.name = truncated_name
@@ -876,18 +885,16 @@ class Command(BaseCommand):
             and not place.categories.filter(id=geoname.feature.category_id).exists()
         ):
             place.categories.add(geoname.feature.category)
+            # same signal gap as _create_place (Opus review #3): .add()
+            # never fires the receiver — derive the anchor explicitly
+            categories = list(place.categories.all())
+            place.kind = anchor_category(categories)
+            place.domain = place_domain(categories)
+            update_fields += ["kind", "domain"]
             changed = True
 
         if changed:
-            place.save(
-                update_fields=[
-                    "name",
-                    "location",
-                    "elevation",
-                    "importance",
-                    "modified",
-                ]
-            )
+            place.save(update_fields=update_fields)
             return True
         return False
 
