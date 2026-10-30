@@ -93,6 +93,10 @@ def build_categories_data(
 
     categories_data = []
     for category in place.categories.all():
+        # Sub-categories only (geoplace-kind-fk): the anchor kind row
+        # moved to the `kind` member — no duplication in both members.
+        if place.kind_id is not None and category.pk == place.kind_id:
+            continue
         association = associations.get(category.pk)
         category_data: dict[str, Any] = {
             "slug": category.slug,
@@ -114,13 +118,14 @@ def build_categories_data(
     return categories_data
 
 
-def kind_ref_for(category: Any, request: Any) -> dict[str, Any]:
+def kind_ref_for(category: Any, request: Any, assoc: Any = None) -> dict[str, Any]:
     """Serialize a kind Category into the preview ref member.
 
-    ``{identifier, slug, color, name, symbol}`` — the localized name
-    and the same symbol URL dict the categories member carries, so a
-    preview that selects only ``kind`` needs nothing else (PO
-    request, read-performance follow-up).
+    ``{identifier, slug, color, name, symbol, classifier, extra}`` —
+    the localized name, the same symbol URL dict the categories
+    member carries, and the anchor association's classifier
+    (``mode.*``) + extra (geoplace-kind-fk): a preview that selects
+    only ``kind`` needs nothing else.
     """
     from server.apps.symbols.utils import resolve_symbol_urls
 
@@ -133,6 +138,11 @@ def kind_ref_for(category: Any, request: Any) -> dict[str, Any]:
     symbol_data = resolve_symbol_urls(category, {"request": request})
     if symbol_data:
         kind_ref["symbol"] = symbol_data
+    if assoc is not None:
+        if assoc.classifier is not None:
+            kind_ref["classifier"] = assoc.classifier.identifier
+        if assoc.extra:
+            kind_ref["extra"] = assoc.extra
     return kind_ref
 
 

@@ -253,32 +253,41 @@ class OverlayCategoriesController(ApiController):
         return results
 
 
-def anchor_kinds_for(places: Any) -> dict[int, Any]:
-    """The anchoring kind Category per place id (preview-light).
+def anchor_kinds_for(places: Any) -> dict[int, dict[str, Any]]:
+    """The anchoring kind per place id (preview-light).
 
-    First association by ``(category order, category slug)`` — the
-    same anchor ``GeoPlace.domain`` derives its super-root from.
-    Returns the Category objects (symbol FKs select_related) so the
-    serializer can add the localized name and symbol URLs. One
-    indexed query for the whole page; never a scan.
+    Reads the ``GeoPlace.kind`` FK (geoplace-kind-fk): one indexed
+    batch query for the page's kind Categories (symbol FKs
+    select_related) plus the anchor associations (classifier /
+    extra). Never a scan. Rows without a kind (NULL FK — placeless
+    imports) are absent; the serializers fall back to no ``kind``
+    member.
     """
-    ids = [place.pk for place in places]
-    if not ids:
+    place_ids = [place.pk for place in places]
+    kind_ids = {place.kind_id for place in places if place.kind_id}
+    if not place_ids or not kind_ids:
         return {}
-    rows = (
-        GeoPlaceCategory.objects.filter(geo_place_id__in=ids)
-        .select_related(
-            "category",
-            "category__symbol_color",
-            "category__symbol_primitive",
-            "category__symbol_mono",
+    from server.apps.categories.models import Category
+
+    categories = {
+        cat.pk: cat
+        for cat in Category.objects.filter(id__in=kind_ids).select_related(
+            "symbol_color", "symbol_primitive", "symbol_mono"
         )
-        .order_by("geo_place_id", "category__order", "category__slug")
-    )
-    anchors: dict[int, Any] = {}
-    for row in rows:
-        anchors.setdefault(row.geo_place_id, row.category)
-    return anchors
+    }
+    # Anchor associations carry the classifier (mode.*) + extra
+    assocs: dict[int, Any] = {}
+    for assoc in GeoPlaceCategory.objects.filter(
+        geo_place_id__in=place_ids, category_id__in=kind_ids
+    ):
+        assocs.setdefault(assoc.geo_place_id, assoc)
+    anchors: dict[int, dict[str, Any]] = {}
+    for place in places:
+        if place.kind_id and place.kind_id in categories:
+            anchors[place.pk] = {
+                "category": categories[place.kind_id],
+                "assoc": assocs.get(place.pk),
+            }
     return anchors
 
 
@@ -366,9 +375,8 @@ class GeoSearchController(ApiController):
             )
         if query.kind:
             queryset = queryset.filter(
-                Q(categories__identifier__in=query.kind)
-                | Q(categories__slug__in=query.kind)
-            ).distinct()
+                Q(kind__identifier__in=query.kind) | Q(kind__slug__in=query.kind)
+            )
 
         if query.bbox:
             queryset = queryset.filter(location__intersects=bbox_polygon(query.bbox))
@@ -686,9 +694,11 @@ class GeoSearchController(ApiController):
             result["score"] = place.rank_score  # type: ignore  # annotated attr (rank_score)
 
             if wants_kind:
-                kind_ref = anchor_kinds.get(place.pk)
-                if kind_ref is not None:
-                    result["kind"] = kind_ref_for(kind_ref, request)
+                anchor = anchor_kinds.get(place.pk)
+                if anchor is not None:
+                    result["kind"] = kind_ref_for(
+                        anchor["category"], request, anchor["assoc"]
+                    )
             if wants_categories:
                 result["categories"] = build_categories_data(place, request) or []
             if wants_sources:
@@ -748,9 +758,8 @@ class GeoNearbyController(ApiController):
                 )
             if query.kind:
                 queryset = queryset.filter(
-                    Q(categories__identifier__in=query.kind)
-                    | Q(categories__slug__in=query.kind)
-                ).distinct()
+                    Q(kind__identifier__in=query.kind) | Q(kind__slug__in=query.kind)
+                )
 
         # Skip the DB cost when the field isn't in the selection
         # Readers disposition (OpenSpec §4.3, benchmarked N=50 via
@@ -791,9 +800,11 @@ class GeoNearbyController(ApiController):
             result = base_result(place, media_url)
             result["distance"] = round(distance_m, 2) if distance_m else None
             if wants_kind:
-                kind_ref = anchor_kinds.get(place.pk)
-                if kind_ref is not None:
-                    result["kind"] = kind_ref_for(kind_ref, request)
+                anchor = anchor_kinds.get(place.pk)
+                if anchor is not None:
+                    result["kind"] = kind_ref_for(
+                        anchor["category"], request, anchor["assoc"]
+                    )
 
             result["categories"] = build_categories_data(place, request) or []
             build_sources(result, place, media_url)
@@ -936,6 +947,16 @@ class PlaceController(ApiController):
                 if wants_amenity and place.domain == DOMAIN_AMENITY
                 else None
             )
+
+            # The anchoring kind (geoplace-kind-fk): same member shape
+            # as search/nearby — the place's main category with its
+            # classifier/extra; sub-categories live in `categories`.
+            if place.kind_id:
+                anchor = anchor_kinds_for([place]).get(place.pk)
+                if anchor is not None:
+                    result["kind"] = kind_ref_for(
+                        anchor["category"], request, anchor["assoc"]
+                    )
 
             if wants_categories:
                 categories_data = build_categories_data(place, request)

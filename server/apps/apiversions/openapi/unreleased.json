@@ -405,8 +405,20 @@
         "type": "object"
       },
       "CategoryKindRefSchema": {
-        "description": "The anchoring kind category of a place (preview-light).\n\nThe main category (e.g. ``accommodation.hut``) as a small ref \u2014\none per place, first by ``(order, slug)``: the same anchor the\n``domain`` super-root identifier derives from. ``name`` (request\nlanguage) and ``symbol`` (the categories-member URL dict) make a\npreview that selects only ``kind`` self-sufficient.",
+        "description": "The anchoring kind category of a place (preview-light).\n\nThe main category (e.g. ``accommodation.hut``) \u2014 stored as the\n``GeoPlace.kind`` FK (geoplace-kind-fk). ``name`` (request\nlanguage), ``symbol`` (the categories-member URL dict),\n``classifier`` (``mode.*`` season classification) and ``extra``\n(schema-validated attributes) from the anchor association make a\npreview that selects only ``kind`` self-sufficient.",
         "properties": {
+          "classifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Classifier"
+          },
           "color": {
             "anyOf": [
               {
@@ -418,6 +430,19 @@
             ],
             "default": null,
             "title": "Color"
+          },
+          "extra": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Extra"
           },
           "identifier": {
             "title": "Identifier",
