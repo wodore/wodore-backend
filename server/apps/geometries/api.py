@@ -302,6 +302,7 @@ class GeoSearchController(ApiController):
             "elevation",
             "importance",
             "country_code",
+            "kind_slug",
         )
 
         if query.min_importance > 0:
@@ -359,17 +360,27 @@ class GeoSearchController(ApiController):
                 _candidate_name=Cast(
                     KeyTextTransform(f"name_{requested_language}", "i18n"),
                     output_field=CharField(),
-                )
+                ),
+                # Prefix arm for translations: LOWER(i18n ->> 'name_xx')
+                # LIKE 'q%' — served by the per-language pattern-opclass
+                # btrees (migration 0071); no Cast — the ::varchar wrapper
+                # would not match the index expression verbatim.
+                _candidate_name_lower=Lower(
+                    KeyTextTransform(f"name_{requested_language}", "i18n")
+                ),
             )
 
         queryset = queryset.annotate(_name_lower=Lower("name"))
         prefix_q = Q(_name_lower__startswith=q.lower())
 
         if qlen <= 2:
-            # Autocomplete start — prefix on the base name only:
-            # trigram similarity is noise this short and the
-            # per-language arms have too few trigrams for the GINs.
+            # Autocomplete start — prefix on the base name and the
+            # requested translation (pattern-opclass btrees): trigram
+            # similarity is noise this short and the per-language GINs
+            # cannot extract trigrams from single characters.
             candidate_q = prefix_q
+            if requested_language != default_language:
+                candidate_q |= Q(_candidate_name_lower__startswith=q.lower())
         elif qlen <= 4:
             candidate_q = prefix_q | Q(name__ilike=f"%{q}%")
             if requested_language != default_language:
@@ -651,6 +662,7 @@ class GeoNearbyController(ApiController):
             "elevation",
             "importance",
             "country_code",
+            "kind_slug",
         )
 
         if query.min_importance > 0:

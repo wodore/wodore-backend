@@ -1970,7 +1970,7 @@
             "title": "Sources"
           }
         },
-        "required": ["slug", "name", "importance", "location", "kind_slug"],
+        "required": ["slug", "name", "importance", "kind_slug", "location"],
         "title": "GeoPlaceDetailSchema",
         "type": "object"
       },
@@ -2036,6 +2036,10 @@
             "title": "Importance",
             "type": "integer"
           },
+          "kind_slug": {
+            "title": "Kind Slug",
+            "type": "string"
+          },
           "location": {
             "$ref": "#/components/schemas/LocationSchema"
           },
@@ -2090,6 +2094,7 @@
           "country_code",
           "elevation",
           "importance",
+          "kind_slug",
           "location"
         ],
         "title": "GeoPlaceNearbySchema",
@@ -2144,6 +2149,10 @@
           "importance": {
             "title": "Importance",
             "type": "integer"
+          },
+          "kind_slug": {
+            "title": "Kind Slug",
+            "type": "string"
           },
           "location": {
             "$ref": "#/components/schemas/LocationSchema"
@@ -2211,6 +2220,7 @@
           "country_code",
           "elevation",
           "importance",
+          "kind_slug",
           "location"
         ],
         "title": "GeoPlaceSearchSchema",

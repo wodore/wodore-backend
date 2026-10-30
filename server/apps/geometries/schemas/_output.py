@@ -117,6 +117,7 @@ class GeoPlaceBaseSchema(pydantic.BaseModel):
     country_code: str | None
     elevation: int | None
     importance: int
+    kind_slug: str
     location: LocationSchema
     categories: list[str] | list[CategoryPlaceTypeSchema] | None = None
     sources: (
@@ -184,7 +185,7 @@ class GeoPlaceDetailSchema(GeoPlaceBaseSchema):
 
     description: str | None = None
     review_status: str | None = None
-    kind_slug: str
+    # kind_slug inherited from GeoPlaceBaseSchema (always present)
     amenity: AmenityDetailSchema | None = None
     links: list[LinkSchema] | None = None
     # Required-but-nullable on the list schemas; optional members on
