@@ -602,6 +602,17 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         categories = list(obj.categories.all())
         return _format_categories_list(categories)
 
+    @display(description=_("Kind"))
+    def kind_display(self, obj: GeoPlace) -> str:
+        """The anchoring kind category (first by order/slug) — derived.
+
+        Not a stored column: the kind IS the first category
+        association (the same anchor ``domain`` derives its super-root
+        from). Editable via the Categories inline below.
+        """
+        first = obj.categories.order_by("order", "slug").first()
+        return first.identifier if first else "—"
+
     @display(description=_("Elevation"))
     def elevation_display(self, obj: GeoPlace) -> str:
         """Display elevation with unit."""
