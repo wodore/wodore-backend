@@ -114,6 +114,28 @@ def build_categories_data(
     return categories_data
 
 
+def kind_ref_for(category: Any, request: Any) -> dict[str, Any]:
+    """Serialize a kind Category into the preview ref member.
+
+    ``{identifier, slug, color, name, symbol}`` — the localized name
+    and the same symbol URL dict the categories member carries, so a
+    preview that selects only ``kind`` needs nothing else (PO
+    request, read-performance follow-up).
+    """
+    from server.apps.symbols.utils import resolve_symbol_urls
+
+    kind_ref: dict[str, Any] = {
+        "identifier": category.identifier,
+        "slug": category.slug,
+        "color": category.color,
+        "name": category.name_i18n,  # noqa: WPS308  # modeltranslation
+    }
+    symbol_data = resolve_symbol_urls(category, {"request": request})
+    if symbol_data:
+        kind_ref["symbol"] = symbol_data
+    return kind_ref
+
+
 def build_sources(result: dict[str, Any], place: GeoPlace, media_url: str) -> None:
     from server.apps.organizations.schema import (
         OrganizationSourceIdDetailSchema,
@@ -142,7 +164,7 @@ def build_sources(result: dict[str, Any], place: GeoPlace, media_url: str) -> No
         result["sources"] = sources
 
 
-def base_result(place: GeoPlace, media_url: str) -> dict[str, Any]:
+def base_result(place: GeoPlace, _media_url: str) -> dict[str, Any]:
     return {
         "name": place.name_i18n,  # noqa: WPS308  # modeltranslation
         "country_code": str(place.country_code) if place.country_code else None,

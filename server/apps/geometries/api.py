@@ -27,6 +27,7 @@ from server.apps.geometries.presenters import (
     build_links_data,
     build_parties_data,
     build_sources,
+    kind_ref_for,
     prefetch_categories,
     prefetch_links,
     prefetch_parties,
@@ -252,37 +253,32 @@ class OverlayCategoriesController(ApiController):
         return results
 
 
-def anchor_kinds_for(places: Any) -> dict[int, dict[str, Any]]:
-    """The anchoring kind category per place id (preview-light).
+def anchor_kinds_for(places: Any) -> dict[int, Any]:
+    """The anchoring kind Category per place id (preview-light).
 
     First association by ``(category order, category slug)`` — the
-    same anchor ``GeoPlace.domain`` derives its super-root from —
-    as ``{identifier, slug, color}``. One indexed query for the whole
-    page; never a scan.
+    same anchor ``GeoPlace.domain`` derives its super-root from.
+    Returns the Category objects (symbol FKs select_related) so the
+    serializer can add the localized name and symbol URLs. One
+    indexed query for the whole page; never a scan.
     """
     ids = [place.pk for place in places]
     if not ids:
         return {}
     rows = (
         GeoPlaceCategory.objects.filter(geo_place_id__in=ids)
+        .select_related(
+            "category",
+            "category__symbol_color",
+            "category__symbol_primitive",
+            "category__symbol_mono",
+        )
         .order_by("geo_place_id", "category__order", "category__slug")
-        .values(
-            "geo_place_id",
-            "category__identifier",
-            "category__slug",
-            "category__color",
-        )
     )
-    anchors: dict[int, dict[str, Any]] = {}
+    anchors: dict[int, Any] = {}
     for row in rows:
-        anchors.setdefault(
-            row["geo_place_id"],
-            {
-                "identifier": row["category__identifier"],
-                "slug": row["category__slug"],
-                "color": row["category__color"],
-            },
-        )
+        anchors.setdefault(row.geo_place_id, row.category)
+    return anchors
     return anchors
 
 
@@ -692,7 +688,7 @@ class GeoSearchController(ApiController):
             if wants_kind:
                 kind_ref = anchor_kinds.get(place.pk)
                 if kind_ref is not None:
-                    result["kind"] = kind_ref
+                    result["kind"] = kind_ref_for(kind_ref, request)
             if wants_categories:
                 result["categories"] = build_categories_data(place, request) or []
             if wants_sources:
@@ -797,7 +793,7 @@ class GeoNearbyController(ApiController):
             if wants_kind:
                 kind_ref = anchor_kinds.get(place.pk)
                 if kind_ref is not None:
-                    result["kind"] = kind_ref
+                    result["kind"] = kind_ref_for(kind_ref, request)
 
             result["categories"] = build_categories_data(place, request) or []
             build_sources(result, place, media_url)

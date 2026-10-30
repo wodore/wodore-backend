@@ -405,7 +405,7 @@
         "type": "object"
       },
       "CategoryKindRefSchema": {
-        "description": "The anchoring kind category of a place (preview-light).\n\nThe main category (e.g. ``accommodation.hut``) as a small ref \u2014\none per place, first by ``(order, slug)``: the same anchor the\n``domain`` super-root identifier derives from.",
+        "description": "The anchoring kind category of a place (preview-light).\n\nThe main category (e.g. ``accommodation.hut``) as a small ref \u2014\none per place, first by ``(order, slug)``: the same anchor the\n``domain`` super-root identifier derives from. ``name`` (request\nlanguage) and ``symbol`` (the categories-member URL dict) make a\npreview that selects only ``kind`` self-sufficient.",
         "properties": {
           "color": {
             "anyOf": [
@@ -423,9 +423,36 @@
             "title": "Identifier",
             "type": "string"
           },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
           "slug": {
             "title": "Slug",
             "type": "string"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Symbol"
           }
         },
         "required": ["identifier", "slug"],

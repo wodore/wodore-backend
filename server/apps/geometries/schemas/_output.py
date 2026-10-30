@@ -114,12 +114,16 @@ class CategoryKindRefSchema(pydantic.BaseModel):
 
     The main category (e.g. ``accommodation.hut``) as a small ref —
     one per place, first by ``(order, slug)``: the same anchor the
-    ``domain`` super-root identifier derives from.
+    ``domain`` super-root identifier derives from. ``name`` (request
+    language) and ``symbol`` (the categories-member URL dict) make a
+    preview that selects only ``kind`` self-sufficient.
     """
 
     identifier: str
     slug: str
     color: str | None = None
+    name: str | None = None
+    symbol: dict[str, str] | None = None
 
 
 class GeoPlaceBaseSchema(pydantic.BaseModel):
