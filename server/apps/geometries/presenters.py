@@ -149,6 +149,10 @@ def base_result(place: GeoPlace, media_url: str) -> dict[str, Any]:
         "slug": place.slug,
         "elevation": place.elevation,
         "importance": place.importance,
+        # Super-root identifier (map.amenity / map.admin / map.natural /
+        # none) — the pin-tier discriminator map previews key on
+        # (read-performance follow-up: preview selects exactly this)
+        "domain": place.domain,
         "location": {
             "lat": place.location.y if place.location else None,
             "lon": place.location.x if place.location else None,

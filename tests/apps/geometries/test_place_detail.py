@@ -95,7 +95,7 @@ class TestPlaceDetailRouting:
         data = response.json()
         assert data["slug"] == place.slug
         assert data["name"] == "Test Berg"
-        assert data["kind_slug"] == "none"
+        assert data["domain"] == "none"
         assert "id" not in data
         assert "public, max-age=60" in response.headers["Cache-Control"]
 
@@ -139,10 +139,10 @@ class TestPlaceDetailRouting:
 
 class TestPlaceDetailContent:
     def test_amenity_place_carries_block(self, client: Client):
-        place = make_place(kind_slug="map.amenity")
+        place = make_place(domain="amenity")
         make_operation(place)
         data = client.get(f"/v1/geo/places/{place.slug}").json()
-        assert data["kind_slug"] == "map.amenity"
+        assert data["domain"] == "amenity"
         assert data["amenity"]["operating_status"] == "open"
         assert set(data["amenity"]) == {
             "operating_status",
@@ -154,14 +154,14 @@ class TestPlaceDetailContent:
         assert data["review_status"] in {"new", "review", "rework", "done"}
 
     def test_amenity_type_without_detail_row_has_no_block(self, client: Client):
-        place = make_place(kind_slug="map.amenity")
+        place = make_place(domain="amenity")
         data = client.get(f"/v1/geo/places/{place.slug}").json()
         assert "amenity" not in data
 
     def test_place_without_detail_model_is_first_class(self, client: Client):
-        place = make_place(kind_slug="map.natural")
+        place = make_place(domain="natural")
         data = client.get(f"/v1/geo/places/{place.slug}").json()
-        assert data["kind_slug"] == "map.natural"
+        assert data["domain"] == "natural"
         assert "amenity" not in data
 
     def test_default_response_carries_categories(
@@ -177,7 +177,7 @@ class TestPlaceDetailContent:
         assert data["categories"]
 
     def test_narrowed_selection(self, client: Client):
-        place = make_place(kind_slug="map.amenity")
+        place = make_place(domain="amenity")
         make_operation(place)
         data = client.get(
             f"/v1/geo/places/{place.slug}",
@@ -188,14 +188,14 @@ class TestPlaceDetailContent:
             "slug",
             "name",
             "amenity",
-            "kind_slug",
+            "domain",
             "location",
             "importance",
         }
         assert data["amenity"]["operating_status"] == "open"
 
     def test_block_of_another_type_absent_not_error(self, client: Client):
-        place = make_place(kind_slug="map.natural")
+        place = make_place(domain="natural")
         response = client.get(
             f"/v1/geo/places/{place.slug}",
             {"fields[places]": "slug,name,amenity"},
@@ -298,7 +298,7 @@ class TestPlaceLinks:
         assert link["symbol"]  # kind icon resolves
 
     def test_phones_served_under_links_not_block(self, client: Client):
-        place = make_place(kind_slug="map.amenity")
+        place = make_place(domain="amenity")
         make_operation(place)
         self._link_place(place)
         data = client.get(f"/v1/geo/places/{place.slug}").json()

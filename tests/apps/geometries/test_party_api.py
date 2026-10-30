@@ -100,7 +100,7 @@ class TestPlaceDetailPartiesField:
     def test_place_detail_includes_parties(self, client: Client) -> None:
         from server.apps.geometries.models import AmenityDetail
 
-        place = GeoPlaceFactory(name="Volg Zermatt", kind_slug="map.amenity")
+        place = GeoPlaceFactory(name="Volg Zermatt", domain="amenity")
         AmenityDetail.objects.create(geo_place=place)
         _link_party(place, slug="volg", url="https://volg.example.com")
 

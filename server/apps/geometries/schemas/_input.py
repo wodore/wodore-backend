@@ -146,7 +146,7 @@ class GeoPlaceBaseInput(BaseModel):
     place_type_identifiers: list[
         str | PlaceTypeInput
     ]  # Category identifiers (e.g., ["shop.bakery"]) or rich entries with association attributes
-    # kind_slug is derived on write from the category tree
+    # domain is derived on write from the category tree
     # (geoplace-category-tree) — no input field.
 
     # Optional fields
@@ -219,7 +219,7 @@ class GeoPlaceBaseInput(BaseModel):
 
 
 # Convenience aliases for specific types
-# (kind_slug is derived on write from the category tree — the
+# (domain is derived on write from the category tree — the
 # per-type presets retired with detail_type)
 GeoPlaceAmenityInput = GeoPlaceBaseInput
 GeoPlaceTransportInput = GeoPlaceBaseInput

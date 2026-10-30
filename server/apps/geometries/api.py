@@ -3,13 +3,19 @@
 from typing import Any
 
 import pydantic
-from dmr import Path, Query, modify
+from dmr import NewHeader, Path, Query, modify
 from dmr.routing import path
 from pydantic import Field
 
 from django.views.decorators.cache import cache_page
 
-from server.apps.api.controller import ApiController, cache_headers, raise_not_found
+from server.apps.api.controller import (
+    SEARCH_CACHE_CONTROL,
+    ApiController,
+    APIError,
+    cache_headers,
+    raise_not_found,
+)
 from server.apps.api.projection import field_selected, project_fields
 from server.apps.api.query import BboxQuery, bbox_polygon, sparse_fields_query
 from server.apps.geometries.presenters import (
@@ -30,8 +36,9 @@ from server.apps.organizations.schema import OrganizationSourceIdSlugSchema
 from server.apps.translations import LanguageQuery
 
 from .converters import GeoPlaceSlugConverter  # noqa: F401  # registers <geoplace:slug>
-from .kinds import KIND_AMENITY
-from .models import GeoPlace
+from .kinds import DOMAIN_AMENITY
+from .lookups import escape_like
+from .models import GeoPlace, GeoPlaceCategory
 from .schemas import (
     GeoPlaceDetailSchema,
     GeoPlaceNearbySchema,
@@ -78,6 +85,20 @@ class _GeoSearchQuery(LanguageQuery, GeoPlaceFields):
         None,
         description=("Filter by parent category slugs (e.g., 'terrain', 'transport')"),
     )
+    domain: list[str] | None = Field(
+        None,
+        description=(
+            "Filter by super-root domain: 'amenity', 'admin' or 'natural' "
+            "(the place's domain member; a 'map.' prefix is tolerated)"
+        ),
+    )
+    kind: list[str] | None = Field(
+        None,
+        description=(
+            "Filter by kind category — identifiers ('accommodation.hut') "
+            "or slugs ('hut')"
+        ),
+    )
 
 
 class GeoSearchQuery(_GeoSearchQuery, BboxQuery):
@@ -114,6 +135,22 @@ class GeoSearchQuery(_GeoSearchQuery, BboxQuery):
             "Remove near-identical places that share a name and a very "
             "close location before pagination."
         ),
+    )
+    lat: float | None = Field(
+        None,
+        ge=-90,
+        le=90,
+        description=(
+            "Optional proximity bias: prefer results near this latitude "
+            "(pairs with lon; blends a distance decay into the ranking — "
+            "closer places win ties without hiding distant matches)"
+        ),
+    )
+    lon: float | None = Field(
+        None,
+        ge=-180,
+        le=180,
+        description="Optional proximity bias longitude (pairs with lat)",
     )
 
 
@@ -215,12 +252,46 @@ class OverlayCategoriesController(ApiController):
         return results
 
 
+def anchor_kinds_for(places: Any) -> dict[int, dict[str, Any]]:
+    """The anchoring kind category per place id (preview-light).
+
+    First association by ``(category order, category slug)`` — the
+    same anchor ``GeoPlace.domain`` derives its super-root from —
+    as ``{identifier, slug, color}``. One indexed query for the whole
+    page; never a scan.
+    """
+    ids = [place.pk for place in places]
+    if not ids:
+        return {}
+    rows = (
+        GeoPlaceCategory.objects.filter(geo_place_id__in=ids)
+        .order_by("geo_place_id", "category__order", "category__slug")
+        .values(
+            "geo_place_id",
+            "category__identifier",
+            "category__slug",
+            "category__color",
+        )
+    )
+    anchors: dict[int, dict[str, Any]] = {}
+    for row in rows:
+        anchors.setdefault(
+            row["geo_place_id"],
+            {
+                "identifier": row["category__identifier"],
+                "slug": row["category__slug"],
+                "color": row["category__color"],
+            },
+        )
+    return anchors
+
+
 class GeoSearchController(ApiController):
     """Fuzzy place search across all language fields."""
 
     @modify(
         operation_id="search_geoplaces",
-        headers=cache_headers(60),
+        headers={"Cache-Control": NewHeader(value=SEARCH_CACHE_CONTROL)},
     )
     def get(self, parsed_query: Query[GeoSearchQuery]) -> list[GeoPlaceSearchSchema]:
         """Search places.
@@ -232,9 +303,7 @@ class GeoSearchController(ApiController):
         """
         from django.conf import settings
         from django.contrib.gis.db.models import PointField
-        from django.contrib.gis.db.models.functions import (
-            Distance,  # noqa: F401  # parity
-        )
+        from django.contrib.gis.db.models.functions import Distance
         from django.contrib.postgres.search import TrigramSimilarity
         from django.db.models import (
             Case,
@@ -243,6 +312,7 @@ class GeoSearchController(ApiController):
             F,
             FloatField,
             Func,
+            Q,
             Value,
             When,
             Window,
@@ -256,11 +326,21 @@ class GeoSearchController(ApiController):
             RowNumber,
         )
 
-        request = self.request
         query = parsed_query
         q = query.q.strip()
         if not q:
             return []
+
+        if (query.lat is None) != (query.lon is None):
+            from http import HTTPStatus
+
+            raise APIError(
+                {
+                    "code": "invalid_parameter",
+                    "detail": "lat and lon must be passed together",
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
 
         default_language = settings.LANGUAGE_CODE
 
@@ -272,6 +352,7 @@ class GeoSearchController(ApiController):
             "elevation",
             "importance",
             "country_code",
+            "domain",
         )
 
         if query.min_importance > 0:
@@ -282,6 +363,16 @@ class GeoSearchController(ApiController):
             )
 
         queryset = apply_type_filters(queryset, query.types, query.categories)
+
+        if query.domain:
+            queryset = queryset.filter(
+                domain__in=[d.removeprefix("map.").lower() for d in query.domain]
+            )
+        if query.kind:
+            queryset = queryset.filter(
+                Q(categories__identifier__in=query.kind)
+                | Q(categories__slug__in=query.kind)
+            ).distinct()
 
         if query.bbox:
             queryset = queryset.filter(location__intersects=bbox_polygon(query.bbox))
@@ -296,6 +387,7 @@ class GeoSearchController(ApiController):
         wants_categories = field_selected(query, "places", "categories")
         wants_sources = field_selected(query, "places", "sources")
         wants_parties = field_selected(query, "places", "parties")
+        wants_kind = field_selected(query, "places", "kind")
         if wants_categories:
             queryset = prefetch_categories(queryset)
         if wants_sources:
@@ -303,9 +395,128 @@ class GeoSearchController(ApiController):
         if wants_parties:
             queryset = prefetch_parties(queryset)
 
-        # Fuzzy search using trigram similarity
+        # Fuzzy search — two-stage with length strategies
+        # (geoplace-read-performance). Stage 1 narrows to candidates
+        # through index-servable lookups only:
+        #
+        # - prefix arm: ``LOWER(name) LIKE 'q%'`` — btree range scan
+        #   (migration 0070); the cheapest arm, powers the first
+        #   autocomplete keystrokes
+        # - containment arm: ``ILIKE '%q%'`` (the custom ``ilike``
+        #   lookup — Django's icontains renders UPPER() LIKE, which
+        #   the gin_trgm_ops GINs cannot serve)
+        # - typo arm: ``%`` similarity operator (len >= 5; lossy GIN
+        #   recheck is too broad on short common tokens)
+        #
+        # Stage 2 (similarity annotations + ranking) then runs over
+        # the candidates only — the pre-change shape computed
+        # TrigramSimilarity over EVERY active/public row, linear in
+        # total places (~750 ms at 440k rows).
         requested_language = query.lang
         translated_name = None
+        qlen = len(q)
+
+        if requested_language != default_language:
+            queryset = queryset.annotate(
+                _candidate_name=Cast(
+                    KeyTextTransform(f"name_{requested_language}", "i18n"),
+                    output_field=CharField(),
+                ),
+                # Prefix arm for translations: LOWER(i18n ->> 'name_xx')
+                # LIKE 'q%' — served by the per-language pattern-opclass
+                # btrees (migration 0071); no Cast — the ::varchar wrapper
+                # would not match the index expression verbatim.
+                _candidate_name_lower=Lower(
+                    KeyTextTransform(f"name_{requested_language}", "i18n")
+                ),
+            )
+
+        queryset = queryset.annotate(_name_lower=Lower("name"))
+        prefix_q = Q(_name_lower__startswith=q.lower())
+
+        if qlen <= 2:
+            # Autocomplete start — prefix on the base name and the
+            # requested translation (pattern-opclass btrees): trigram
+            # similarity is noise this short and the per-language GINs
+            # cannot extract trigrams from single characters.
+            candidate_q = prefix_q
+            if requested_language != default_language:
+                candidate_q |= Q(_candidate_name_lower__startswith=q.lower())
+        elif qlen <= 4:
+            # Containment patterns escape LIKE metacharacters — the
+            # custom ilike lookup takes the pattern verbatim, unlike
+            # the builtin startswith arm (PatternLookup escapes)
+            contained = f"%{escape_like(q)}%"
+            candidate_q = prefix_q | Q(name__ilike=contained)
+            if requested_language != default_language:
+                candidate_q |= Q(_candidate_name__ilike=contained)
+        else:
+            contained = f"%{escape_like(q)}%"
+            candidate_q = Q(name__ilike=contained) | Q(name__trigram_similar=q)
+            if requested_language != default_language:
+                candidate_q |= Q(_candidate_name__ilike=contained) | Q(
+                    _candidate_name__trigram_similar=q
+                )
+        queryset = queryset.filter(candidate_q)
+
+        if qlen <= 4 and not query.deduplicate:
+            # Instant autocomplete path: keystroke queries are
+            # near-unique — effectively uncacheable — so the cold
+            # path must be cheap on its own. Index-served candidates,
+            # ZERO trigram computation: prefix matches first, then a
+            # rank of importance (+ optional proximity blend). The
+            # similarity pipeline below stays for fuzzy (>= 5 char)
+            # queries and deduplicate runs.
+            fast_prefix = Case(
+                When(_name_lower__startswith=q.lower(), then=Value(1.0)),
+                default=Value(0.0),
+                output_field=FloatField(),
+            )
+            fast_importance = Case(
+                When(importance__lt=0, then=Value(0.0)),
+                When(importance__gt=100, then=Value(1.0)),
+                default=Coalesce(F("importance"), Value(0)) / Value(100.0),
+                output_field=FloatField(),
+            )
+            fast_qs = queryset.annotate(
+                prefix_match=fast_prefix,
+                _fast_importance=fast_importance,
+            )
+            if query.lat is not None and query.lon is not None:
+                from django.contrib.gis.geos import Point
+
+                bias_point = Point(query.lon, query.lat, srid=4326)
+                fast_qs = fast_qs.annotate(
+                    _distance_m=Distance("location", bias_point)
+                ).annotate(
+                    _fast_proximity=ExpressionWrapper(
+                        Greatest(
+                            Value(0.0),
+                            Value(1.0) - F("_distance_m") / Value(100_000.0),
+                        ),
+                        output_field=FloatField(),
+                    )
+                )
+                fast_qs = fast_qs.annotate(
+                    rank_score=ExpressionWrapper(
+                        Value(0.5) * F("_fast_importance")
+                        + Value(0.5) * F("_fast_proximity"),
+                        output_field=FloatField(),
+                    )
+                )
+            else:
+                fast_qs = fast_qs.annotate(
+                    rank_score=F("_fast_importance"),
+                )
+            fast_qs = fast_qs.order_by("-prefix_match", "-rank_score", "_name_lower")
+            return self._search_result_dicts(  # type: ignore  # serialized dicts match schema shape at runtime
+                fast_qs,
+                query,
+                wants_categories,
+                wants_sources,
+                wants_parties,
+                wants_kind,
+            )
 
         if requested_language != default_language:
             translated_name = Cast(
@@ -362,10 +573,37 @@ class GeoSearchController(ApiController):
             default=Coalesce(F("importance"), Value(0)) / Value(100.0),
             output_field=FloatField(),
         )
-        rank_score = ExpressionWrapper(
-            Value(0.8) * similarity_expr + Value(0.2) * normalized_importance,
-            output_field=FloatField(),
-        )
+
+        # Optional proximity bias (geoplace-read-performance): blend
+        # a distance decay (1 → 0 over 100 km) into the rank — closer
+        # places win ties without hiding distant matches entirely.
+        # Computed on the prefetched candidate set only, never a scan.
+        proximity_expr: Any | None = None
+        if query.lat is not None and query.lon is not None:
+            from django.contrib.gis.geos import Point
+
+            bias_point = Point(query.lon, query.lat, srid=4326)
+            queryset = queryset.annotate(_distance_m=Distance("location", bias_point))
+            proximity_expr = ExpressionWrapper(
+                Greatest(
+                    Value(0.0),
+                    Value(1.0) - F("_distance_m") / Value(100_000.0),
+                ),
+                output_field=FloatField(),
+            )
+
+        if proximity_expr is not None:
+            rank_score = ExpressionWrapper(
+                Value(0.6) * similarity_expr
+                + Value(0.15) * normalized_importance
+                + Value(0.25) * proximity_expr,
+                output_field=FloatField(),
+            )
+        else:
+            rank_score = ExpressionWrapper(
+                Value(0.8) * similarity_expr + Value(0.2) * normalized_importance,
+                output_field=FloatField(),
+            )
 
         queryset = queryset.annotate(
             similarity=similarity_expr,
@@ -373,7 +611,13 @@ class GeoSearchController(ApiController):
             prefix_match=prefix_match,
             fts_rank=fts_rank,
             token_match=token_match,
-        ).filter(similarity__gte=query.threshold)
+        )
+        if qlen >= 5:
+            # Short queries (autocomplete mode): trigram similarity
+            # against full place names is structurally low — the
+            # prefix-first ordering and rank carry relevance, and the
+            # threshold would starve the dropdown of results.
+            queryset = queryset.filter(similarity__gte=query.threshold)
 
         if query.deduplicate:
             grid_size = Value(0.00005)
@@ -411,19 +655,44 @@ class GeoSearchController(ApiController):
             "-rank_score",
             "-fts_rank",
             "-similarity",
-        )[query.offset : query.offset + query.limit]
+        )
 
-        results = []
+        results = self._search_result_dicts(
+            queryset, query, wants_categories, wants_sources, wants_parties, wants_kind
+        )
+        return results  # type: ignore  # serialized dicts match schema shape at runtime
+
+    def _search_result_dicts(
+        self,
+        queryset: Any,
+        query: GeoSearchQuery,
+        wants_categories: bool,
+        wants_sources: bool,
+        wants_parties: bool,
+        wants_kind: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Slice an ordered search queryset and build response dicts."""
+        from django.conf import settings
+
+        request = self.request
+        places = list(queryset[query.offset : query.offset + query.limit])
+        anchor_kinds = anchor_kinds_for(places) if wants_kind else {}
+
+        results: list[dict[str, Any]] = []
         media_url = settings.MEDIA_URL
         if not media_url.startswith("http"):
             media_url = request.build_absolute_uri(media_url)
 
-        for place in queryset:
+        for place in places:
             result = base_result(place, media_url)
             # rank_score is a queryset annotation — django-stubs cannot
             # model .annotate() attributes.
             result["score"] = place.rank_score  # type: ignore  # annotated attr (rank_score)
 
+            if wants_kind:
+                kind_ref = anchor_kinds.get(place.pk)
+                if kind_ref is not None:
+                    result["kind"] = kind_ref
             if wants_categories:
                 result["categories"] = build_categories_data(place, request) or []
             if wants_sources:
@@ -432,7 +701,7 @@ class GeoSearchController(ApiController):
                 result["parties"] = build_parties_data(place, request) or []
             results.append(result)
 
-        return results  # type: ignore  # serialized dicts match schema shape at runtime
+        return results
 
 
 class GeoNearbyController(ApiController):
@@ -466,12 +735,26 @@ class GeoNearbyController(ApiController):
             "elevation",
             "importance",
             "country_code",
+            "domain",
         )
 
         if query.min_importance > 0:
             queryset = queryset.filter(importance__gte=query.min_importance)
 
         queryset = apply_type_filters(queryset, query.types, query.categories)
+
+        if query.domain or query.kind:
+            from django.db.models import Q
+
+            if query.domain:
+                queryset = queryset.filter(
+                    domain__in=[d.removeprefix("map.").lower() for d in query.domain]
+                )
+            if query.kind:
+                queryset = queryset.filter(
+                    Q(categories__identifier__in=query.kind)
+                    | Q(categories__slug__in=query.kind)
+                ).distinct()
 
         # Skip the DB cost when the field isn't in the selection
         # Readers disposition (OpenSpec §4.3, benchmarked N=50 via
@@ -481,6 +764,7 @@ class GeoNearbyController(ApiController):
         wants_categories = field_selected(query, "places", "categories")
         wants_sources = field_selected(query, "places", "sources")
         wants_parties = field_selected(query, "places", "parties")
+        wants_kind = field_selected(query, "places", "kind")
         if wants_categories:
             queryset = prefetch_categories(queryset)
         if wants_sources:
@@ -492,12 +776,15 @@ class GeoNearbyController(ApiController):
             "distance"
         )[query.offset : query.offset + query.limit]
 
+        places = list(queryset)
+        anchor_kinds = anchor_kinds_for(places) if wants_kind else {}
+
         results = []
         media_url = settings.MEDIA_URL
         if not media_url.startswith("http"):
             media_url = request.build_absolute_uri(media_url)
 
-        for place in queryset:
+        for place in places:
             # distance is a queryset annotation (Distance("location", point))
             # — django-stubs cannot model .annotate() attributes.
             place_distance = place.distance  # type: ignore  # annotated attr (distance)
@@ -507,6 +794,10 @@ class GeoNearbyController(ApiController):
 
             result = base_result(place, media_url)
             result["distance"] = round(distance_m, 2) if distance_m else None
+            if wants_kind:
+                kind_ref = anchor_kinds.get(place.pk)
+                if kind_ref is not None:
+                    result["kind"] = kind_ref
 
             result["categories"] = build_categories_data(place, request) or []
             build_sources(result, place, media_url)
@@ -521,6 +812,7 @@ class GeoNearbyController(ApiController):
                         "categories": "categories",
                         "sources": "sources",
                         "parties": "parties",
+                        "kind": "kind",
                     },
                 )
             )
@@ -637,7 +929,7 @@ class PlaceController(ApiController):
         with override(query.lang):
             result = base_result(place, media_url)
             result["description"] = place.description_i18n  # noqa: WPS308
-            result["kind_slug"] = place.kind_slug
+            result["domain"] = place.domain
             result["review_status"] = place.review_status
 
             # Always seed the block member so it stays a valid selection
@@ -645,7 +937,7 @@ class PlaceController(ApiController):
             # missing", never a 400 (see _narrow_place_detail).
             result["amenity"] = (
                 build_amenity_detail(place)
-                if wants_amenity and place.kind_slug == KIND_AMENITY
+                if wants_amenity and place.domain == DOMAIN_AMENITY
                 else None
             )
 

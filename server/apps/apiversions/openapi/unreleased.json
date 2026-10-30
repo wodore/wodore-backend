@@ -404,6 +404,34 @@
         "title": "BaseModel",
         "type": "object"
       },
+      "CategoryKindRefSchema": {
+        "description": "The anchoring kind category of a place (preview-light).\n\nThe main category (e.g. ``accommodation.hut``) as a small ref \u2014\none per place, first by ``(order, slug)``: the same anchor the\n``domain`` super-root identifier derives from.",
+        "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Color"
+          },
+          "identifier": {
+            "title": "Identifier",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": ["identifier", "slug"],
+        "title": "CategoryKindRefSchema",
+        "type": "object"
+      },
       "CategoryListItemSchema": {
         "description": "Simple category item for list view.",
         "properties": {
@@ -1817,7 +1845,7 @@
         "type": "object"
       },
       "GeoPlaceDetailSchema": {
-        "description": "Unified place detail (place-detail-endpoint).\n\nRequired members: ``slug``, ``name``, ``kind_slug`` (the type\ndiscriminator clients switch on), ``location``, ``importance``.\nEverything else is an optional member under the ``fields[places]``\nsparse-fieldset selection; detail blocks appear as sibling members\nnamed exactly after their super-root (``amenity`` now,\n``admin``/``natural`` later) and only for places of that type\nwith a detail row.",
+        "description": "Unified place detail (place-detail-endpoint).\n\nRequired members: ``slug``, ``name``, ``domain`` (the type\ndiscriminator clients switch on), ``location``, ``importance``.\nEverything else is an optional member under the ``fields[places]``\nsparse-fieldset selection; detail blocks appear as sibling members\nnamed exactly after their super-root (``amenity`` now,\n``admin``/``natural`` later) and only for places of that type\nwith a detail row.",
         "properties": {
           "amenity": {
             "anyOf": [
@@ -1875,6 +1903,10 @@
             "default": null,
             "title": "Description"
           },
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
           "elevation": {
             "anyOf": [
               {
@@ -1891,9 +1923,16 @@
             "title": "Importance",
             "type": "integer"
           },
-          "kind_slug": {
-            "title": "Kind Slug",
-            "type": "string"
+          "kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CategoryKindRefSchema"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           },
           "links": {
             "anyOf": [
@@ -1970,7 +2009,7 @@
             "title": "Sources"
           }
         },
-        "required": ["slug", "name", "importance", "location", "kind_slug"],
+        "required": ["slug", "name", "importance", "domain", "location"],
         "title": "GeoPlaceDetailSchema",
         "type": "object"
       },
@@ -2021,6 +2060,10 @@
             "default": null,
             "title": "Distance"
           },
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
           "elevation": {
             "anyOf": [
               {
@@ -2035,6 +2078,17 @@
           "importance": {
             "title": "Importance",
             "type": "integer"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CategoryKindRefSchema"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           },
           "location": {
             "$ref": "#/components/schemas/LocationSchema"
@@ -2090,6 +2144,7 @@
           "country_code",
           "elevation",
           "importance",
+          "domain",
           "location"
         ],
         "title": "GeoPlaceNearbySchema",
@@ -2130,6 +2185,10 @@
             ],
             "title": "Country Code"
           },
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
           "elevation": {
             "anyOf": [
               {
@@ -2144,6 +2203,17 @@
           "importance": {
             "title": "Importance",
             "type": "integer"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CategoryKindRefSchema"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           },
           "location": {
             "$ref": "#/components/schemas/LocationSchema"
@@ -2211,6 +2281,7 @@
           "country_code",
           "elevation",
           "importance",
+          "domain",
           "location"
         ],
         "title": "GeoPlaceSearchSchema",
@@ -7272,6 +7343,48 @@
             }
           },
           {
+            "description": "Filter by super-root domain: 'amenity', 'admin' or 'natural' (the place's domain member; a 'map.' prefix is tolerated)",
+            "in": "query",
+            "name": "domain",
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Filter by super-root domain: 'amenity', 'admin' or 'natural' (the place's domain member; a 'map.' prefix is tolerated)",
+              "title": "Domain"
+            }
+          },
+          {
+            "description": "Filter by kind category \u2014 identifiers ('accommodation.hut') or slugs ('hut')",
+            "in": "query",
+            "name": "kind",
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Filter by kind category \u2014 identifiers ('accommodation.hut') or slugs ('hut')",
+              "title": "Kind"
+            }
+          },
+          {
             "description": "Latitude coordinate",
             "in": "query",
             "name": "lat",
@@ -7553,6 +7666,48 @@
             }
           },
           {
+            "description": "Filter by super-root domain: 'amenity', 'admin' or 'natural' (the place's domain member; a 'map.' prefix is tolerated)",
+            "in": "query",
+            "name": "domain",
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Filter by super-root domain: 'amenity', 'admin' or 'natural' (the place's domain member; a 'map.' prefix is tolerated)",
+              "title": "Domain"
+            }
+          },
+          {
+            "description": "Filter by kind category \u2014 identifiers ('accommodation.hut') or slugs ('hut')",
+            "in": "query",
+            "name": "kind",
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Filter by kind category \u2014 identifiers ('accommodation.hut') or slugs ('hut')",
+              "title": "Kind"
+            }
+          },
+          {
             "description": "Search query string to match against place names in all languages",
             "in": "query",
             "name": "q",
@@ -7638,6 +7793,46 @@
               "description": "Remove near-identical places that share a name and a very close location before pagination.",
               "title": "Deduplicate",
               "type": "boolean"
+            }
+          },
+          {
+            "description": "Optional proximity bias: prefer results near this latitude (pairs with lon; blends a distance decay into the ranking \u2014 closer places win ties without hiding distant matches)",
+            "in": "query",
+            "name": "lat",
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 90,
+                  "minimum": -90,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Optional proximity bias: prefer results near this latitude (pairs with lon; blends a distance decay into the ranking \u2014 closer places win ties without hiding distant matches)",
+              "title": "Lat"
+            }
+          },
+          {
+            "description": "Optional proximity bias longitude (pairs with lat)",
+            "in": "query",
+            "name": "lon",
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 180,
+                  "minimum": -180,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Optional proximity bias longitude (pairs with lat)",
+              "title": "Lon"
             }
           }
         ],

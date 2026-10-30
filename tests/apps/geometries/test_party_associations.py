@@ -398,7 +398,7 @@ class TestRoleScopedPartyProtection:
         _Category.objects.create(slug="kiosk", parent=shop, name="Kiosk")
 
         place = GeoPlaceFactory(
-            kind_slug="map.amenity",
+            domain="amenity",
             protected_fields=[{"parties": ["role.brand"]}],
         )
 

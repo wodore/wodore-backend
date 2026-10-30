@@ -3917,14 +3917,14 @@ class Command(BaseCommand):
                         associations, ignore_conflicts=True
                     )
 
-                # Derive kind_slug from the just-attached categories —
+                # Derive domain from the just-attached categories —
                 # bulk_create bypasses save(), the schema-path
                 # derivation never runs on this PBF branch (review P1)
-                from server.apps.geometries.kinds import place_kind_slug
+                from server.apps.geometries.kinds import place_domain
 
                 for place, categories in zip(created_geoplaces, categories_to_create):
-                    place.kind_slug = place_kind_slug(categories)
-                GeoPlace.objects.bulk_update(created_geoplaces, ["kind_slug"])
+                    place.domain = place_domain(categories)
+                GeoPlace.objects.bulk_update(created_geoplaces, ["domain"])
 
                 # Now create details with proper references
                 for place, detail in zip(created_geoplaces, amenity_details_to_create):
@@ -4097,7 +4097,7 @@ class Command(BaseCommand):
             name=name,
             location=Point(data["lon"], data["lat"], srid=4326),
             country_code=self._guess_country_code(Point(data["lon"], data["lat"])),
-            # kind_slug is derived on write from the category tree
+            # domain is derived on write from the category tree
             # (geoplace-category-tree) — this legacy path creates
             # places before categories; the schema path derives it.
             importance=importance,  # Use calculated importance

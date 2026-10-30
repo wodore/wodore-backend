@@ -5,8 +5,8 @@ category (first category by ``(order, slug)``); the **contract group**
 is that category's parent (``accommodation`` for a hut); the
 super-roots (``amenity`` / ``admin`` / ``natural``) sit above the
 contract groups under the ``map`` namespace root. The stored
-``GeoPlace.kind_slug`` is the super-root's identifier — ``map.amenity``,
-``map.admin``, ``map.natural`` — derived on write (consumed by
+``GeoPlace.domain`` is the super-root slug — ``amenity``,
+``admin``, ``natural`` — derived on write (consumed by
 tile/clustering SQL).
 
 The contract itself lives in the DB (``CategoryKindContract`` on the
@@ -30,17 +30,17 @@ from typing import Any
 #: Namespace root separating map categories from vocabulary trees.
 MAP_ROOT_SLUG: str = "map"
 
-#: Super-roots directly under ``map`` (kind_slug = f"map.{slug}").
+#: Super-roots directly under ``map`` (domain = the super-root slug).
 SUPER_ROOT_SLUGS: frozenset[str] = frozenset({"amenity", "admin", "natural"})
 
-#: Stored ``GeoPlace.kind_slug`` values (super-root identifiers).
-KIND_AMENITY: str = "map.amenity"
-KIND_ADMIN: str = "map.admin"
-KIND_NATURAL: str = "map.natural"
-KIND_NONE: str = "none"
+#: Stored ``GeoPlace.domain`` values (super-root identifiers).
+DOMAIN_AMENITY: str = "amenity"
+DOMAIN_ADMIN: str = "admin"
+DOMAIN_NATURAL: str = "natural"
+DOMAIN_NONE: str = "none"
 
-_VALID_KIND_SLUGS: frozenset[str] = frozenset(
-    {KIND_AMENITY, KIND_ADMIN, KIND_NATURAL, KIND_NONE}
+_VALID_DOMAIN_SLUGS: frozenset[str] = frozenset(
+    {DOMAIN_AMENITY, DOMAIN_ADMIN, DOMAIN_NATURAL, DOMAIN_NONE}
 )
 
 
@@ -59,9 +59,9 @@ class PlaceKind:
     has_seasonality: bool = False
 
     @property
-    def kind_slug(self) -> str:
-        """Stored kind_slug — the super-root's identifier."""
-        return f"{MAP_ROOT_SLUG}.{self.super_root}"
+    def domain(self) -> str:
+        """Stored domain — the super-root slug (plain, no prefix)."""
+        return self.super_root
 
 
 #: Contract-group slug → seed contract. Pinned against the live
@@ -95,7 +95,7 @@ PLACE_KINDS: dict[str, PlaceKind] = {
 
 #: Vocabulary roots never anchor a kind (association classifiers, uri
 #: kinds, link trees).
-KIND_VOCABULARY_ROOTS: frozenset[str] = frozenset(
+DOMAIN_VOCABULARY_ROOTS: frozenset[str] = frozenset(
     {"mode", "role", "relations", "external_link", "link_type"}
 )
 
@@ -202,8 +202,8 @@ def kind_contract_for(category: Any) -> Any:
     return kind_contract_state(category)[0]
 
 
-def place_kind_slug(categories: Any) -> str:
-    """Derived ``kind_slug`` for a place's categories (map.<super>).
+def place_domain(categories: Any) -> str:
+    """Derived ``domain`` for a place's categories (super-root slug).
 
     Depth-guarded walk: only a kind-level category (parent = contract
     group, grandparent = super-root, great-grandparent = ``map``)
@@ -226,8 +226,8 @@ def place_kind_slug(categories: Any) -> str:
             and super_root is not None
             and super_root.slug in SUPER_ROOT_SLUGS
         ):
-            return f"{namespace.slug}.{super_root.slug}"
-    return KIND_NONE
+            return super_root.slug
+    return DOMAIN_NONE
 
 
 def assert_registry_valid() -> None:
