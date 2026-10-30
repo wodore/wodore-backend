@@ -1,6 +1,6 @@
 # Claude Development Guide
 
-Quick reference for Claude when working on wodore-backend.
+Quick reference for agents when working on wodore-backend.
 
 **Note**: This file should be updated whenever important development information, patterns, or infrastructure details are discovered during work on the project.
 
@@ -27,8 +27,8 @@ app update_availability --all
 
 ## Changelog
 
-Both changelogs are auto-generated on release — never edit them by hand
-and never ship changelog entries inside PRs:
+Both changelogs are auto-generated on release — NEVER edit them by hand
+and NEVER ship changelog entries inside PRs:
 
 - `CHANGELOG.md`: built by `inv release` from merged PR titles (PR
   titles must be changelog-ready — imperative, capitalized, no
@@ -49,7 +49,7 @@ Two feature flags (see `server/settings/components/oidc.py`):
 - OIDC enabled + provider unreachable = startup fails fast (`ImproperlyConfigured`).
 - Frontend local mode: `WODORE_OICD_ISSUER_URL=http://localhost:8000/oauth/local`,
   `WODORE_OICD_CLIENT_ID=wodore-local-dev`, any `WODORE_OICD_RESOURCE_ID`.
-- Local users: `app local_auth_users` (admin@local.test / admin-dev, editor@local.test / editor-dev).
+- Local users: `app local_auth_users` (<admin@local.test> / admin-dev, <editor@local.test> / editor-dev).
 - Test tokens: `POST /oauth/local/token` with `grant_type=password`,
   `client_id=wodore-local-dev-password`, `client_secret=wodore-local-dev-secret`
   (dev/test-only client seeded by `app local_auth_users`).
@@ -59,13 +59,13 @@ Two feature flags (see `server/settings/components/oidc.py`):
 - **Django Apps**: `server/apps/` (e.g., `huts/`, `availbility/`, `organizations/`)
 - **Settings**: `server/settings/components/` (modular settings files)
 - **API**: django-modern-rest (dmr, not DRF) - Controllers in `api.py` modules, each exporting a `paths` list
-- **Admin**: Django Unfold - configuration in `server/settings/components/unfold.py`
+- **Admin**: Django Unfold - configuration in `server/settings/components/unfold.py` -- <https://unfoldadmin.com/docs>
 
 ## Documentation
 
 ### Work In Progress
 
-Document your work under `_work` in this form `yymmdd_working_title.md`. Keep the document up-to-date.
+Document your work under `_work` (git ignored) in this form `yymmdd_working_title.md`. Keep the document up-to-date.
 
 ### Translations (gettext)
 
@@ -85,6 +85,7 @@ OpenAPI schema available at:
 
 - **Local**: <http://localhost:8000/v1/openapi.json>
 - **Production**: <https://hub.wodore.com> (may not be up-to-date during development)
+- **Staging**: <https://hub.stg.wodore.com> (may not be up-to-date during development)
 
 ## Tech Stack
 
@@ -92,7 +93,7 @@ OpenAPI schema available at:
 - **Admin**: Django Unfold (customized admin interface) - [Documentation](https://unfoldadmin.com/docs/)
 - **Database**: PostgreSQL with PostGIS
 - **Dependencies**: hut-services library for external hut information and booking data
-- **Secrets**: Infisical for environment variable management
+- **Secrets**: Infisical or `.env.` for environment variable management
 
 ### Local Editable Hut-Services
 
@@ -107,12 +108,17 @@ Switch **both** to path sources together (uv resolves the private package's
 
 The Wodore ecosystem consists of multiple repositories:
 
-- **Backend** (this repository): `wodore-backend/`
-- **Frontend**: `../wodore-frontend-quasar/` - Quasar/Vue.js frontend application
-- **Hut Services (Public)**: `../hut-services/` - Public library for hut information schemas and base services
-- **Hut Services (Private)**: `../hut-services-private/` - Private implementations for external booking services (HRS, SAC, etc.)
+REPO_BURGINFRA=$HOME/git/burgdev/burginfra/
+REPO_WODORE_BACKEND=$HOME/git/wodore/wodore-backend/
+REPO_WODORE_FRONTEND=$HOME/git/wodore/wodore-frontend-quasar/
+REPO_WODORE_HUT_SERVICE=$HOME/git/wodore/hut-services/
+REPO_WODORE_HUT_SERVICE_PRIVATE=$HOME/git/wodore/hut-services-private/
 
-All paths are relative to the repository root (`wodore-backend/`).
+- **Backend** (this repository): `$REPO_WODORE_BACKEND`
+- **Frontend**: `$REPO_WODORE_FRONTEND` - Quasar/Vue.js frontend application
+- **Hut Services (Public)**: `$REPO_WODORE_HUT_SERVICE` - Public library for hut information schemas and base services
+- **Hut Services (Private)**: `$REPO_WODORE_HUT_SERVICE-PRIVATE` - Private implementations for external booking services (HRS, SAC, etc.)
+- BurgInfra (deployement): `$REPO_BURGINFRA` - Production and staging deployment. New docker build automatically updates the `staging` branch, but needs to be manually merged into `main`
 
 ### WEPs (Wodore Enhancement Proposals)
 
@@ -127,7 +133,7 @@ Technical proposals for significant features and architectural decisions:
 
 ### Docker Compose Services
 
-Services are defined in `docker-compose.yml`:
+Services are defined in `docker-compose.yml`, this is only used for development not production:
 
 - **PostgreSQL Database (PostGIS)** - Port 5432
 - **Imagor** (Image Processing) - Port 8079
@@ -270,8 +276,7 @@ that matter for any code change:
 ## Type Checking
 
 Type checking is **pyrefly** — one engine for CLI, CI and editor LSP, running
-`preset = "strict"` project-wide (openspec `pyrefly-type-checking`; campaign
-history: `_work/261024_django_type_checking.md`). django-stubs provides the
+`preset = "strict"` project-wide (openspec `pyrefly-type-checking`). django-stubs provides the
 Django type vocabulary.
 
 ```bash
@@ -305,7 +310,6 @@ inv check.types        # or: uv run pyrefly check
   PR from a fresh branch name. Prefer fresh branch names per PR.
 - Don't gate on ty (Astral): it has no Django support (~373 false positives
   here); revisit when astral-sh/ty#1018 lands.
-
 
 ## Testing
 
@@ -499,6 +503,7 @@ Serving: `GET /v1/map/catalog` (dmr) and
 byte-identical; subset clients never receive full variants).
 
 **Style validation flow** (full detail: `docs/map-style-subset-spec.md`):
+
 - **Saves** gate in `MapLayer.clean()`: structural + parameter-token
   checks → subset walker (`profile=subset` rows) → styl as a subprocess
   when a binary is on PATH (absent = silent skip). E-codes block unless
