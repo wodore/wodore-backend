@@ -251,6 +251,10 @@ class GeoPlaceCategory(TimeStampedModel):
         db_index=True,
         related_name="geo_place_associations",
     )
+    #: Runtime FK id attribute (None while unsaved) — pyrefly does not
+    #: synthesize ``<fk>_id`` attributes; explicit annotation per the
+    #: repo idiom (see _category_extra_schema.py).
+    category_id: int | None
     classifier = models.ForeignKey(
         Category,
         on_delete=models.SET_NULL,
@@ -419,6 +423,9 @@ class GeoPlaceParty(TimeStampedModel):
         verbose_name=_("Role"),
         help_text=_("Role this party plays for the place (role.* category)"),
     )
+    #: Runtime FK id attribute (None while unsaved) — same idiom as
+    #: ``GeoPlaceCategory.category_id`` above.
+    role_id: int | None
     order = models.PositiveSmallIntegerField(
         default=0,
         db_index=True,
