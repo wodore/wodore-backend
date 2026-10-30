@@ -61,12 +61,25 @@ def drop_tiles_view(_apps: Any, schema_editor: Any) -> None:
 
 
 def recreate_tiles_view(_apps: Any, schema_editor: Any) -> None:
-    from server.apps.geometries.models.tiles_view import GeoPlacesForTilesView
+    """Era-frozen SQL (kind_slug era): re-derive from 0065's frozen
+    detail_type view with the column swap — a live import would render
+    whatever the model says TODAY (``domain`` since 0072), which does
+    not exist yet at this point on fresh databases."""
+    import importlib.util
+    from pathlib import Path
 
-    sql, params = GeoPlacesForTilesView.ViewMeta.query()
+    spec = importlib.util.spec_from_file_location(
+        "m0065_tiles_view",
+        Path(__file__).with_name("0065_tiles_view_classifier.py"),
+    )
+    assert spec is not None and spec.loader is not None
+    m0065 = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m0065)
+
+    sql = m0065.VIEW_SQL.replace("gp.detail_type,", "gp.kind_slug,")
     with schema_editor.connection.cursor() as cursor:
         cursor.execute("DROP VIEW IF EXISTS geoplaces_for_tiles CASCADE")
-        cursor.execute(f"CREATE VIEW geoplaces_for_tiles AS {sql}", params)
+        cursor.execute(f"CREATE VIEW geoplaces_for_tiles AS {sql}")
 
 
 class Migration(migrations.Migration):
