@@ -1,40 +1,64 @@
-# Claude Development Guide
+# wodore-backend Development Guide
 
-Quick reference for Claude when working on wodore-backend.
+Quick reference for agents and contributors working on wodore-backend.
 
-**Note**: This file should be updated whenever important development information, patterns, or infrastructure details are discovered during work on the project.
+**Note**: This file should be updated whenever important development
+information, patterns, or infrastructure details are discovered during work
+on the project.
 
 ## Essential Commands
 
-Use `app` command with activated virtualenv (sets environment with infisical):
+Django commands run through the `app` wrapper (loads the environment via
+Infisical):
 
 ```bash
-# Activate virtualenv first
-source .venv/bin/activate
+source .venv/bin/activate    # activate virtualenv first
 
-# Django commands (app alias uses infisical for environment)
-app <command>
-
-# Examples
-app makemigrations
+app makemigrations           # Django commands via app (uses Infisical env)
 app migrate
 app update_availability --all
 
-# Note: app expands to: infisical run --env=dev --path /backend --log-level warn -- app <command>
-# (no --silent: it swallows the child's stdout — interactive commands like
-# `app createsuperuser` would hang with invisible prompts)
+inv tests                    # run the test suite — mandatory after any change
+inv check.types              # pyrefly type check
+inv lint                     # ruff lint + format check
 ```
 
-## Changelog
+- `app` expands to `infisical run --env=dev --path /backend -- app <command>`
+  (no `--silent`: it swallows the child's stdout — interactive commands like
+  `app createsuperuser` would hang with invisible prompts).
+- Without Infisical, plain `.env` files work too:
+  `uv run python manage.py <command>`.
 
-Both changelogs are auto-generated on release — never edit them by hand
-and never ship changelog entries inside PRs:
+## Environments & URLs
 
-- `CHANGELOG.md`: built by `inv release` from merged PR titles (PR
-  titles must be changelog-ready — imperative, capitalized, no
-  conventional-commit tags).
-- `CHANGELOG_API.md`: the same release step regenerates it from PRs
-  labeled `api:*` (see "API Versioning").
+| Environment | API / OpenAPI | Frontend |
+|---|---|---|
+| Local | <http://localhost:8000/v1/openapi.json> | <http://localhost:9000> |
+| Staging | <https://hub.stg.wodore.com> | <https://stg.wodore.com> |
+| Production | <https://hub.wodore.com> | <https://wodore.com> |
+
+- Deployed OpenAPI may lag during active development.
+- API CDN hosts: `hub.cdn.wodore.com` / `hub.cdn.stg.wodore.com` (BunnyCDN);
+  vector tiles: `tiles.wodore.com` / `tiles.stg.wodore.com`.
+- Deployment lives in the burginfra repo (see Related Projects): new docker
+  builds auto-update staging, production is a manual merge to `main`.
+
+## Changelog & Pull Requests
+
+Both changelogs are auto-generated on release — never edit them by hand and
+never ship changelog entries inside PRs. Full conventions:
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
+- PR titles are changelog-ready: imperative, capitalized, no
+  conventional-commit tags (they land in `CHANGELOG.md` verbatim).
+- Label every PR with a `type:*` label; API changes additionally get an
+  `api:*` label and also appear in `CHANGELOG_API.md` (see API Versioning).
+- CI quirk: workflow events sometimes don't fire for a branch — proactively
+  merge `origin/main` before pushing, or recreate the PR from a fresh
+  branch name. Prefer fresh branch names per PR.
+
+- `CHANGELOG.md`: built by `inv release` from merged PR titles.
+- `CHANGELOG_API.md`: regenerated from PRs labeled `api:*`.
 
 ## Authentication Modes
 
@@ -49,23 +73,30 @@ Two feature flags (see `server/settings/components/oidc.py`):
 - OIDC enabled + provider unreachable = startup fails fast (`ImproperlyConfigured`).
 - Frontend local mode: `WODORE_OICD_ISSUER_URL=http://localhost:8000/oauth/local`,
   `WODORE_OICD_CLIENT_ID=wodore-local-dev`, any `WODORE_OICD_RESOURCE_ID`.
-- Local users: `app local_auth_users` (admin@local.test / admin-dev, editor@local.test / editor-dev).
+- Local users: `app local_auth_users` (<admin@local.test> / admin-dev,
+  <editor@local.test> / editor-dev).
 - Test tokens: `POST /oauth/local/token` with `grant_type=password`,
   `client_id=wodore-local-dev-password`, `client_secret=wodore-local-dev-secret`
   (dev/test-only client seeded by `app local_auth_users`).
 
-## Project Structure
+## Project Structure & Tech Stack
 
-- **Django Apps**: `server/apps/` (e.g., `huts/`, `availbility/`, `organizations/`)
+- **Framework**: Django with django-modern-rest (dmr, not DRF) for the API
+- **Admin**: Django Unfold — [Documentation](https://unfoldadmin.com/docs/)
+- **Database**: PostgreSQL with PostGIS
+- **Django Apps**: `server/apps/` (e.g., `huts/`, `availability/`, `organizations/`)
 - **Settings**: `server/settings/components/` (modular settings files)
-- **API**: django-modern-rest (dmr, not DRF) - Controllers in `api.py` modules, each exporting a `paths` list
-- **Admin**: Django Unfold - configuration in `server/settings/components/unfold.py`
+- **API**: controllers in `api.py` modules, each exporting a `paths` list
+- **Secrets**: Infisical or `.env` files for environment variables
+- **Dependencies**: `hut-services` library for external hut information and
+  booking data
 
 ## Documentation
 
 ### Work In Progress
 
-Document your work under `_work` in this form `yymmdd_working_title.md`. Keep the document up-to-date.
+Local working notes go under `_work/` (git-ignored), named
+`yymmdd_working_title.md`. Keep the document up to date while working.
 
 ### Translations (gettext)
 
@@ -79,125 +110,86 @@ variants render through these catalogs (`{% translate %}` in
 `server/templates/txt/llms.txt`, locale active per URL — see
 `server/apps/main/views.py`).
 
-### API Documentation
-
-OpenAPI schema available at:
-
-- **Local**: <http://localhost:8000/v1/openapi.json>
-- **Production**: <https://hub.wodore.com> (may not be up-to-date during development)
-
-## Tech Stack
-
-- **Framework**: Django with django-modern-rest (dmr) for API
-- **Admin**: Django Unfold (customized admin interface) - [Documentation](https://unfoldadmin.com/docs/)
-- **Database**: PostgreSQL with PostGIS
-- **Dependencies**: hut-services library for external hut information and booking data
-- **Secrets**: Infisical for environment variable management
-
-### Local Editable Hut-Services
-
-For local development, `hut-services` and `hut-services-private` can be installed as
-editable sources from the sibling checkouts (see `[tool.uv.sources]` in `pyproject.toml`).
-Switch **both** to path sources together (uv resolves the private package's
-`../hut-services` path dependency and conflicts with a git pin), then run
-`uv sync --extra private` — the `private` extra is required to install
-`hut-services-private` at all (plain `uv sync` omits it).
-
-## Related Projects
-
-The Wodore ecosystem consists of multiple repositories:
-
-- **Backend** (this repository): `wodore-backend/`
-- **Frontend**: `../wodore-frontend-quasar/` - Quasar/Vue.js frontend application
-- **Hut Services (Public)**: `../hut-services/` - Public library for hut information schemas and base services
-- **Hut Services (Private)**: `../hut-services-private/` - Private implementations for external booking services (HRS, SAC, etc.)
-
-All paths are relative to the repository root (`wodore-backend/`).
-
 ### WEPs (Wodore Enhancement Proposals)
 
 Technical proposals for significant features and architectural decisions:
 
-- **Location**: `docs/weps/board/` - Blog posts in MkDocs
-- **Format**: Single-sentence summary + detailed analysis with categories/tags
-- **Build**: `inv docs.serve` - Shows all WEPs with integrated TOC in left sidebar
-- **Online Access**: `/weps/` (blog index), `/weps/tags/` (tags), `/weps/category/` (categories)
+- **Location**: `docs/weps/board/` — blog posts in MkDocs
+- **Format**: single-sentence summary + detailed analysis with categories/tags
+- **Build**: `inv docs.serve` — shows all WEPs with integrated TOC
+- **Online**: `/weps/` (index), `/weps/tags/`, `/weps/category/`
+
+## Related Projects
+
+The Wodore ecosystem:
+
+- **Backend** (this repository): `$REPO_WODORE_BACKEND`
+- **Frontend**: `$REPO_WODORE_FRONTEND` — Quasar/Vue.js application
+- **Hut Services (public)**: `$REPO_WODORE_HUT_SERVICE` — schemas and base
+  services for external hut information
+- **Hut Services (private)**: `$REPO_WODORE_HUT_SERVICE_PRIVATE` — external
+  booking service implementations (HRS, SAC, …)
+- **BurgInfra (deployment)**: `$REPO_BURGINFRA` — production and staging
+  deployment; new docker builds auto-update staging, production needs a
+  manual merge to `main`
+
+### Local Editable Hut-Services
+
+For local development, `hut-services` and `hut-services-private` can be
+installed as editable sources from the sibling checkouts (see
+`[tool.uv.sources]` in `pyproject.toml`). Switch **both** to path sources
+together (uv resolves the private package's `../hut-services` path
+dependency and conflicts with a git pin), then run `uv sync --extra
+private` — the `private` extra is required to install `hut-services-private`
+at all (plain `uv sync` omits it).
 
 ## Infrastructure
 
-### Docker Compose Services
+### Docker Compose Services (dev only)
 
-Services are defined in `docker-compose.yml`:
+Defined in `docker-compose.yml` — development only, never used in production:
 
-- **PostgreSQL Database (PostGIS)** - Port 5432
-- **Imagor** (Image Processing) - Port 8079
-- **Martin** (Vector Tile Server) - Port 8075 — published by the
-  **tile-router** (single tile origin; martin itself is compose-internal)
-  - Serves vector tiles from PostGIS database
-  - Configuration: `martin_sync/config/martin.yaml` (generated by `app martin_sync`)
-  - **CDN-Tag purge taxonomy**: the tile-router derives Bunny purge tags
-    from the URL automatically (`tiles tiles:<source>` /
-    `tiles tiles:raster:<facade>`; the API's `ApiCdnCacheMiddleware`
-    stamps `api api:<app>`) — new sources/facades are purgeable with no
-    nginx edit; one source can be purged without evicting warm terrain
-    tiles — see `_work/261026_cdn_tags.md`.
-  - Endpoint: `http://localhost:8075/huts/{z}/{x}/{y}.pbf`
-  - Catalog: `http://localhost:8075/catalog`
-  - DB sources: `huts` (public+active huts), `geoplaces_view`, `geoplaces` (function),
-    `availability` (function; params `date`/`days`/`days_max_zoom`/`cache_ttl`, see
-    `server/apps/availability/tiles.py`)
-  - **MLT (MapLibre Tile) v1**: any source is also served as MLT on an explicit
-    `.mlt` URL space (`/huts/{z}/{x}/{y}.mlt`) — the tile-router strips the
-    suffix and asks Martin to convert at serve time (implicit on
-    Martin ≥ 1.16; `convert_to_mlt` in martin.yaml covers older). Only the
-    literal `.mlt` suffix selects MLT — extension-less/`.pbf`/`.mvt` stay MVT.
-    Opt-in is style-side (`encoding: mlt` + `.mlt` tiles template; the huts,
-    availability and transport overlays opted in). Source ids must be
-    underscore-only — the tile-router's `.mlt` location and the CDN-Tag map
-    match `[A-Za-z0-9_,]` first path segments (hyphens break MLT serving
-    and purge tagging). nginx (tile-router/edge) is required for `.mlt` URLs — it
-    already is the single tile origin in dev and prod; lane Martin
-    (`scripts/lane-martin.sh`) has no router in front, so `.mlt` works there
-    only via extension-less URL + explicit `Accept: application/vnd.maplibre-tile`
-    header. Adding a source = style opt-in (+ martin.yaml entry for
-    Martin < 1.16) — no router change.
-  - **Transitland passthrough** (`transitland_stops` in martin.yaml): Martin
-    proxies the Transitland v2 stops tileset (transport-stops overlay) with a
-    server-side `apikey` header, serve-time MVT→MLT conversion and a 4-day
-    stale-while-revalidate `cache_control`. The `TRANSITLAND_API_KEY` lives in
-    the env registry (envvars EnvVar row — value in the DB, never committed);
-    `martin_sync` bakes it into the generated config
-    (`resolve_passthrough_headers`), compose/lane-martin pass the env var as
-    fallback. The key never appears in a client-visible URL. Full story:
-    `_work/261029_transitland_transport_layer.md`.
-- **Tile-router** (`tile_server/tile-router.conf.template`, nginx) - Port 8075
-  - Single-origin tile routing: `/raster/*` → the mapproxy facades
-    (rewritten to mapproxy's internal `/mapproxy/` prefix), `*.mlt` →
-    martin with the MLT accept header (extension stripped), everything
-    else → martin. `MARTIN_TILE_URL` (default `http://localhost:8075`)
-    points here, so the style fixtures' `/raster/tiles/...` URLs work
-    with plain `docker compose up`. 7d immutable browser caching; the
-    styles' `?v=N` param busts.
-- **MapProxy raster facades** (`tile_server/mapproxy/`, part of the dev
-  compose like martin — port 8091, `django-local-mapproxy`):
-  - `world_topo` — OpenTopoMap + basemap.at + swisstopo pixelkarte,
-    border-merged, served as **WebP**
-  - `world_satellite` — ESRI World Imagery, **WebP**
-  - The wodore styles reference them via implementation-agnostic
-    `/raster/tiles/...` paths — an edge route (nginx) rewrites them to
-    the facade in staging/prod; the lane dev tile router does it in dev.
-  - See `tile_server/mapproxy/README.md` for the WebP recipe and the
-    single-source passthrough gotcha (clipped coverage forces real
-    WebP encoding).
-  - Terrain postprocessing (Martin ≥ 1.16): `contours` — server-traced MVT
-    contour lines from Mapterhorn (Terrarium webp, layer `contour`, tags
-    `ele`+`major`, `/contours/{z}/{x}/{y}`); `hillshade` — baked raster PNG
-    from AWS Terrain Tiles normal tiles (`/hillshade/{z}/{x}/{y}`).
-    Martin caches only the upstream elevation tiles, NOT the postprocessed
-    output — warm terrain tiles will be cached at the prod cluster edge
-    (reference nginx proxy_cache config: `_work/261008_ofm_mtk_parity.md`
-    in the PR #292 lane).
-    Test style: `wd-terrain-test` (`tile_server/styles/wd-terrain-test.json`).
+- **PostgreSQL (PostGIS)** — port 5432
+- **Imagor** (image processing) — port 8079
+- **Martin** (vector tile server) + **tile-router** (nginx) — port 8075
+- **MapProxy raster facades** — port 8091
+
+### Tiles (Martin + tile-router + MapProxy)
+
+- **Martin** serves vector tiles from PostGIS; configuration
+  `martin_sync/config/martin.yaml` is generated by `app martin_sync`
+  (Martin loads its config at startup — restart to pick up changes).
+  Endpoints: `http://localhost:8075/huts/{z}/{x}/{y}.pbf`,
+  catalog at `/catalog`. DB sources: `huts` (public+active huts),
+  `geoplaces_view`, `geoplaces`, `availability` (params `date`/`days`/
+  `days_max_zoom`/`cache_ttl`, see `server/apps/availability/tiles.py`).
+- **Tile-router** (`tile_server/tile-router.conf.template`, nginx) is the
+  single tile origin: `/raster/*` → MapProxy facades, `*.mlt` → Martin with
+  MLT accept header, everything else → Martin. `MARTIN_TILE_URL` (default
+  `http://localhost:8075`) points here. 7d immutable browser caching; the
+  styles' `?v=N` param busts. It also derives Bunny CDN purge tags from the
+  URL automatically — new sources/facades are purgeable with no nginx edit
+  (see the template comments).
+- **MLT (MapLibre Tile) v1**: any source is also served as MLT on the
+  explicit `.mlt` URL space (serve-time conversion, implicit on
+  Martin ≥ 1.16). Only the literal `.mlt` suffix selects MLT — extension-less
+  /`.pbf`/`.mvt` stay MVT. Opt-in is style-side (`encoding: mlt` + `.mlt`
+  tiles template). Source ids must be underscore-only (hyphens break MLT
+  serving and purge tagging).
+- **MapProxy facades** (`tile_server/mapproxy/`): `world_topo`
+  (OpenTopoMap + basemap.at + swisstopo) and `world_satellite` (ESRI), both
+  served as WebP. Styles reference them via implementation-agnostic
+  `/raster/tiles/...` paths. See `tile_server/mapproxy/README.md` for the
+  WebP recipe and the single-source passthrough gotcha.
+- **Terrain postprocessing** (Martin ≥ 1.16): `contours` (server-traced MVT
+  contour lines from Mapterhorn) and `hillshade` (baked raster PNG from AWS
+  Terrain Tiles). Martin caches only upstream elevation tiles, not the
+  postprocessed output. Test style: `wd-terrain-test`
+  (`tile_server/styles/wd-terrain-test.json`).
+- **Transitland passthrough** (`transitland_stops`): Martin proxies the
+  Transitland v2 stops tileset with a server-side `apikey` header baked in
+  by `martin_sync` (`TRANSITLAND_API_KEY` from the env registry) — the key
+  never appears in a client-visible URL.
 
 ## Common Patterns
 
@@ -220,35 +212,42 @@ Services are defined in `docker-compose.yml`:
 
 ### API Endpoints (dmr Controllers)
 
-**Structure:**
-
-- One `Controller[...]` class per path (subclass `server.apps.api.controller.ApiController`)
-- Method per HTTP verb (`def get(...)`, `def post(...)`); docstring = description, endpoint slug = title
-- Typed components: `parsed_query: Query[YourQueryModel]`, `parsed_body: Body[X]`, `parsed_path: Path[X]`
-  (parameter names MUST be `parsed_*` - dmr silently skips others)
-- Query/path models are plain pydantic models composed from `LanguageQuery` / `FieldsQuery`
-  (`server.apps.translations.schema`, `server.apps.api.query`); descriptions via `Field(..., description=...)`,
+- One `Controller[...]` class per path (subclass
+  `server.apps.api.controller.ApiController`); method per HTTP verb
+  (`def get(...)`, `def post(...)`); docstring = description, endpoint
+  slug = title
+- Typed components: `parsed_query: Query[YourQueryModel]`,
+  `parsed_body: Body[X]`, `parsed_path: Path[X]` (parameter names MUST be
+  `parsed_*` — dmr silently skips others)
+- Query/path models are plain pydantic models composed from
+  `LanguageQuery` / `FieldsQuery` (`server.apps.translations.schema`,
+  `server.apps.api.query`); descriptions via `Field(..., description=...)`,
   examples via `json_schema_extra={'example': ...}`
-- **Every route sets `name=` on `dmr.routing.path` equal to `@modify(operation_id=...)`**
-  (versioning keys on it; startup checks E003/E004 enforce the invariant)
+- **Every route sets `name=` on `dmr.routing.path` equal to
+  `@modify(operation_id=...)`** (versioning keys on it; startup checks
+  E003/E004 enforce the invariant)
 - Response headers (Cache-Control etc.) via `@modify(headers=cache_headers(max_age=...))`
-- Errors: `raise_not_found(...)`, `APIError({'code', 'detail'}, status_code=...)` - one error contract everywhere
-- Serialization: `WodoreSerializer` dumps with `exclude_unset` - construct minimal DTOs/dicts,
-  unset optional fields are absent from the JSON (not null). Keep that when adding fields
-- Endpoints returning `HttpResponse` (ETag/304 paths) use `@validate(ResponseSpec(...))` + `self.to_response(...)`
+- Errors: `raise_not_found(...)`, `APIError({'code', 'detail'}, status_code=...)`
+  — one error contract everywhere
+- Serialization: `WodoreSerializer` dumps with `exclude_unset` — construct
+  minimal DTOs/dicts, unset optional fields are absent from the JSON (not
+  null). Keep that when adding fields
+- Endpoints returning `HttpResponse` (ETag/304 paths) use
+  `@validate(ResponseSpec(...))` + `self.to_response(...)`
 
 ## API Versioning
 
 The API (`/v1/`) uses date-based contract versioning (`Api-Version` header /
-`api_version` query param). Registry: `server/apps/apiversions/registry.py`.
-Full runbook: `docs/api-versioning.md` (mkdocs: "API Versioning"). The rules
-that matter for any code change:
+`api_version` query param). Registry:
+`server/apps/apiversions/registry.py`. Full runbook:
+[docs/api-versioning.md](docs/api-versioning.md) and
+[CONTRIBUTING.md](CONTRIBUTING.md). The rules that matter for any code change:
 
 - **Versions are created only for breaking changes** (remove/rename, new
   required param, tightened validation, changed observable defaults, new
-  response enum value). Additive changes (new endpoints, optional
-  params/fields) need no version. Litmus test: would a client pinned to the
-  current version behave differently after the deploy?
+  response enum value). Additive changes need no version. Litmus test:
+  would a client pinned to the current version behave differently after
+  the deploy?
 - **Breaking change PR** = new `VersionChange` (downgrade transforms keyed
   by `operation_id` — explicit ids required, system check enforces) +
   snapshot via `app api_snapshot` **committed in the PR** (CI checks
@@ -258,21 +257,17 @@ that matter for any code change:
   date, regenerate snapshot) — never stack a new version. CI gates this
   (`python3 -m server.apps.apiversions.registry_check`).
 - **Release**: CI cuts the `api/<date>` tag when the docker build shipping
-  it succeeds (`new-api-version.yml`); `inv release` regenerates
-  `CHANGELOG_API.md`. API changes appear in BOTH changelogs (type label →
-  `CHANGELOG.md`, api label → `CHANGELOG_API.md`).
+  it succeeds; `inv release` regenerates both changelogs.
 - Response downgrades for pinned-old versions are applied by
   `ApiVersionMiddleware` uniformly to every JSON response (dmr controllers
-  and GeoJSON endpoints alike); contract tests pin this. Endpoint identity
-  is the URL name == operationId (startup checks E003/E004 enforce it).
-  ETags on hut endpoints key on the resolved version + registry hash.
+  and GeoJSON endpoints alike); contract tests pin this. ETags on hut
+  endpoints key on the resolved version + registry hash.
 
 ## Type Checking
 
-Type checking is **pyrefly** — one engine for CLI, CI and editor LSP, running
-`preset = "strict"` project-wide (openspec `pyrefly-type-checking`; campaign
-history: `_work/261024_django_type_checking.md`). django-stubs provides the
-Django type vocabulary.
+Type checking is **pyrefly** — one engine for CLI, CI and editor LSP,
+running `preset = "strict"` project-wide. django-stubs provides the Django
+type vocabulary.
 
 ```bash
 inv check.types        # or: uv run pyrefly check
@@ -281,49 +276,31 @@ inv check.types        # or: uv run pyrefly check
 **Rules & quirks** (hard-won, follow them):
 
 - All new/changed code must be fully annotated — the implicit-any rules are
-  on everywhere. Fix findings in code; there is **no baseline** (retired) and
+  on everywhere. Fix findings in code; there is **no baseline** and
   creating one is not an option.
 - Suppressions are a last resort: bare `# type: ignore  # <short reason>`.
   Never `# pyright:` comments. For multi-line expressions pyrefly cannot
   suppress line-based — restructure to a single-line anchor (typed local,
   constant) and suppress that line.
 - Established idioms: modeltrans `<field>_i18n: str` annotations ·
-  `Manager.from_queryset(QuerySet)` factory (+ its one documented chain gap) ·
-  split-settings cross-file `# type: ignore` · `@override` from `typing` ·
-  django-stubs signatures for management commands (`add_arguments(parser:
-  CommandParser)`, `handle(*args: Any, **options: Any)`) and admin hooks.
-- pi-lens may report pyright-family "unresolved import" blockers from a
-  venv-less runner (`ready=0/N`): environmental noise — pyrefly is the only
-  authority; verify with `pyrefly check` and runtime imports, never chase them.
-- A conclusively-determined pre-existing lens finding gets exactly one triage —
-  `lens_diagnostic_mark` (`false-positive`/`suppress`, with reason) or a
-  `# pi-lens-ignore: <rule>` source comment — never a per-turn re-justification.
-  The turn-end advisory honors marks on its live arm; its stale-history replay is
-  bounded and retires on its own — ignore repeats of already-marked findings.
-- CI quirk: workflow events sometimes don't fire for a branch — proactively
-  merge `origin/main` before pushing (merge-pushes trigger), or recreate the
-  PR from a fresh branch name. Prefer fresh branch names per PR.
-- Don't gate on ty (Astral): it has no Django support (~373 false positives
-  here); revisit when astral-sh/ty#1018 lands.
-
+  `Manager.from_queryset(QuerySet)` factory (+ its one documented chain
+  gap) · split-settings cross-file `# type: ignore` · `@override` from
+  `typing` · django-stubs signatures for management commands
+  (`add_arguments(parser: CommandParser)`, `handle(*args: Any, **options: Any)`)
+  and admin hooks.
+- Don't gate on ty (Astral): it has no Django support (many false
+  positives here); revisit when astral-sh/ty#1018 lands.
 
 ## Testing
 
-After making changes, **always run the test suite** to verify nothing is broken:
+After making changes, **always run the test suite** to verify nothing is
+broken — mandatory before considering work complete:
 
 ```bash
-# Activate virtualenv first
-source .venv/bin/activate
-
-# Run all tests
 inv tests
 ```
 
-**Important**: This is mandatory after any code changes before considering work complete.
-
-**In a worktree**: `inv tests` resolves `POSTGRES_DB=wodore` from
-`.env.test` and would collide all lanes on one shared test database.
-Use the lane runner instead (see § Worktrees / workz):
+**In a worktree**: use the lane runner instead (see § Worktrees / workz):
 
 ```bash
 scripts/lane-run.sh .venv/bin/pytest
@@ -332,196 +309,107 @@ scripts/lane-run.sh .venv/bin/pytest
 ## Worktrees / workz
 
 Agent worktrees are provisioned by [workz](https://github.com/rohansx/workz)
-(see `.workz.toml`). Every worktree gets:
+(see `.workz.toml`). Every worktree ("lane") gets:
 
-- **Dotfiles synced** from the main checkout: `.env*` (workz default) plus
-  `.infisical.json` and `.geoplaces_osm_import.json`.
-- **Its own `.venv`** — never symlinked (`.workz.toml` ignores it):
-  `scripts/lane-venv.sh` (post_start) syncs with `--frozen --extra private`
-  and patches activate with a lane-aware `app()`. uv hardlinks from the
-  shared cache (~6 MB marginal disk, sub-second warm sync). Each lane's
-  editable install points at its own checkout, so `app`/`manage` and
-  `pytest` always run lane code. Never `git add` it (gitignored).
-  `--extra private` is required: plain `uv sync` silently omits
-  hut-services-private.
-- **Its own database on the shared dev postgres** (`django-local-postgis:5432`,
-  no extra ports), cloned from the quiescent `wodore_template` snapshot —
-  same state as the dev main DB. Need current dev data? Refresh the template
-  first: `scripts/db-refresh-template.sh` (takes a few minutes).
-- **A dev-server port range** from 3400 up — used by `scripts/lane-dev.sh`
-  and `workz run` (workz is the ONLY port allocator; paseo's `runserver`
-  service
-  wraps the same script and uses no `$PASEO_PORT` of its own).
-- **`martin_sync/` copied** into every worktree (gitignored, ~109 MB,
-  generated by `app martin_sync`; workz `copy_add` cannot copy directories,
-  so the provisioning hook `scripts/sync-martin.sh` does). Refill the lane
-  copy against the lane DB with
-  `scripts/lane-run.sh .venv/bin/python manage.py martin_sync`.
+- **Its own `.venv`** (never symlinked; synced with `--extra private` —
+  plain `uv sync` silently omits hut-services-private)
+- **Its own database** on the shared dev postgres, cloned from the
+  quiescent `wodore_template` snapshot
+- **A dev-server port** (range from 3400 up) and a **`martin_sync/` copy**
 
-**Run commands against the lane DB with the standard infisical wrapper, not
-raw `infisical run`:**
+**Lane setup** (idempotent — lane venv, lane DB, martin_sync copy):
+
+```bash
+scripts/lane-setup.sh
+```
+
+**Run commands against the lane DB** with the standard wrapper, never raw
+`infisical run` (the lane DB name in `.env.local` must win over the
+infisical-injected one):
 
 ```bash
 scripts/lane-run.sh .venv/bin/pytest
 ```
 
-`workz` writes the lane DB name into `.env.local`, but Django reads
-`POSTGRES_DB` from the environment (infisical injects it) — `lane-run.sh`
-re-injects the lane name after infisical so it wins.
-
-**Lane step 1:** the global pi provisioning hook runs `workz sync …
---isolated`, which syncs files and allocates the DB name — but does **not**
-run the `post_start` hook (that only fires on `workz start`). Provision
-what sync cannot:
-
-```bash
-scripts/lane-setup.sh
-# idempotent: lane venv (hardlinked from the uv cache, lane-aware `app()`),
-# lane DB (cloned from wodore_template), martin_sync copied from main.
-# Shared verbatim by workz start (post_start) and paseo.json setup.
-```
-
-**Dev server:** `scripts/lane-dev.sh
-fg|start|stop|status|attach|kill` — `fg` runs a guarded foreground
-supervisor on the workz port (`PORT` in the `.env.local` managed block)
-through `lane-run.sh`: runserver plus a django-q2 **qcluster**; when
-runserver stops, the wrapper's traps tear the qcluster down too — across
-paseo `script stop`, `workz run --stop`, Ctrl-C and crashes. A second start
-on a live lane port is a no-op, a foreign listener is refused; orphans from
-a SIGKILLed run are retired on the next `fg`/`kill`. Process management is
-cwd-scoped discovery (`pgrep -f '.?venv/bin/python3? manage.py
-(qcluster|runserver)'` + `/proc/<pid>/cwd` == worktree) — no pidfiles.
-django-q2 hangs on SIGTERM in this stack, so every stop is TERM → ~5 s →
-SIGKILL. Make qcluster optional with `QCLUSTER=0` in `.env.local` (outside
-the workz managed block, like `FRONTEND_DOMAIN`) or one-off
-`QCLUSTER=0 scripts/lane-dev.sh fg`. `start` prefers detached `workz run`
-and falls back to a detached local supervisor (logs to `.lane-dev.log`)
-when workz can't resolve the lane — paseo-created worktrees, and branches
-renamed after `workz sync` (workz keys its run registry on branch name and
-never refreshes it); `stop` is cwd-scoped (TERM → KILL of runserver +
-qcluster) and works in every mode; `attach` prints recent runserver output
-(the paseo service terminal via `paseo terminal capture`, else
-`.lane-dev.log` when the local supervisor ran, else the last detached workz
-run log — live view: open the terminal in the Paseo app); `kill` hard-stops
-runserver + qcluster (note: paseo's lifecycle badge
-may keep saying "running" until it reaps the pane — use `paseo script stop`
-when the supervisor is healthy). paseo.json exposes all of this as
-`runserver` (service), `runserver:attach` and `runserver:kill`.
-
-**Teardown:** `scripts/lane-teardown.sh` — dev server stop → workz reap →
-martin stop → lane DB drop, idempotent. `workz done <branch> --cleanup-db`
-fires it as `pre_done`; `paseo.json` `worktree.teardown` runs it on
-workspace archive (the workz port allocation is reclaimed later by
-`workz doctor --fix`).
+**Dev server**: `scripts/lane-dev.sh fg|start|stop|status|attach|kill` —
+runserver plus a django-q2 qcluster, guarded so the qcluster is torn down
+when runserver stops. `QCLUSTER=0` disables the qcluster.
+**Teardown**: `scripts/lane-teardown.sh` (dev server → martin → lane DB,
+idempotent).
 
 After `source .venv/bin/activate` in the lane, `app <command>` runs against
-the LANE database (lane-aware function; the main checkout's `app` targets
-dev). `WODORE_APP_NO_INFISICAL=1 app <cmd>` skips infisical (like `inv
-app.app` without `-i`): all env except `POSTGRES_DB`/`MARTIN_TILE_URL`
-(from `.env.local`) must come from your shell. No `make init` needed in
-lanes: pre-commit hooks live in the shared `.git/hooks` and the
-`.volumes`/`media/imagor_data` directories are only needed for local
-compose/imagor work.
+the **lane** database (the main checkout's `app` targets dev).
 
-Note: workz reads `.workz.toml` from the **main checkout** — provisioning
-activates repo-wide once this file is merged to main (before that, a
-temporary untracked copy in the main checkout bootstraps it).
+**Rules:**
 
-**Martin in a worktree:** tile work *can* happen in a worktree — start a
-lane-scoped **tile stack** with `scripts/lane-martin.sh start` (docker: the
-same martin image/config as the compose instance serving the **lane
-database**, plus an nginx **tile-router** built from the repo template —
-martin is network-internal only, the router is the published origin on
-the workz port `PORT_END`, identical topology to the dev compose
-including the `.mlt` URL space; `lane-run.sh` points `MARTIN_TILE_URL`
-there automatically; falls back to compose-default credentials when
-infisical is unavailable). Refill the lane `martin_sync` when you need current tiles
-(`scripts/lane-run.sh .venv/bin/python manage.py martin_sync`) — martin
-loads its config at startup, so `stop` + `start` afterwards to pick the
-refill up. Teardown stops the containers automatically (`pre_done`);
-`scripts/lane-martin.sh stop` also works ad hoc (workz `reap` cannot
-remove containers). Work on the **shared** martin instance —
-version/image updates (the `martin` service in `docker-compose.yml`) and
-shared config — stays in the **main checkout**, never in a worktree.
+- **Never run `docker compose` against the shared dev stack from a
+  worktree** — the compose bind-mounts are relative, so a worktree run
+  repoints the shared containers at the worktree's copies (an empty pgdata
+  makes the dev database appear "wiped"). Use the lane scripts; run
+  `docker compose` only in the main checkout.
+- Tile work *can* happen in a worktree: `scripts/lane-martin.sh start`
+  runs a lane-scoped martin + tile-router serving the lane DB on the lane
+  port (`lane-run.sh` points `MARTIN_TILE_URL` there automatically).
+  Work on the **shared** martin instance (image updates, shared config)
+  stays in the **main checkout**.
+- Work touching **imagor** is done in the main checkout — the shared
+  container reads the main checkout's media setup.
 
-**Imagor rule:** work that touches **imagor** is done in the main
-checkout — the shared container reads the main checkout's media setup.
+### Error Tracking (Sentry protocol)
 
-**Shared compose rule:** never run `docker compose` against the shared
-dev stack from a worktree — the compose bind-mounts are relative
-(`./.volumes/pgdata`, `./martin_sync`, …), so a worktree run repoints
-the shared containers at the worktree's copies: an empty `pgdata`
-initializes a blank cluster and the dev database appears "wiped"
-(recovery: recreate the service from the main checkout). Use the lane
-scripts for worktree work; run `docker compose` only in the main
-checkout.
-
-### Error tracking (Sentry protocol)
-
-`sentry-sdk` (Sentry protocol) initialized in `server/settings/components/sentry.py`,
+`sentry-sdk` initialized in `server/settings/components/sentry.py`,
 included FIRST in the settings list (before logging config). Rules:
 
-- **DSN-gated**: no `SENTRY_DSN` env var → SDK never initializes (dev/test/CI
-  are always telemetry-free). Staging/prod get the DSN from Infisical.
+- **DSN-gated**: no `SENTRY_DSN` env var → SDK never initializes
+  (dev/test/CI are always telemetry-free). Staging/prod get the DSN from
+  Infisical.
 - **Vendor-neutral**: the DSN decides the destination — sentry.io or Better
   Stack (Sentry-SDK-compatible ingestion). Switching vendors = swap DSN,
   never a code change. Rollback = unset the DSN.
 - **Release = `GIT_HASH`** (per-commit deploys) in both staging and prod;
   package semver rides along as an `app_version` event tag.
-- **`SENTRY_TRACES_SAMPLE_RATE`** (default 0.05, `0` = errors-only) — health
-  checks are never traced (sampler excludes `/health/`).
-- **PII stays off**: `send_default_pii=False` is fixed — do not flip without
-  a privacy review (no user IPs/identities in events). Caveat: this only
-  covers SDK-attached data (user, IP, cookies, request bodies) — PII that
-  app code writes *into log messages* still flows into breadcrumbs and
-  error events; keep tokens/emails out of log calls.
+- **`SENTRY_TRACES_SAMPLE_RATE`** (default 0.05, `0` = errors-only) —
+  health checks are never traced (sampler excludes `/health/`).
+- **PII stays off**: `send_default_pii=False` is fixed — do not flip
+  without a privacy review. Caveat: this only covers SDK-attached data —
+  PII that app code writes *into log messages* still flows into
+  breadcrumbs and error events; keep tokens/emails out of log calls.
 - **django-q2 failures** reach Sentry via the in-repo error reporter
-  (`server/core/q2_sentry.py`, wired through `Q_CLUSTER["error_reporter"]`) —
-  q2 itself swallows task exceptions (string result, no ERROR log).
-- Existing structlog output (bridged through stdlib logging) becomes
-  breadcrumbs; `logger.error`+ becomes events. Log format unchanged
-  (JSON lines on stdout).
+  (`server/core/q2_sentry.py`, wired through `Q_CLUSTER["error_reporter"]`)
+  — q2 itself swallows task exceptions.
 
-### Map layers (basemaps app)
+### Map Layers (basemaps app)
 
-Overlays and basemaps live in `server/apps/basemaps` (WEP010 phase 2):
-`MapLayer` rows (role basemap|overlay, `(slug, spec, profile)` variants —
-device tier × capability profile: `full` complete MapLibre styles vs
-`subset`, the strict Leaflet-renderable whitelist in
+Overlays and basemaps live in `server/apps/basemaps`: `MapLayer` rows
+(role basemap|overlay; `(slug, spec, profile)` variants — `full` complete
+MapLibre styles vs `subset`, the strict Leaflet-renderable whitelist in
 `server/apps/basemaps/validation.py`; `version` records the rules a row
-was validated against — style-spec release for `full` (e.g. `26.4.4`),
-subset revision for `subset`), parameters (scalar + `opacity-curve`
-widgets, `{{token}}` nodes in styles), category links, coverage.
-Serving: `GET /v1/map/catalog` (dmr) and
-`GET /v1/map/styles/{slug}.json` (plain view; resolved by default,
-`?mode=tokenized` for customizing clients, `?spec=` variant selection,
-`?profile=full|subset` capability — omitted stays profile-agnostic and
-byte-identical; subset clients never receive full variants).
+was validated against), parameters (scalar + `opacity-curve` widgets,
+`{{token}}` nodes in styles), category links, coverage.
 
-**Style validation flow** (full detail: `docs/map-style-subset-spec.md`):
+Serving: `GET /v1/map/catalog` (dmr) and `GET /v1/map/styles/{slug}.json`
+(plain view; `?mode=tokenized`, `?spec=`, `?profile=full|subset` — omitted
+stays profile-agnostic; subset clients never receive full variants).
+
+**Style validation flow** (full detail:
+[docs/map-style-subset-spec.md](docs/map-style-subset-spec.md)):
+
 - **Saves** gate in `MapLayer.clean()`: structural + parameter-token
   checks → subset walker (`profile=subset` rows) → styl as a subprocess
   when a binary is on PATH (absent = silent skip). E-codes block unless
   listed in the row's `styl_ignored_rules` (JSON codes, `["*"]` skips
-  styl entirely — external-derived styles); W-codes never block, they
-  surface only alongside a blocking error.
+  styl entirely — external-derived styles); W-codes never block.
 - **Seed** (`map_seed`): the upsert calls the walker + styl directly
   (update_or_create bypasses clean()); external-derived rows carry
-  `styl_ignored_rules: ["*"]` (redundant with the CI workflow skip
-  list on purpose — defense in depth).
-- **CI**: `validate_map_styles` sweep in the tests job (no styl binary
-  required; W-codes always reported) + the `map-style-spec` job
-  (styl over `dump_map_styles` output + `fixtures/styles/`, external-
-  derived skip list).
-- New subset rows are tagged manually in `map_seed` (one-time tagging
-  table: openspec style-profiles-subset design D6) — never auto-tagged.
-Caching: layer entries carry `style_version` (also appended to
-`style_url` as `&v=`) — a matching `?v=` on any style URL serves
-immutable (1 y); `layers`/`slots` and unversioned style fetches allow
-the CDN edge 60 s of staleness (`s-maxage=60`, browsers revalidate).
-Volatile-parameter clocks (runtime `date`) live on `MapParameter.Kind`
-(`is_volatile`) and rotate every derived cache key — see
-`server/apps/basemaps/api.py` module docstring.
-`map_seed` provisions the frontend-parity catalog (run after category seeds).
-`martin_sync` no longer syncs styles — Martin serves tiles/sprites/fonts only;
-styles are served by the API from the registry.
+  `styl_ignored_rules: ["*"]`. New subset rows are tagged manually in
+  `map_seed` — never auto-tagged.
+- **CI**: `validate_map_styles` sweep in the tests job + the
+  `map-style-spec` job (styl over `dump_map_styles` output +
+  `fixtures/styles/`).
+
+Caching: layer entries carry `style_version` (appended to `style_url` as
+`&v=`) — a matching `?v=` serves immutable (1 y); unversioned fetches allow
+the CDN edge 60 s of staleness. Volatile-parameter clocks (runtime `date`)
+rotate every derived cache key — see `server/apps/basemaps/api.py` module
+docstring. `martin_sync` serves tiles/sprites/fonts only — styles are
+served by the API from the registry.
