@@ -11,9 +11,10 @@ The ``AlterField`` on ``domain`` rides along: it captures the
 verbose_name/help_text corrections from the admin-label fix (no DB
 change).
 
-Backfill: one chunked-friendly UPDATE with a lateral subquery — the
-per-row trigger overhead needs the lifted statement timeout (see
-0066/0072).
+Backfill: a single-statement UPDATE with a correlated subquery —
+the per-row trigger overhead needs the lifted statement timeout
+(see 0066/0072). Fine for today's ~443k rows; at the projected 5M
+scale, re-estimate the timeout or chunk by pk range first.
 """
 
 from typing import Any
@@ -43,26 +44,40 @@ def backfill_kind(_apps: Any, schema_editor: Any) -> None:
 
 def null_kind(_apps: Any, schema_editor: Any) -> None:
     with schema_editor.connection.cursor() as cursor:
+        # same lifted timeout as the backfill — full-table UPDATE
+        cursor.execute("SET LOCAL statement_timeout = '120s'")
         cursor.execute("UPDATE geometries_geoplace SET kind_id = NULL")
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('categories', '0023_category_is_protected'),
-        ('geometries', '0072_kind_slug_to_domain'),
+        ("categories", "0023_category_is_protected"),
+        ("geometries", "0072_kind_slug_to_domain"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='geoplace',
-            name='kind',
-            field=models.ForeignKey(blank=True, help_text='The anchoring main category (derived: first association by order, slug) — categories inline edits re-anchor on save', null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='places_anchored', to='categories.category', verbose_name='Kind'),
+            model_name="geoplace",
+            name="kind",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="The anchoring main category (derived: first association by order, slug) — categories inline edits re-anchor on save",
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="places_anchored",
+                to="categories.category",
+                verbose_name="Kind",
+            ),
         ),
         migrations.AlterField(
-            model_name='geoplace',
-            name='domain',
-            field=models.CharField(default='none', help_text='Super-root tier of the place (derived) — amenity / admin / natural / none', max_length=100, verbose_name='Domain'),
+            model_name="geoplace",
+            name="domain",
+            field=models.CharField(
+                default="none",
+                help_text="Super-root tier of the place (derived) — amenity / admin / natural / none",
+                max_length=100,
+                verbose_name="Domain",
+            ),
         ),
         migrations.RunPython(backfill_kind, null_kind),
     ]

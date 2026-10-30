@@ -1,6 +1,6 @@
 """GeoPlace search and query endpoints on dmr."""
 
-from typing import Any
+from typing import Any, ClassVar
 
 import pydantic
 from dmr import NewHeader, Path, Query, modify
@@ -100,10 +100,21 @@ class _GeoSearchQuery(LanguageQuery, GeoPlaceFields):
             "or slugs ('hut')"
         ),
     )
+    # dmr collapses repeated query params to the last single value
+    # unless the field is listed here — without it every array filter
+    # 400s with "Input should be a valid list" (found by the kind-FK
+    # regression tests; applies to the shipped domain/types filters too)
+    __dmr_force_list__: ClassVar[frozenset[str]] = frozenset(
+        ("types", "categories", "domain", "kind")
+    )
 
 
 class GeoSearchQuery(_GeoSearchQuery, BboxQuery):
     """Query parameters for the place search endpoint."""
+
+    __dmr_force_list__: ClassVar[frozenset[str]] = frozenset(
+        (*_GeoSearchQuery.__dmr_force_list__, "countries")
+    )
 
     q: str = Field(
         description="Search query string to match against place names in all languages",
@@ -275,18 +286,27 @@ def anchor_kinds_for(places: Any) -> dict[int, dict[str, Any]]:
             "symbol_color", "symbol_primitive", "symbol_mono"
         )
     }
-    # Anchor associations carry the classifier (mode.*) + extra
-    assocs: dict[int, Any] = {}
+    # Anchor associations carry the classifier (mode.*) + extra.
+    # Composite key + order_by("id"): kind_ids is the global set of
+    # the page's kinds, so a place may match an association whose
+    # category is some OTHER place's kind (its own sub-category) —
+    # keying by place alone let that steal the anchor's classifier.
+    # order_by("id") makes duplicate (place, category) rows — the
+    # (geo_place, category, classifier) unique constraint allows
+    # them — resolve deterministically to the first-created.
+    assocs: dict[tuple[int, int], Any] = {}
     for assoc in GeoPlaceCategory.objects.filter(
         geo_place_id__in=place_ids, category_id__in=kind_ids
-    ):
-        assocs.setdefault(assoc.geo_place_id, assoc)
+    ).order_by("id"):
+        category_id = assoc.category_id
+        if category_id is not None:  # narrow the FK-id union for the key
+            assocs.setdefault((assoc.geo_place_id, category_id), assoc)
     anchors: dict[int, dict[str, Any]] = {}
     for place in places:
         if place.kind_id and place.kind_id in categories:
             anchors[place.pk] = {
                 "category": categories[place.kind_id],
-                "assoc": assocs.get(place.pk),
+                "assoc": assocs.get((place.pk, place.kind_id)),
             }
     return anchors
 
@@ -358,6 +378,9 @@ class GeoSearchController(ApiController):
             "importance",
             "country_code",
             "domain",
+            # kind must load with the page: anchor_kinds_for reads
+            # place.kind_id — a deferred column costs one query PER ROW
+            "kind",
         )
 
         if query.min_importance > 0:
@@ -742,6 +765,9 @@ class GeoNearbyController(ApiController):
             "importance",
             "country_code",
             "domain",
+            # kind must load with the page: anchor_kinds_for reads
+            # place.kind_id — a deferred column costs one query PER ROW
+            "kind",
         )
 
         if query.min_importance > 0:
@@ -894,6 +920,7 @@ class PlaceController(ApiController):
         wants_sources = field_selected(query, "places", "sources")
         wants_parties = field_selected(query, "places", "parties")
         wants_links = field_selected(query, "places", "links")
+        wants_kind = field_selected(query, "places", "kind")
 
         queryset = GeoPlace.objects.filter(
             is_active=True,
@@ -951,7 +978,8 @@ class PlaceController(ApiController):
             # The anchoring kind (geoplace-kind-fk): same member shape
             # as search/nearby — the place's main category with its
             # classifier/extra; sub-categories live in `categories`.
-            if place.kind_id:
+            # Gated like the other optional members (review #5).
+            if wants_kind and place.kind_id:
                 anchor = anchor_kinds_for([place]).get(place.pk)
                 if anchor is not None:
                     result["kind"] = kind_ref_for(

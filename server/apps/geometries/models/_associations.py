@@ -522,12 +522,27 @@ def _rederive_place_kind(geo_place_id: int) -> None:
         )
         del anchor  # read for domain only; kind derives atomically above
     except Exception:  # signal guard — see docstring
+        # never break the triggering write, but never hide a real
+        # derivation bug either — the receiver is the ONLY sync path
+        # for admin inline edits (Opus review #4)
+        import logging
+
+        logging.getLogger(__name__).exception(
+            "rederive_place_kind failed for place %s", geo_place_id
+        )
         return
 
 
 def _on_association_saved(
     sender: Any, instance: "GeoPlaceCategory", **kwargs: Any
 ) -> None:
+    update_fields = kwargs.get("update_fields")
+    if update_fields and set(update_fields) <= {"extra", "modified"}:
+        # extra-only saves cannot move the anchor: kind is the category
+        # FK, and classifier/extra ride the association row itself —
+        # skipping kills the N-UPDATE storm on schema upserts that
+        # save() every association row (Opus review #6)
+        return
     _rederive_place_kind(instance.geo_place_id)
 
 

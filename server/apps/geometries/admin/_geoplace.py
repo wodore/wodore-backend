@@ -342,8 +342,9 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
 
     # domain derives on write from the category tree
-    # (geoplace-category-tree) — never hand-edited; kind_display is
-    # the derived anchor category (first by order/slug)
+    # (geoplace-category-tree) — never hand-edited; kind is the
+    # derived anchor category FK (first association by order/slug,
+    # maintained by the rederive receiver on association writes)
     readonly_fields = ("domain", "kind")
 
     list_display = (
