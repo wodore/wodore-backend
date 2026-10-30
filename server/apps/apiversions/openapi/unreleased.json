@@ -404,6 +404,34 @@
         "title": "BaseModel",
         "type": "object"
       },
+      "CategoryKindRefSchema": {
+        "description": "The anchoring kind category of a place (preview-light).\n\nThe main category (e.g. ``accommodation.hut``) as a small ref \u2014\none per place, first by ``(order, slug)``: the same anchor the\n``kind_slug`` super-root identifier derives from.",
+        "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Color"
+          },
+          "identifier": {
+            "title": "Identifier",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": ["identifier", "slug"],
+        "title": "CategoryKindRefSchema",
+        "type": "object"
+      },
       "CategoryListItemSchema": {
         "description": "Simple category item for list view.",
         "properties": {
@@ -1891,6 +1919,17 @@
             "title": "Importance",
             "type": "integer"
           },
+          "kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CategoryKindRefSchema"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "kind_slug": {
             "title": "Kind Slug",
             "type": "string"
@@ -2036,6 +2075,17 @@
             "title": "Importance",
             "type": "integer"
           },
+          "kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CategoryKindRefSchema"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "kind_slug": {
             "title": "Kind Slug",
             "type": "string"
@@ -2149,6 +2199,17 @@
           "importance": {
             "title": "Importance",
             "type": "integer"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CategoryKindRefSchema"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           },
           "kind_slug": {
             "title": "Kind Slug",

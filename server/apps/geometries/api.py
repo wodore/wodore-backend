@@ -36,7 +36,7 @@ from server.apps.translations import LanguageQuery
 
 from .converters import GeoPlaceSlugConverter  # noqa: F401  # registers <geoplace:slug>
 from .kinds import KIND_AMENITY
-from .models import GeoPlace
+from .models import GeoPlace, GeoPlaceCategory
 from .schemas import (
     GeoPlaceDetailSchema,
     GeoPlaceNearbySchema,
@@ -236,6 +236,40 @@ class OverlayCategoriesController(ApiController):
         return results
 
 
+def anchor_kinds_for(places: Any) -> dict[int, dict[str, Any]]:
+    """The anchoring kind category per place id (preview-light).
+
+    First association by ``(category order, category slug)`` — the
+    same anchor ``GeoPlace.kind_slug`` derives its super-root from —
+    as ``{identifier, slug, color}``. One indexed query for the whole
+    page; never a scan.
+    """
+    ids = [place.pk for place in places]
+    if not ids:
+        return {}
+    rows = (
+        GeoPlaceCategory.objects.filter(geo_place_id__in=ids)
+        .order_by("geo_place_id", "category__order", "category__slug")
+        .values(
+            "geo_place_id",
+            "category__identifier",
+            "category__slug",
+            "category__color",
+        )
+    )
+    anchors: dict[int, dict[str, Any]] = {}
+    for row in rows:
+        anchors.setdefault(
+            row["geo_place_id"],
+            {
+                "identifier": row["category__identifier"],
+                "slug": row["category__slug"],
+                "color": row["category__color"],
+            },
+        )
+    return anchors
+
+
 class GeoSearchController(ApiController):
     """Fuzzy place search across all language fields."""
 
@@ -327,6 +361,7 @@ class GeoSearchController(ApiController):
         wants_categories = field_selected(query, "places", "categories")
         wants_sources = field_selected(query, "places", "sources")
         wants_parties = field_selected(query, "places", "parties")
+        wants_kind = field_selected(query, "places", "kind")
         if wants_categories:
             queryset = prefetch_categories(queryset)
         if wants_sources:
@@ -449,6 +484,7 @@ class GeoSearchController(ApiController):
                 wants_categories,
                 wants_sources,
                 wants_parties,
+                wants_kind,
             )
 
         if requested_language != default_language:
@@ -602,24 +638,30 @@ class GeoSearchController(ApiController):
         wants_categories: bool,
         wants_sources: bool,
         wants_parties: bool,
+        wants_kind: bool = False,
     ) -> list[dict[str, Any]]:
         """Slice an ordered search queryset and build response dicts."""
         from django.conf import settings
 
         request = self.request
-        queryset = queryset[query.offset : query.offset + query.limit]
+        places = list(queryset[query.offset : query.offset + query.limit])
+        anchor_kinds = anchor_kinds_for(places) if wants_kind else {}
 
         results: list[dict[str, Any]] = []
         media_url = settings.MEDIA_URL
         if not media_url.startswith("http"):
             media_url = request.build_absolute_uri(media_url)
 
-        for place in queryset:
+        for place in places:
             result = base_result(place, media_url)
             # rank_score is a queryset annotation — django-stubs cannot
             # model .annotate() attributes.
             result["score"] = place.rank_score  # type: ignore  # annotated attr (rank_score)
 
+            if wants_kind:
+                kind_ref = anchor_kinds.get(place.pk)
+                if kind_ref is not None:
+                    result["kind"] = kind_ref
             if wants_categories:
                 result["categories"] = build_categories_data(place, request) or []
             if wants_sources:
@@ -678,6 +720,7 @@ class GeoNearbyController(ApiController):
         wants_categories = field_selected(query, "places", "categories")
         wants_sources = field_selected(query, "places", "sources")
         wants_parties = field_selected(query, "places", "parties")
+        wants_kind = field_selected(query, "places", "kind")
         if wants_categories:
             queryset = prefetch_categories(queryset)
         if wants_sources:
@@ -689,12 +732,15 @@ class GeoNearbyController(ApiController):
             "distance"
         )[query.offset : query.offset + query.limit]
 
+        places = list(queryset)
+        anchor_kinds = anchor_kinds_for(places) if wants_kind else {}
+
         results = []
         media_url = settings.MEDIA_URL
         if not media_url.startswith("http"):
             media_url = request.build_absolute_uri(media_url)
 
-        for place in queryset:
+        for place in places:
             # distance is a queryset annotation (Distance("location", point))
             # — django-stubs cannot model .annotate() attributes.
             place_distance = place.distance  # type: ignore  # annotated attr (distance)
@@ -704,6 +750,10 @@ class GeoNearbyController(ApiController):
 
             result = base_result(place, media_url)
             result["distance"] = round(distance_m, 2) if distance_m else None
+            if wants_kind:
+                kind_ref = anchor_kinds.get(place.pk)
+                if kind_ref is not None:
+                    result["kind"] = kind_ref
 
             result["categories"] = build_categories_data(place, request) or []
             build_sources(result, place, media_url)
@@ -718,6 +768,7 @@ class GeoNearbyController(ApiController):
                         "categories": "categories",
                         "sources": "sources",
                         "parties": "parties",
+                        "kind": "kind",
                     },
                 )
             )

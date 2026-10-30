@@ -109,6 +109,19 @@ class PartySchema(pydantic.BaseModel):
     symbol: dict[str, str] | None = None  # resolved color/mono URLs
 
 
+class CategoryKindRefSchema(pydantic.BaseModel):
+    """The anchoring kind category of a place (preview-light).
+
+    The main category (e.g. ``accommodation.hut``) as a small ref —
+    one per place, first by ``(order, slug)``: the same anchor the
+    ``kind_slug`` super-root identifier derives from.
+    """
+
+    identifier: str
+    slug: str
+    color: str | None = None
+
+
 class GeoPlaceBaseSchema(pydantic.BaseModel):
     """Base schema for GeoPlace with common fields."""
 
@@ -118,6 +131,7 @@ class GeoPlaceBaseSchema(pydantic.BaseModel):
     elevation: int | None
     importance: int
     kind_slug: str
+    kind: CategoryKindRefSchema | None = None
     location: LocationSchema
     categories: list[str] | list[CategoryPlaceTypeSchema] | None = None
     sources: (
