@@ -37,16 +37,33 @@ GEOGRAPHY_INDEX_REVERSE_SQL = (
 
 
 def set_trigram_threshold(_apps: Any, _schema_editor: Any) -> None:
-    from psycopg import sql
+    """Widen the ``%``-operator prefilter floor to 0.1 (new sessions).
 
-    from django.db import connection
+    Scope-degrading and never fatal: ``ALTER DATABASE`` needs database
+    ownership, which managed clusters (CNPG/RDS) usually deny the app
+    role ("permission denied to set parameter"); the ROLE-level default
+    — fully static SQL, value parameterized — achieves the same for
+    every future session of the role the app connects as (verified on
+    CNPG staging). If denied the migration CONTINUES with a warning:
+    the GUC only loosens the ``%`` prefilter (recall at API thresholds
+    below the server default degrades; nothing breaks, and the default
+    can be set cluster-side instead). Autocommit (``atomic = False``),
+    so a denied attempt poisons nothing.
+    """
+    from django.db.utils import ProgrammingError
 
-    db_name = connection.settings_dict["NAME"]
     with _schema_editor.connection.cursor() as cursor:
-        stmt = sql.SQL(
-            "ALTER DATABASE {} SET pg_trgm.similarity_threshold = %s"
-        ).format(sql.Identifier(db_name))
-        cursor.execute(stmt, ["0.1"])
+        try:
+            cursor.execute(
+                "ALTER ROLE CURRENT_USER SET pg_trgm.similarity_threshold = %s",
+                ["0.1"],
+            )
+        except ProgrammingError:
+            print(
+                "⚠ pg_trgm.similarity_threshold not set (role privilege "
+                "denied): the %-prefilter keeps the server default — set "
+                "it cluster-side for full recall at API thresholds below 0.3"
+            )
 
 
 class Migration(migrations.Migration):
