@@ -93,6 +93,10 @@ def build_categories_data(
 
     categories_data = []
     for category in place.categories.all():
+        # Sub-categories only (geoplace-kind-fk): the anchor kind row
+        # moved to the `kind` member — no duplication in both members.
+        if place.kind_id is not None and category.pk == place.kind_id:
+            continue
         association = associations.get(category.pk)
         category_data: dict[str, Any] = {
             "slug": category.slug,
@@ -112,6 +116,34 @@ def build_categories_data(
             category_data["symbol"] = symbol_data
         categories_data.append(category_data)
     return categories_data
+
+
+def kind_ref_for(category: Any, request: Any, assoc: Any = None) -> dict[str, Any]:
+    """Serialize a kind Category into the preview ref member.
+
+    ``{identifier, slug, color, name, symbol, classifier, extra}`` —
+    the localized name, the same symbol URL dict the categories
+    member carries, and the anchor association's classifier
+    (``mode.*``) + extra (geoplace-kind-fk): a preview that selects
+    only ``kind`` needs nothing else.
+    """
+    from server.apps.symbols.utils import resolve_symbol_urls
+
+    kind_ref: dict[str, Any] = {
+        "identifier": category.identifier,
+        "slug": category.slug,
+        "color": category.color,
+        "name": category.name_i18n,  # noqa: WPS308  # modeltranslation
+    }
+    symbol_data = resolve_symbol_urls(category, {"request": request})
+    if symbol_data:
+        kind_ref["symbol"] = symbol_data
+    if assoc is not None:
+        if assoc.classifier is not None:
+            kind_ref["classifier"] = assoc.classifier.identifier
+        if assoc.extra:
+            kind_ref["extra"] = assoc.extra
+    return kind_ref
 
 
 def build_sources(result: dict[str, Any], place: GeoPlace, media_url: str) -> None:
@@ -142,7 +174,7 @@ def build_sources(result: dict[str, Any], place: GeoPlace, media_url: str) -> No
         result["sources"] = sources
 
 
-def base_result(place: GeoPlace, media_url: str) -> dict[str, Any]:
+def base_result(place: GeoPlace, _media_url: str) -> dict[str, Any]:
     return {
         "name": place.name_i18n,  # noqa: WPS308  # modeltranslation
         "country_code": str(place.country_code) if place.country_code else None,

@@ -3917,14 +3917,19 @@ class Command(BaseCommand):
                         associations, ignore_conflicts=True
                     )
 
-                # Derive domain from the just-attached categories —
-                # bulk_create bypasses save(), the schema-path
-                # derivation never runs on this PBF branch (review P1)
-                from server.apps.geometries.kinds import place_domain
+                # Derive domain + kind from the just-attached
+                # categories — bulk_create bypasses save(), the
+                # schema-path derivation never runs on this PBF branch
+                # (review P1; geoplace-kind-fk D4)
+                from server.apps.geometries.kinds import (
+                    anchor_category,
+                    place_domain,
+                )
 
                 for place, categories in zip(created_geoplaces, categories_to_create):
+                    place.kind = anchor_category(categories)
                     place.domain = place_domain(categories)
-                GeoPlace.objects.bulk_update(created_geoplaces, ["domain"])
+                GeoPlace.objects.bulk_update(created_geoplaces, ["kind", "domain"])
 
                 # Now create details with proper references
                 for place, detail in zip(created_geoplaces, amenity_details_to_create):
