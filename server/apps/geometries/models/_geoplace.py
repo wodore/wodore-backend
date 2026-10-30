@@ -28,12 +28,12 @@ from server.core.utils import UpdateCreateStatus
 
 from ..converters import RESERVED_URL_SEGMENTS, SLUG_GRAMMAR_RE
 from ..kinds import (
-    KIND_ADMIN,
-    KIND_AMENITY,
-    KIND_NONE,
+    DOMAIN_ADMIN,
+    DOMAIN_AMENITY,
+    DOMAIN_NONE,
     contract_for_group,
     kind_root_category,
-    place_kind_slug,
+    place_domain,
 )
 
 if TYPE_CHECKING:
@@ -197,9 +197,9 @@ class GeoPlace(TimeStampedModel):
 
     # Kind slug (super-root identifier — map.amenity / map.admin /
     # map.natural — derived on write from the category tree)
-    kind_slug = models.CharField(
+    domain = models.CharField(
         max_length=100,
-        default=KIND_NONE,
+        default=DOMAIN_NONE,
         # indexed via Meta (geometries__kind_sl_c6f402_idx); db_index
         # would create a duplicate auto index (the rename from
         # detail_type carried the old auto pair along — dropped in
@@ -294,7 +294,7 @@ class GeoPlace(TimeStampedModel):
                 name="geoplaces_act_pub_cnt_idx",
             ),
             models.Index(fields=["-importance"]),
-            models.Index(fields=["kind_slug"]),
+            models.Index(fields=["domain"], name="geoplace_domain_idx"),
             # GIN index for trigram similarity search (critical for search performance)
             GinIndex(
                 fields=["name"],
@@ -1169,10 +1169,10 @@ class GeoPlace(TimeStampedModel):
         name_dict = schema.get_name_dict()
         description_dict = schema.get_description_dict()
 
-        # kind_slug is derived on write from the category tree
+        # domain is derived on write from the category tree
         # (geoplace-category-tree D3) — the input schema no longer
         # declares it.
-        derived_kind_slug = place_kind_slug([spec.category for spec in place_types])
+        derived_domain = place_domain([spec.category for spec in place_types])
 
         # Build place data
         place_data = {
@@ -1180,7 +1180,7 @@ class GeoPlace(TimeStampedModel):
             "main_language": detect_main_language(name_dict) or settings.LANGUAGE_CODE,
             "location": location,
             "country_code": schema.country_code,
-            "kind_slug": derived_kind_slug,
+            "domain": derived_domain,
             "elevation": schema.elevation,
             "importance": schema.importance,
             "review_status": schema.review_status.value,
@@ -1244,7 +1244,7 @@ class GeoPlace(TimeStampedModel):
             cls._write_seasonality(place, schema.seasonality, place_types)
 
         # Create detail model based on type (flattened structure)
-        if derived_kind_slug == KIND_AMENITY and schema.operating_status:
+        if derived_domain == DOMAIN_AMENITY and schema.operating_status:
             amenity_kwargs = {
                 "geo_place": place,
                 "operating_status": schema.operating_status.value,
@@ -1260,7 +1260,7 @@ class GeoPlace(TimeStampedModel):
 
             AmenityDetail.objects.create(**amenity_kwargs)
 
-        elif derived_kind_slug == KIND_ADMIN and schema.admin_level:
+        elif derived_domain == DOMAIN_ADMIN and schema.admin_level:
             AdminDetail.objects.create(
                 geo_place=place,
                 admin_level=schema.admin_level,
@@ -1423,12 +1423,12 @@ class GeoPlace(TimeStampedModel):
                     assoc.save(update_fields=["extra", "modified"])
                     categories_updated = True
 
-        # kind_slug derived on write from the category tree
+        # domain derived on write from the category tree
         # (geoplace-category-tree D3).
-        derived_kind_slug = place_kind_slug([spec.category for spec in place_types])
-        if "kind_slug" not in protected and place.kind_slug != derived_kind_slug:
-            place.kind_slug = derived_kind_slug
-            update_fields.append("kind_slug")
+        derived_domain = place_domain([spec.category for spec in place_types])
+        if "domain" not in protected and place.domain != derived_domain:
+            place.domain = derived_domain
+            update_fields.append("domain")
             place_updated = True
 
         # Typed operating facts + seasonality (task 2.3) — own
@@ -1533,7 +1533,7 @@ class GeoPlace(TimeStampedModel):
 
         # Update or create detail model (flattened structure)
         detail_updated = False
-        if derived_kind_slug == KIND_AMENITY and schema.operating_status:
+        if derived_domain == DOMAIN_AMENITY and schema.operating_status:
             # Build amenity detail data from flattened schema
             try:
                 amenity_detail = place.amenity_detail  # type: ignore  # dynamic attr: plugin-less inference gap
@@ -1571,7 +1571,7 @@ class GeoPlace(TimeStampedModel):
             elif update_fields:
                 amenity_detail.save(update_fields=update_fields)
 
-        elif derived_kind_slug == KIND_ADMIN and schema.admin_level:
+        elif derived_domain == DOMAIN_ADMIN and schema.admin_level:
             admin_detail, created = AdminDetail.objects.update_or_create(
                 geo_place=place,
                 defaults={

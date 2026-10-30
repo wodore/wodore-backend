@@ -238,6 +238,22 @@ REVALIDATE_EDGE_CACHE_CONTROL = (
 #: response as permanently fresh without ever revalidating it.
 IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable, stale-if-error=604800"
 
+#: ``Cache-Control`` for the place search (autocomplete,
+#: geoplace-read-performance): browsers never reuse a typed URL
+#: (``max-age=0`` — typing must always see fresh results), while the
+#: Bunny edge may serve each query-string URL for an hour and keep it
+#: freshening-stale for a week — far clients (US/NZ) hit their
+#: regional PoP instead of the European origin. Keystroke-unique URLs
+#: never collide; popular full words repeat for everyone.
+#: ``stale-if-error`` keeps search alive through origin incidents.
+#: NOTE: clients pinning an old API version must pin via the
+#: ``api_version`` query param (cache-key distinct) — header-pinned
+#: requests could otherwise receive another version's cached body.
+SEARCH_CACHE_CONTROL = (
+    "public, max-age=0, s-maxage=3600, "
+    "stale-while-revalidate=604800, stale-if-error=604800"
+)
+
 
 def revalidate_headers() -> dict[str, NewHeader]:
     """``Cache-Control`` header spec for ``@modify(headers=...)``."""

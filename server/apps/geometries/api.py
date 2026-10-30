@@ -3,13 +3,14 @@
 from typing import Any
 
 import pydantic
-from dmr import Path, Query, modify
+from dmr import NewHeader, Path, Query, modify
 from dmr.routing import path
 from pydantic import Field
 
 from django.views.decorators.cache import cache_page
 
 from server.apps.api.controller import (
+    SEARCH_CACHE_CONTROL,
     ApiController,
     APIError,
     cache_headers,
@@ -35,7 +36,7 @@ from server.apps.organizations.schema import OrganizationSourceIdSlugSchema
 from server.apps.translations import LanguageQuery
 
 from .converters import GeoPlaceSlugConverter  # noqa: F401  # registers <geoplace:slug>
-from .kinds import KIND_AMENITY
+from .kinds import DOMAIN_AMENITY
 from .models import GeoPlace, GeoPlaceCategory
 from .schemas import (
     GeoPlaceDetailSchema,
@@ -82,6 +83,20 @@ class _GeoSearchQuery(LanguageQuery, GeoPlaceFields):
     categories: list[str] | None = Field(
         None,
         description=("Filter by parent category slugs (e.g., 'terrain', 'transport')"),
+    )
+    domain: list[str] | None = Field(
+        None,
+        description=(
+            "Filter by super-root domain: 'amenity', 'admin' or 'natural' "
+            "(the place's domain member; a 'map.' prefix is tolerated)"
+        ),
+    )
+    kind: list[str] | None = Field(
+        None,
+        description=(
+            "Filter by kind category — identifiers ('accommodation.hut') "
+            "or slugs ('hut')"
+        ),
     )
 
 
@@ -240,7 +255,7 @@ def anchor_kinds_for(places: Any) -> dict[int, dict[str, Any]]:
     """The anchoring kind category per place id (preview-light).
 
     First association by ``(category order, category slug)`` — the
-    same anchor ``GeoPlace.kind_slug`` derives its super-root from —
+    same anchor ``GeoPlace.domain`` derives its super-root from —
     as ``{identifier, slug, color}``. One indexed query for the whole
     page; never a scan.
     """
@@ -275,7 +290,7 @@ class GeoSearchController(ApiController):
 
     @modify(
         operation_id="search_geoplaces",
-        headers=cache_headers(60),
+        headers={"Cache-Control": NewHeader(value=SEARCH_CACHE_CONTROL)},
     )
     def get(self, parsed_query: Query[GeoSearchQuery]) -> list[GeoPlaceSearchSchema]:
         """Search places.
@@ -336,7 +351,7 @@ class GeoSearchController(ApiController):
             "elevation",
             "importance",
             "country_code",
-            "kind_slug",
+            "domain",
         )
 
         if query.min_importance > 0:
@@ -347,6 +362,16 @@ class GeoSearchController(ApiController):
             )
 
         queryset = apply_type_filters(queryset, query.types, query.categories)
+
+        if query.domain:
+            queryset = queryset.filter(
+                domain__in=[d.removeprefix("map.").lower() for d in query.domain]
+            )
+        if query.kind:
+            queryset = queryset.filter(
+                Q(categories__identifier__in=query.kind)
+                | Q(categories__slug__in=query.kind)
+            ).distinct()
 
         if query.bbox:
             queryset = queryset.filter(location__intersects=bbox_polygon(query.bbox))
@@ -704,13 +729,26 @@ class GeoNearbyController(ApiController):
             "elevation",
             "importance",
             "country_code",
-            "kind_slug",
+            "domain",
         )
 
         if query.min_importance > 0:
             queryset = queryset.filter(importance__gte=query.min_importance)
 
         queryset = apply_type_filters(queryset, query.types, query.categories)
+
+        if query.domain or query.kind:
+            from django.db.models import Q
+
+            if query.domain:
+                queryset = queryset.filter(
+                    domain__in=[d.removeprefix("map.").lower() for d in query.domain]
+                )
+            if query.kind:
+                queryset = queryset.filter(
+                    Q(categories__identifier__in=query.kind)
+                    | Q(categories__slug__in=query.kind)
+                ).distinct()
 
         # Skip the DB cost when the field isn't in the selection
         # Readers disposition (OpenSpec §4.3, benchmarked N=50 via
@@ -885,7 +923,7 @@ class PlaceController(ApiController):
         with override(query.lang):
             result = base_result(place, media_url)
             result["description"] = place.description_i18n  # noqa: WPS308
-            result["kind_slug"] = place.kind_slug
+            result["domain"] = place.domain
             result["review_status"] = place.review_status
 
             # Always seed the block member so it stays a valid selection
@@ -893,7 +931,7 @@ class PlaceController(ApiController):
             # missing", never a 400 (see _narrow_place_detail).
             result["amenity"] = (
                 build_amenity_detail(place)
-                if wants_amenity and place.kind_slug == KIND_AMENITY
+                if wants_amenity and place.domain == DOMAIN_AMENITY
                 else None
             )
 

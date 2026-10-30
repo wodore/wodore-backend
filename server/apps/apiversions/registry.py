@@ -135,20 +135,16 @@ def _strip_static_map_fallback(data: Any) -> Any:
     return data
 
 
-def _downgrade_kind_slug(data: Any) -> Any:
+def _downgrade_domain(data: Any) -> Any:
     """Downgrade for the place detail route (geoplace-category-tree):
-    ``kind_slug`` (the category-tree super-root identifier) renames
-    back to ``detail_type`` with the legacy enum values — transport
-    is indistinguishable from amenity post-tree (accepted loss, same
-    as the migration's reverse path)."""
+    ``domain`` (the category-tree super-root slug — amenity / admin /
+    natural / none) renames back to ``detail_type``; the plain values
+    equal the legacy enum, so this is a pure key rename. Transport is
+    indistinguishable from amenity post-tree (accepted loss, same as
+    the migration's reverse path)."""
 
-    if isinstance(data, dict) and "kind_slug" in data:
-        legacy = {
-            "map.amenity": "amenity",
-            "map.admin": "admin",
-            "map.natural": "natural",
-        }
-        data["detail_type"] = legacy.get(data.pop("kind_slug"), "none")
+    if isinstance(data, dict) and "domain" in data:
+        data["detail_type"] = data.pop("domain")
     return data
 
 
@@ -225,11 +221,11 @@ REGISTRY: list[VersionChange] = [
             "block's phones member is REMOVED (phones are served only "
             "as uri.phone links) — zero consumers, sunset window 0, "
             "same doctrine. ALSO: the place detail response's "
-            "detail_type member renames to kind_slug — the category-tree "
-            "super-root identifier (map.amenity / map.admin / "
-            "map.natural / none) replaces the flat enum "
-            "(geoplace-category-tree); pinned clients receive the legacy "
-            "detail_type member with legacy values via downgrade. "
+            "detail_type member renames to domain — the category-tree "
+            "super-root slug (amenity / admin / natural / none) "
+            "replaces the flat enum (geoplace-category-tree); pinned "
+            "clients receive the legacy detail_type member with the "
+            "identical legacy values via downgrade. "
             "ALSO: place search pre-filters candidates through the "
             "trigram indexes before similarity ranking (read-performance "
             "follow-up) — queries below the default threshold of 0.2 may "
@@ -240,7 +236,7 @@ REGISTRY: list[VersionChange] = [
         responses={
             "images_for_hut": _strip_static_map_fallback,
             "images_for_place": _strip_static_map_fallback,
-            "get_place": _downgrade_kind_slug,
+            "get_place": _downgrade_domain,
         },
     ),
 ]

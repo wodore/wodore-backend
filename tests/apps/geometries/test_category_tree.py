@@ -2,7 +2,7 @@
 
 Covers the migration-seeded tree shape (map → super-roots → contract
 groups → kinds), the CategoryKindContract runtime (classifier M2M,
-operations/seasonality gates), the depth-guarded kind_slug derivation,
+operations/seasonality gates), the depth-guarded domain derivation,
 identifier stability and the identifier-first resolution fallbacks.
 """
 
@@ -13,10 +13,10 @@ from django.core.exceptions import ValidationError
 
 from server.apps.categories.models import Category
 from server.apps.geometries.kinds import (
-    KIND_ADMIN,
-    KIND_AMENITY,
-    KIND_NONE,
-    place_kind_slug,
+    DOMAIN_ADMIN,
+    DOMAIN_AMENITY,
+    DOMAIN_NONE,
+    place_domain,
 )
 from server.apps.geometries.models import GeoPlace, GeoPlaceCategory
 from server.apps.geometries.models._kind_contract import CategoryKindContract
@@ -159,7 +159,7 @@ class TestKindSlugDerivation:
         hut, _ = Category.objects.get_or_create(
             slug="derive-hut", parent=_accommodation(), defaults={"name": "D"}
         )
-        assert place_kind_slug([hut]) == KIND_AMENITY
+        assert place_domain([hut]) == DOMAIN_AMENITY
 
     def test_admin_group_derives_map_admin(self):
         admin_super = Category.objects.get(slug="admin", parent__slug="map")
@@ -167,22 +167,22 @@ class TestKindSlugDerivation:
         municipality, _ = Category.objects.get_or_create(
             slug="municipality", parent=administrative, defaults={"name": "M"}
         )
-        assert place_kind_slug([municipality]) == KIND_ADMIN
+        assert place_domain([municipality]) == DOMAIN_ADMIN
 
     def test_contract_group_anchor_stays_none(self):
         # depth guard: a contract-group category walks to map, not a
         # super-root — never a partial path
-        assert place_kind_slug([_accommodation()]) == KIND_NONE
+        assert place_domain([_accommodation()]) == DOMAIN_NONE
 
     def test_super_root_anchor_stays_none(self):
-        assert place_kind_slug([_amenity_super()]) == KIND_NONE
+        assert place_domain([_amenity_super()]) == DOMAIN_NONE
 
     def test_vocabulary_anchor_stays_none(self):
         mode_std = Category.objects.get(identifier="mode.standard")
-        assert place_kind_slug([mode_std]) == KIND_NONE
+        assert place_domain([mode_std]) == DOMAIN_NONE
 
     def test_no_categories_is_none(self):
-        assert place_kind_slug([]) == KIND_NONE
+        assert place_domain([]) == DOMAIN_NONE
 
     def test_first_valid_anchor_wins(self):
         # an invalid anchor (vocabulary) sorts before a valid one only
@@ -191,7 +191,7 @@ class TestKindSlugDerivation:
         hut, _ = Category.objects.get_or_create(
             slug="multi-hut", parent=_accommodation(), defaults={"name": "X"}
         )
-        assert place_kind_slug([mode_std, hut]) == KIND_AMENITY
+        assert place_domain([mode_std, hut]) == DOMAIN_AMENITY
 
 
 class TestContractCache:

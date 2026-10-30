@@ -152,7 +152,7 @@ def base_result(place: GeoPlace, media_url: str) -> dict[str, Any]:
         # Super-root identifier (map.amenity / map.admin / map.natural /
         # none) — the pin-tier discriminator map previews key on
         # (read-performance follow-up: preview selects exactly this)
-        "kind_slug": place.kind_slug,
+        "domain": place.domain,
         "location": {
             "lat": place.location.y if place.location else None,
             "lon": place.location.x if place.location else None,

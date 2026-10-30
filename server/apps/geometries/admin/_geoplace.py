@@ -337,9 +337,9 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
     list_filter_submit = True  # Add submit button for filters
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
 
-    # kind_slug derives on write from the category tree
+    # domain derives on write from the category tree
     # (geoplace-category-tree) — never hand-edited
-    readonly_fields = ("kind_slug",)
+    readonly_fields = ("domain",)
 
     list_display = (
         "category_icon",

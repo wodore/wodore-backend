@@ -405,7 +405,7 @@
         "type": "object"
       },
       "CategoryKindRefSchema": {
-        "description": "The anchoring kind category of a place (preview-light).\n\nThe main category (e.g. ``accommodation.hut``) as a small ref \u2014\none per place, first by ``(order, slug)``: the same anchor the\n``kind_slug`` super-root identifier derives from.",
+        "description": "The anchoring kind category of a place (preview-light).\n\nThe main category (e.g. ``accommodation.hut``) as a small ref \u2014\none per place, first by ``(order, slug)``: the same anchor the\n``domain`` super-root identifier derives from.",
         "properties": {
           "color": {
             "anyOf": [
@@ -1845,7 +1845,7 @@
         "type": "object"
       },
       "GeoPlaceDetailSchema": {
-        "description": "Unified place detail (place-detail-endpoint).\n\nRequired members: ``slug``, ``name``, ``kind_slug`` (the type\ndiscriminator clients switch on), ``location``, ``importance``.\nEverything else is an optional member under the ``fields[places]``\nsparse-fieldset selection; detail blocks appear as sibling members\nnamed exactly after their super-root (``amenity`` now,\n``admin``/``natural`` later) and only for places of that type\nwith a detail row.",
+        "description": "Unified place detail (place-detail-endpoint).\n\nRequired members: ``slug``, ``name``, ``domain`` (the type\ndiscriminator clients switch on), ``location``, ``importance``.\nEverything else is an optional member under the ``fields[places]``\nsparse-fieldset selection; detail blocks appear as sibling members\nnamed exactly after their super-root (``amenity`` now,\n``admin``/``natural`` later) and only for places of that type\nwith a detail row.",
         "properties": {
           "amenity": {
             "anyOf": [
@@ -1903,6 +1903,10 @@
             "default": null,
             "title": "Description"
           },
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
           "elevation": {
             "anyOf": [
               {
@@ -1929,10 +1933,6 @@
               }
             ],
             "default": null
-          },
-          "kind_slug": {
-            "title": "Kind Slug",
-            "type": "string"
           },
           "links": {
             "anyOf": [
@@ -2009,7 +2009,7 @@
             "title": "Sources"
           }
         },
-        "required": ["slug", "name", "importance", "kind_slug", "location"],
+        "required": ["slug", "name", "importance", "domain", "location"],
         "title": "GeoPlaceDetailSchema",
         "type": "object"
       },
@@ -2060,6 +2060,10 @@
             "default": null,
             "title": "Distance"
           },
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
           "elevation": {
             "anyOf": [
               {
@@ -2085,10 +2089,6 @@
               }
             ],
             "default": null
-          },
-          "kind_slug": {
-            "title": "Kind Slug",
-            "type": "string"
           },
           "location": {
             "$ref": "#/components/schemas/LocationSchema"
@@ -2144,7 +2144,7 @@
           "country_code",
           "elevation",
           "importance",
-          "kind_slug",
+          "domain",
           "location"
         ],
         "title": "GeoPlaceNearbySchema",
@@ -2185,6 +2185,10 @@
             ],
             "title": "Country Code"
           },
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
           "elevation": {
             "anyOf": [
               {
@@ -2210,10 +2214,6 @@
               }
             ],
             "default": null
-          },
-          "kind_slug": {
-            "title": "Kind Slug",
-            "type": "string"
           },
           "location": {
             "$ref": "#/components/schemas/LocationSchema"
@@ -2281,7 +2281,7 @@
           "country_code",
           "elevation",
           "importance",
-          "kind_slug",
+          "domain",
           "location"
         ],
         "title": "GeoPlaceSearchSchema",
@@ -7343,6 +7343,48 @@
             }
           },
           {
+            "description": "Filter by super-root domain: 'amenity', 'admin' or 'natural' (the place's domain member; a 'map.' prefix is tolerated)",
+            "in": "query",
+            "name": "domain",
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Filter by super-root domain: 'amenity', 'admin' or 'natural' (the place's domain member; a 'map.' prefix is tolerated)",
+              "title": "Domain"
+            }
+          },
+          {
+            "description": "Filter by kind category \u2014 identifiers ('accommodation.hut') or slugs ('hut')",
+            "in": "query",
+            "name": "kind",
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Filter by kind category \u2014 identifiers ('accommodation.hut') or slugs ('hut')",
+              "title": "Kind"
+            }
+          },
+          {
             "description": "Latitude coordinate",
             "in": "query",
             "name": "lat",
@@ -7621,6 +7663,48 @@
               "default": null,
               "description": "Filter by parent category slugs (e.g., 'terrain', 'transport')",
               "title": "Categories"
+            }
+          },
+          {
+            "description": "Filter by super-root domain: 'amenity', 'admin' or 'natural' (the place's domain member; a 'map.' prefix is tolerated)",
+            "in": "query",
+            "name": "domain",
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Filter by super-root domain: 'amenity', 'admin' or 'natural' (the place's domain member; a 'map.' prefix is tolerated)",
+              "title": "Domain"
+            }
+          },
+          {
+            "description": "Filter by kind category \u2014 identifiers ('accommodation.hut') or slugs ('hut')",
+            "in": "query",
+            "name": "kind",
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Filter by kind category \u2014 identifiers ('accommodation.hut') or slugs ('hut')",
+              "title": "Kind"
             }
           },
           {

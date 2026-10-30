@@ -114,7 +114,7 @@ class CategoryKindRefSchema(pydantic.BaseModel):
 
     The main category (e.g. ``accommodation.hut``) as a small ref —
     one per place, first by ``(order, slug)``: the same anchor the
-    ``kind_slug`` super-root identifier derives from.
+    ``domain`` super-root identifier derives from.
     """
 
     identifier: str
@@ -130,7 +130,7 @@ class GeoPlaceBaseSchema(pydantic.BaseModel):
     country_code: str | None
     elevation: int | None
     importance: int
-    kind_slug: str
+    domain: str
     kind: CategoryKindRefSchema | None = None
     location: LocationSchema
     categories: list[str] | list[CategoryPlaceTypeSchema] | None = None
@@ -188,7 +188,7 @@ class LinkSchema(pydantic.BaseModel):
 class GeoPlaceDetailSchema(GeoPlaceBaseSchema):
     """Unified place detail (place-detail-endpoint).
 
-    Required members: ``slug``, ``name``, ``kind_slug`` (the type
+    Required members: ``slug``, ``name``, ``domain`` (the type
     discriminator clients switch on), ``location``, ``importance``.
     Everything else is an optional member under the ``fields[places]``
     sparse-fieldset selection; detail blocks appear as sibling members
@@ -199,7 +199,7 @@ class GeoPlaceDetailSchema(GeoPlaceBaseSchema):
 
     description: str | None = None
     review_status: str | None = None
-    # kind_slug inherited from GeoPlaceBaseSchema (always present)
+    # domain inherited from GeoPlaceBaseSchema (always present)
     amenity: AmenityDetailSchema | None = None
     links: list[LinkSchema] | None = None
     # Required-but-nullable on the list schemas; optional members on

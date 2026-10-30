@@ -25,8 +25,7 @@ def _index_sql(lang: str) -> str:
 
 def _drop_sql(lang: str) -> str:
     return (
-        "DROP INDEX CONCURRENTLY IF EXISTS "
-        f"geoplaces_i18n_name_{lang}_lower_prefix_idx"
+        f"DROP INDEX CONCURRENTLY IF EXISTS geoplaces_i18n_name_{lang}_lower_prefix_idx"
     )
 
 
