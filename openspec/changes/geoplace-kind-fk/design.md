@@ -35,10 +35,22 @@ place's category FK, `categories` as sub-categories.
    anchor in `categories`; the frontend typeahead (PR #376) already
    renders `kind` standalone.
 
-4. **Derivation unchanged.** First association by `(order, slug)` —
-   the exact rule `__str__`, the tiles JSON ordering, and `domain`
-   already use. `anchor_category()` in `kinds.py` is the single
-   helper; write paths set `kind` + `domain` together.
+4. **Derivation — classifier-aware anchor.** First association by
+   `(classifier priority, order, slug)`: a `mode.standard`
+   association outranks every other association regardless of
+   order; ties fall through to the historical `(order, slug)`
+   (anchoring fix, PO decision — the D4 fallback
+   `accommodation.unknown` at order 0 must not anchor a hut's real
+   open type). `anchor_category()` in `kinds.py` is the single
+   helper (accepts bare categories or association-like items);
+   write paths set `kind` + `domain` together. Migration 0074
+   re-anchors rows written under the order-only rule (places with a
+   mode.standard association — the only ones whose anchor can
+   change); reverse restores the order-only rule on the same subset.
+   Also: `anchor_kinds_for`/detail guard with `kind_id is not None`
+   — legacy pk-0 anchors (`accommodation.unknown`, HutType id 0
+   preserved by categories/0002) are falsy and silently dropped the
+   kind member.
 
 5. **`on_delete=SET_NULL`.** Protected vocabulary largely prevents
    kind-category deletion; if a non-protected kind category dies,

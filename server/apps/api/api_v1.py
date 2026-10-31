@@ -30,6 +30,7 @@ API_DESCRIPTION = (
 # Import order mirrors the URL assembly below (most specific first).
 from server.apps.basemaps import api as map_api
 from server.apps.categories import api as categories_api
+from server.apps.external_links import api as external_links_api
 from server.apps.feedbacks import api as feedbacks_api
 from server.apps.geometries import api as geo_api
 from server.apps.geometries import api_images as geo_images_api
@@ -61,6 +62,11 @@ def build_router() -> Router:
     router.include(Router("symbols/", symbols_api.paths, tags=["symbols"]))
     router.include(Router("icons/", icons_api.paths, tags=["icons"]))
     router.include(Router("feedback/", feedbacks_api.paths, tags=["feedback"]))
+    # Open-in action registry (OpenSpec external-actions): public list
+    # + render under links/, the user-scoped twin under the /my/
+    # namespace (MyApiController — auth + private + never CDN).
+    router.include(Router("links/", external_links_api.paths, tags=["links"]))
+    router.include(Router("my/", external_links_api.my_paths, tags=["my"]))
     # Root (version, sitemaps) last — least specific.
     router.include(Router("", utils_api.paths, tags=["utils"]))
     return router

@@ -359,8 +359,14 @@ class GeoPlace(TimeStampedModel):
         if not self.pk:
             return self.name_i18n
 
-        first_category = self.categories.order_by("order", "slug").first()
-        category_slug = first_category.slug if first_category else "uncategorized"
+        # Display follows the stored kind FK (anchor rule —
+        # classifier priority, then ``(order, slug)``); fall back to
+        # the historical first-category read when no kind is stored.
+        if self.kind_id is not None:
+            category_slug = self.kind.slug if self.kind else "uncategorized"
+        else:
+            first_category = self.categories.order_by("order", "slug").first()
+            category_slug = first_category.slug if first_category else "uncategorized"
         return f"{self.name_i18n} ({category_slug})"
 
     def clean_slug(self) -> None:

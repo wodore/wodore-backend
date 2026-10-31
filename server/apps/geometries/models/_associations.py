@@ -484,28 +484,30 @@ def _rederive_place_kind(geo_place_id: int) -> None:
     The import/schema paths derive both inline (bulk paths skip
     signals anyway); this receiver covers everything else — admin
     inline edits, ORM scripts, shell — so the FK always equals the
-    first association by ``(order, slug)`` after any write
-    (geoplace-kind-fk spec invariant).
+    first association by anchor order (classifier priority, then
+    ``(order, slug)``) after any write (geoplace-kind-fk spec
+    invariant).
 
     Fail-safe by design: historical-migration states (MigrationExecutor
     tests) fire this with schemas where ``kind`` may not exist — a
     signal must never break the triggering write.
     """
-    from ..kinds import anchor_category, place_domain
+    from ..kinds import order_by_anchor, place_domain
     from ._geoplace import GeoPlace
 
     try:
-        categories = list(
-            Category.objects.filter(geo_place_associations__geo_place_id=geo_place_id)
+        associations = list(
+            GeoPlaceCategory.objects.filter(geo_place_id=geo_place_id)
+            .select_related("category", "classifier")
+            .exclude(category_id__isnull=True)
         )
-        anchor = anchor_category(categories)
         # kind_id via atomic subquery — a Python-read anchor can be
         # deleted before the UPDATE lands (historical-migration
         # collectors); the deferred FK violation then surfaces at
         # teardown's SET CONSTRAINTS ALL IMMEDIATE, uncatchable here.
         # The subquery reads current rows at UPDATE time: kind_id is
         # NULL or an existing category, never a dangling ref.
-        first_assoc = (
+        first_assoc = order_by_anchor(
             GeoPlaceCategory.objects.filter(
                 geo_place=OuterRef("pk"),
                 # only associations whose category still exists — the
@@ -513,14 +515,11 @@ def _rederive_place_kind(geo_place_id: int) -> None:
                 # their association rows, leaving transient dangles
                 category_id__in=Category.objects.values("id"),
             )
-            .order_by("category__order", "category__slug")
-            .values("category_id")[:1]
-        )
+        ).values("category_id")[:1]
         GeoPlace.objects.filter(pk=geo_place_id).update(
             kind_id=Subquery(first_assoc),
-            domain=place_domain(categories),
+            domain=place_domain(associations),
         )
-        del anchor  # read for domain only; kind derives atomically above
     except Exception:  # signal guard — see docstring
         # never break the triggering write, but never hide a real
         # derivation bug either — the receiver is the ONLY sync path

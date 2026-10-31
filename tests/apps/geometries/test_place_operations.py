@@ -269,11 +269,19 @@ class TestWodoreSeasonalityImport:
         }
         assert ("hut", "mode.standard") in associations
         assert ("unknown", "mode.reduced") in associations  # resolved
+        # mode.standard defines the kind (anchoring fix): the open
+        # type anchors although accommodation.unknown carries order 0
+        assert place.kind_id == hut_category.pk
         operations = {
             o.mode.identifier: o.capacity
             for o in place.operations.all()  # type: ignore  # reverse FK: plugin-less inference gap
         }
         assert operations == {"mode.standard": None, "mode.reduced": None}
+
+        # (Reduced-only anchoring — no mode.standard association — is
+        # impossible for wodore huts: hut_type_open is NOT NULL, every
+        # hut carries a standard association. Covered at ORM level in
+        # test_kind_fk.py::TestClassifierAwareAnchor.)
 
     def test_all_standard_months_no_reduced(self, hut_category: Category):
         """Months all 100 = always standard — no reduced mode appears."""

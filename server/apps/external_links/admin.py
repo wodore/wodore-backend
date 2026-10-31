@@ -15,7 +15,7 @@ from unfold.decorators import display
 from server.apps.manager.admin import ModelAdmin
 from server.apps.translations.forms import required_i18n_fields_form_factory
 
-from .models import ExternalLink, ReviewStatus
+from .models import ExternalAction, ExternalLink, ReviewStatus
 
 
 @admin.register(ExternalLink)
@@ -216,3 +216,41 @@ class ExternalLinkAdmin(ModelAdmin):
                 "failed": failed,
             },
         )
+
+
+@admin.register(ExternalAction)
+class ExternalActionAdmin(ModelAdmin):
+    """Open-in action registry admin (OpenSpec ``external-actions``).
+
+    The scoping axes (kinds/countries/user) filter; the backing link
+    (template URL + template vars) is edited inline-ish via the link
+    FK link. Saves purge the ``api:external_links`` CDN tag via the
+    ApiCdnCacheMiddleware signal (task 3.1).
+    """
+
+    list_display = (
+        "link_label",
+        "scope",
+        "owner",
+        "order",
+        "is_active",
+    )
+    list_filter = ("is_active", "user", "kinds")
+    search_fields = ("link__label", "link__url", "link__identifier")
+    autocomplete_fields = ("link",)
+    filter_horizontal = ("kinds",)
+    ordering = ("order", "pk")
+
+    @display(description=_("Action"))
+    def link_label(self, obj: ExternalAction) -> str:
+        return obj.link.label_i18n
+
+    @display(description=_("Scope"))
+    def scope(self, obj: ExternalAction) -> str:
+        countries = ", ".join(obj.countries) if obj.countries else "global"
+        kinds = ", ".join(k.identifier for k in obj.kinds.all()) or "any point"
+        return f"{kinds} · {countries}"
+
+    @display(description=_("Owner"))
+    def owner(self, obj: ExternalAction) -> str:
+        return str(obj.user) if obj.user else "public"
