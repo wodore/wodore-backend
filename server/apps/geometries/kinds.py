@@ -1,7 +1,9 @@
 """Place kinds — seed registry + DB-contract runtime.
 
 OpenSpec ``geoplace-category-tree``: a place's kind is its anchoring
-category (first category by ``(order, slug)``); the **contract group**
+category — first association by ``(classifier priority, order,
+slug)`` (``mode.standard`` outranks everything, PO decision on the
+geoplace-kind-fk fix); the **contract group**
 is that category's parent (``accommodation`` for a hut); the
 super-roots (``amenity`` / ``admin`` / ``natural``) sit above the
 contract groups under the ``map`` namespace root. The stored
@@ -100,34 +102,79 @@ DOMAIN_VOCABULARY_ROOTS: frozenset[str] = frozenset(
 )
 
 
-def anchor_category(categories: Any) -> Any:
-    """The anchoring kind category — first by ``(order, slug)``.
+#: Anchor classifier priority — lower rank wins the kind anchor
+#: (PO decision: ``mode.standard`` defines the kind). Classifiers
+#: not listed (``mode.reduced``, NULL, ``role.*``) rank neutrally;
+#: ties fall through to ``(order, slug)`` as before.
+ANCHOR_CLASSIFIER_PRIORITY: dict[str, int] = {"mode.standard": 0}
 
-    The exact rule ``GeoPlace.__str__`` and the tiles JSON ordering
-    use; ``GeoPlace.kind`` stores it (geoplace-kind-fk),
+#: Rank for associations without an anchor-priority classifier.
+ANCHOR_NEUTRAL_RANK: int = 1
+
+
+def _anchor_category_of(item: Any) -> Any:
+    """The kind category an item stands for.
+
+    Bare categories stand for themselves; association-like items
+    (``GeoPlaceCategory``, ``PlaceTypeSpec``) carry ``.category``.
+    """
+    return getattr(item, "category", item)
+
+
+def _anchor_sort_key(item: Any) -> tuple[int, int, str]:
+    """Sort key implementing the anchor rule in one place.
+
+    ``(classifier priority, order, slug)`` — every derivation helper
+    (``anchor_category``, ``kind_root_category``, ``place_domain``)
+    and the ORM ordering (``order_by_anchor``) share it.
+    """
+    classifier = getattr(item, "classifier", None)
+    category = _anchor_category_of(item)
+    rank = (
+        ANCHOR_CLASSIFIER_PRIORITY.get(classifier.identifier, ANCHOR_NEUTRAL_RANK)
+        if classifier is not None
+        else ANCHOR_NEUTRAL_RANK
+    )
+    return (rank, category.order, category.slug)
+
+
+def anchor_category(items: Any) -> Any:
+    """The anchoring kind — first by ``(priority, order, slug)``.
+
+    Accepts bare categories or association-like items carrying
+    ``.category`` / ``.classifier`` (``GeoPlaceCategory`` rows,
+    ``PlaceTypeSpec`` entries). A ``mode.standard`` association outranks
+    every other association regardless of order — the D4 fallback
+    ``accommodation.unknown`` (order 0) must not anchor over a hut's
+    real open type. Without a prioritized classifier the rule is the
+    historical ``(order, slug)`` (geonames/OSM associations carry no
+    classifier). The exact rule ``GeoPlace.__str__`` and the rederive
+    receiver use; ``GeoPlace.kind`` stores it (geoplace-kind-fk),
     ``kind_root_category`` resolves its contract group.
     """
     ordered = sorted(
-        (c for c in categories if c is not None),
-        key=lambda c: (c.order, c.slug),
+        (item for item in items if item is not None),
+        key=_anchor_sort_key,
     )
-    return ordered[0] if ordered else None
+    return _anchor_category_of(ordered[0]) if ordered else None
 
 
-def kind_root_category(categories: Any) -> Any:
+def kind_root_category(items: Any) -> Any:
     """The contract-group category anchoring a place's kind.
 
-    The parent of the first category by ``(order, slug)`` —
-    deterministic, the rule ``GeoPlace.__str__`` uses. A root category
-    itself anchors directly (vocabulary edge — no contract group).
+    The parent of the anchoring category (see ``anchor_category`` —
+    classifier priority first, then ``(order, slug)``) —
+    deterministic, the rule ``GeoPlace.__str__`` uses. A root
+    category itself anchors directly (vocabulary edge — no contract
+    group).
     """
     ordered = sorted(
-        (c for c in categories if c is not None),
-        key=lambda c: (c.order, c.slug),
+        (item for item in items if item is not None),
+        key=_anchor_sort_key,
     )
     if not ordered:
         return None
-    first = ordered[0]
+    first = _anchor_category_of(ordered[0])
     return first.parent if first.parent is not None else first
 
 
@@ -216,19 +263,22 @@ def kind_contract_for(category: Any) -> Any:
     return kind_contract_state(category)[0]
 
 
-def place_domain(categories: Any) -> str:
+def place_domain(items: Any) -> str:
     """Derived ``domain`` for a place's categories (super-root slug).
 
-    Depth-guarded walk: only a kind-level category (parent = contract
-    group, grandparent = super-root, great-grandparent = ``map``)
-    anchors a kind. Shallower anchors (contract groups, super-roots,
-    vocabulary) are skipped — never "map" or a partial path.
+    Depth-guarded walk in anchor order (classifier priority first,
+    then ``(order, slug)`` — the same rule ``anchor_category`` uses):
+    only a kind-level category (parent = contract group, grandparent
+    = super-root, great-grandparent = ``map``) anchors a kind.
+    Shallower anchors (contract groups, super-roots, vocabulary) are
+    skipped — never "map" or a partial path.
     """
     ordered = sorted(
-        (c for c in categories if c is not None),
-        key=lambda c: (c.order, c.slug),
+        (item for item in items if item is not None),
+        key=_anchor_sort_key,
     )
-    for cat in ordered:
+    for item in ordered:
+        cat = _anchor_category_of(item)
         group = getattr(cat, "parent", None)
         super_root = getattr(group, "parent", None) if group is not None else None
         namespace = (
@@ -242,6 +292,26 @@ def place_domain(categories: Any) -> str:
         ):
             return super_root.slug
     return DOMAIN_NONE
+
+
+def order_by_anchor(queryset: Any) -> Any:
+    """Order a ``GeoPlaceCategory`` queryset by the anchor rule.
+
+    ORM twin of ``_anchor_sort_key`` (single source: the priority
+    dict) — the rederive receiver's atomic ``kind_id`` subquery uses
+    it. Expressions in ``order_by`` keep it identical to the Python
+    rule without denormalizing the rank.
+    """
+    from django.db.models import Case, Value, When
+
+    priority = Case(
+        *[
+            When(classifier__identifier=identifier, then=Value(rank))
+            for identifier, rank in ANCHOR_CLASSIFIER_PRIORITY.items()
+        ],
+        default=Value(ANCHOR_NEUTRAL_RANK),
+    )
+    return queryset.order_by(priority, "category__order", "category__slug")
 
 
 def assert_registry_valid() -> None:

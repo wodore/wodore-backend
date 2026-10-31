@@ -42,7 +42,7 @@ from server.apps.external_geonames.management.commands._country_groups import (
 )
 from server.apps.external_geonames.models import Feature, GeoName
 from server.apps.geometries.kinds import anchor_category, place_domain
-from server.apps.geometries.models import GeoPlace
+from server.apps.geometries.models import GeoPlace, GeoPlaceCategory
 from server.apps.geometries.schemas import (
     GeoPlaceBaseInput,
     OperationInput,
@@ -843,10 +843,17 @@ class Command(BaseCommand):
         place.categories.add(geoname.feature.category)
         # m2m .add() writes through bulk_create — no post_save fires,
         # so the rederive receiver (models/_associations.py) never
-        # runs on this path; derive explicitly (Opus review #3)
-        categories = list(place.categories.all())
-        place.kind = anchor_category(categories)
-        place.domain = place_domain(categories)
+        # runs on this path; derive explicitly (Opus review #3).
+        # Associations (not bare categories): the anchor rule is
+        # classifier-aware (mode.standard first) — geonames rows
+        # carry NULL classifiers, so the order/slug fallback applies.
+        associations = list(
+            GeoPlaceCategory.objects.filter(geo_place=place).select_related(
+                "category", "classifier"
+            )
+        )
+        place.kind = anchor_category(associations)
+        place.domain = place_domain(associations)
         place.save(update_fields=["kind", "domain", "modified"])
         return place
 
@@ -887,9 +894,14 @@ class Command(BaseCommand):
             place.categories.add(geoname.feature.category)
             # same signal gap as _create_place (Opus review #3): .add()
             # never fires the receiver — derive the anchor explicitly
-            categories = list(place.categories.all())
-            place.kind = anchor_category(categories)
-            place.domain = place_domain(categories)
+            # (associations: classifier-aware rule, NULL for geonames)
+            associations = list(
+                GeoPlaceCategory.objects.filter(geo_place=place).select_related(
+                    "category", "classifier"
+                )
+            )
+            place.kind = anchor_category(associations)
+            place.domain = place_domain(associations)
             update_fields += ["kind", "domain"]
             changed = True
 

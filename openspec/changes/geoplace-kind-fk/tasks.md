@@ -45,3 +45,21 @@
 - [ ] 4.3 Full suite + pyrefly + makemigrations --check; PR
       (`type:feature`, `api:breaking` for the categories narrowing —
       unreleased, `BUILD`)
+
+## 5. Anchoring fix — mode.standard defines the kind
+
+- [ ] 5.1 `kinds.py`: `ANCHOR_CLASSIFIER_PRIORITY`
+      (`mode.standard` → 0, neutral 1); `anchor_category`,
+      `kind_root_category`, `place_domain` accept association-like
+      items and order by `(priority, order, slug)`; `order_by_anchor`
+      ORM twin
+- [ ] 5.2 `_rederive_place_kind` receiver + geonames import paths:
+      derive from associations (classifier-aware)
+- [ ] 5.3 Migration `0074_reanchor_kind_mode_standard`: re-anchor
+      places with a mode.standard association (raw SQL, scoped
+      EXISTS), reverse restores the order-only rule
+- [ ] 5.4 pk-0 truthiness fix in `anchor_kinds_for` + place detail
+      (`kind_id is not None`)
+- [ ] 5.5 Tests: mixed standard+reduced anchoring, reduced-only,
+      classifier-less regression, pk-0 kind member, migration
+      re-anchor + reverse, wodore import e2e kind pin
