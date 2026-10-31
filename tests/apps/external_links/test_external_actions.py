@@ -141,10 +141,20 @@ class ExternalActionsApiTests(TestCase):
         self.assertIn(self.public.link.identifier, ids)
 
     def test_lang_varies_labels(self) -> None:
-        r_de = self.client.get("/v1/links/actions?lang=de")
-        r_en = self.client.get("/v1/links/actions?lang=en")
-        self.assertEqual(r_de.status_code, 200)
-        self.assertEqual(r_en.status_code, 200)
+        # Pin the modeltrans path: a localized label must actually be
+        # served for that language (regression guard for the
+        # label_i18n German-hardcode found in review).
+        link = self.global_any.link
+        link.label_fr = "Cartes"  # type: ignore  # dynamic attr: modeltrans column
+        link.save(skip_health_check=True)
+        ident = link.identifier
+
+        def label_for(lang: str) -> str:
+            rows = self.client.get(f"/v1/links/actions?lang={lang}").json()
+            return next(r["label"] for r in rows if r["id"] == ident)
+
+        self.assertEqual(label_for("fr"), "Cartes")
+        self.assertNotEqual(label_for("de"), "Cartes")
 
     def test_public_cache_headers(self) -> None:
         r = self.client.get("/v1/links/actions?kind=map.transport")
@@ -162,13 +172,12 @@ class ExternalActionsApiTests(TestCase):
         client = Client(SERVER_NAME="localhost")
         client.force_login(self.user)
         r = client.get("/v1/my/links/actions")
-        # The endpoint may reject if the auth provider is not fully
-        # configured in tests — accept auth-rejection or success; the
-        # own-rows assertion only runs on success.
-        if r.status_code == 200:
-            ids = [row["id"] for row in r.json()]
-            self.assertIn(self.user_action.link.identifier, ids)
-            self.assertNotIn(self.public.link.identifier, ids)
+        # The /my/ base enforces auth in dispatch (force_login sets an
+        # authenticated session user) — 200 with own rows only.
+        self.assertEqual(r.status_code, 200)
+        ids = [row["id"] for row in r.json()]
+        self.assertIn(self.user_action.link.identifier, ids)
+        self.assertNotIn(self.public.link.identifier, ids)
 
     # ── Render ──────────────────────────────────────────────────────
 

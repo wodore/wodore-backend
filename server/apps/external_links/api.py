@@ -45,7 +45,7 @@ from server.apps.api.auth import AuthBearer
 from server.apps.api.controller import ApiController, raise_not_found
 from server.apps.api.error_codes import ErrorCode
 from server.apps.translations import LanguageQuery
-from server.apps.translations import override as lang_override
+from server.apps.translations.service import localized_value
 
 from .models import ExternalAction, ExternalLink
 
@@ -87,20 +87,26 @@ class RenderPath(pydantic.BaseModel):
 
 
 def _action_rows(queryset: QuerySet[ExternalAction], lang: str) -> list[dict[str, Any]]:
-    """Serialize action rows for the list endpoints (labels localized)."""
+    """Serialize action rows for the list endpoints (labels localized).
+
+    Localized values go through the canonical ``localized_value``
+    helper (reads the modeltrans ``i18n`` spec by explicit language —
+    the virtual fields do NOT resolve the active language on access,
+    and the ``*_i18n`` properties hardcode the base column). Unset
+    translations fall back to the base-language value.
+    """
     rows: list[dict[str, Any]] = []
-    with lang_override(lang):
-        for action in queryset:
-            link: ExternalLink = action.link
-            rows.append(
-                {
-                    "id": link.identifier,
-                    "label": link.label_i18n,
-                    "url": link.url_i18n,
-                    "template_vars": link.template_vars or None,
-                    "order": action.order,
-                }
-            )
+    for action in queryset:
+        link: ExternalLink = action.link
+        rows.append(
+            {
+                "id": link.identifier,
+                "label": localized_value(link, "label", lang) or link.label,
+                "url": localized_value(link, "url", lang) or link.url,
+                "template_vars": link.template_vars or None,
+                "order": action.order,
+            }
+        )
     return rows
 
 
@@ -109,7 +115,9 @@ def _filtered_actions(
 ) -> QuerySet[ExternalAction]:
     """Apply the kind/iso scope semantics (D2/D3) to a base queryset."""
     if kind:
-        queryset = queryset.filter(Q(kinds__identifier=kind) | Q(kinds=None)).distinct()
+        queryset = queryset.filter(
+            Q(kinds__identifier=kind) | Q(kinds__isnull=True)
+        ).distinct()
     if iso:
         code = iso.upper()
         queryset = queryset.filter(
@@ -160,7 +168,21 @@ class MyApiController(ApiController):
     def dispatch(
         self, request: HttpRequest, *args: Any, **kwargs: Any
     ) -> HttpResponseBase:
-        response = super().dispatch(request, *args, **kwargs)
+        # Runtime auth enforcement lives HERE (security= in
+        # __init__ is OpenAPI documentation only) — every inheriting
+        # controller gets the 401 without re-implementing it.
+        user = getattr(request, "user", None)
+        response: HttpResponseBase
+        if user is None or not user.is_authenticated:
+            response = self.to_response(
+                {
+                    "code": ErrorCode.not_authenticated,
+                    "detail": "authentication required",
+                },
+                status_code=HTTPStatus.UNAUTHORIZED,
+            )
+        else:
+            response = super().dispatch(request, *args, **kwargs)
         response.headers["Cache-Control"] = "private, no-store"
         return response
 
@@ -174,17 +196,8 @@ class MyExternalActionsController(MyApiController):
 
         Own open-in actions by app scope
         """
-        user = getattr(self.request, "user", None)
-        if user is None or not user.is_authenticated:
-            raise APIError(
-                {
-                    "code": ErrorCode.not_authenticated,
-                    "detail": "authentication required",
-                },
-                status_code=HTTPStatus.UNAUTHORIZED,
-            )
         queryset = ExternalAction.objects.filter(
-            is_active=True, user=user
+            is_active=True, user=self.request.user
         ).select_related("link")
         return _action_rows(
             _filtered_actions(queryset, parsed_query.kind, parsed_query.iso),
