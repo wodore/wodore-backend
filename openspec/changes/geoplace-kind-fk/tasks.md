@@ -63,3 +63,25 @@
 - [ ] 5.5 Tests: mixed standard+reduced anchoring, reduced-only,
       classifier-less regression, pk-0 kind member, migration
       re-anchor + reverse, wodore import e2e kind pin
+
+## 6. Regression fix — schema writes carry the classifiers
+
+Staging follow-up to #469: the `--update` re-import re-anchored
+~1150 mixed-mode places back to `accommodation.unknown` — the
+schema write paths passed bare categories
+(`[spec.category for spec in place_types]`) to the anchor helpers,
+stripping the classifier priority tier. (Associations kept their
+classifiers; the earlier "zero mode.standard" reading was a
+measurement artifact.)
+
+- [ ] 6.1 `_geoplace.py`: pass the spec list directly to
+      `anchor_category` / `place_domain` / `kind_root_category` /
+      `validate_place_extra` (duck-typed since 5.1) — create, update
+      and the operations/seasonality contract gates
+- [ ] 6.2 Tests: schema create/update with mixed
+      mode.standard + mode.reduced specs at production orders
+      (unknown 0 < hut 50) — kind anchors from the standard type,
+      associations persist classifiers; wodore create + `--update`
+      re-import e2e (the staging scenario); fixtures forced to
+      production orders (seed rows default to order 0 and passed
+      vacuously through the slug tiebreak)

@@ -21,6 +21,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
+from hut_services import LocationSchema
 
 from django.contrib.gis.geos import Point
 from django.test import Client
@@ -29,6 +30,11 @@ from server.apps.categories.models import Category
 from server.apps.external_geonames.models import GeoName
 from server.apps.geometries.management.commands.import_geoplaces import Command
 from server.apps.geometries.models import GeoPlace, GeoPlaceCategory
+from server.apps.geometries.schemas import (
+    GeoPlaceBaseInput,
+    PlaceTypeInput,
+    SourceInput,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -365,6 +371,95 @@ class TestZeroPkAnchor:
         )
         assert response.status_code == 200, response.content
         assert response.json()["kind"]["identifier"] == "accommodation.kfx-zero"
+
+
+class TestSchemaPathClassifierAnchor:
+    """Schema write paths (create AND update) derive the anchor from
+    the specs' classifiers and persist them.
+
+    Staging regression after #469: the inline derivation passed bare
+    categories to the anchor helpers — every mixed mode.standard +
+    mode.reduced write (a hut with reduced-season facts) re-anchored
+    by (order, slug) alone, and accommodation.unknown (production
+    order 0) beat the real open types (camping 25 … alp 55) on the
+    --update re-import. Here unknown carries order 0 and the hut
+    order 1 — the old rule anchors unknown, the fixed rule the hut.
+    """
+
+    @staticmethod
+    def _mixed_schema(
+        name: str, source_id: str
+    ) -> tuple[GeoPlaceBaseInput, SourceInput]:
+        hut = _hut_cat()  # order 1
+        unknown = _unknown_cat()  # order 0 — the D4 fallback shape
+        schema = GeoPlaceBaseInput(
+            name=name,
+            location=LocationSchema(lon=8.1, lat=46.6),
+            country_code="CH",
+            importance=80,
+            place_type_identifiers=[
+                PlaceTypeInput(identifier=hut.identifier, classifier="mode.standard"),
+                PlaceTypeInput(
+                    identifier=unknown.identifier, classifier="mode.reduced"
+                ),
+            ],
+        )
+        return schema, SourceInput(slug="wodore", source_id=source_id)
+
+    @staticmethod
+    def _assocs(place: GeoPlace) -> set[tuple[int | None, int | None]]:
+        return {
+            (a.category_id, a.classifier_id)
+            for a in GeoPlaceCategory.objects.filter(geo_place=place)
+        }
+
+    def test_create_anchors_standard_and_persists_classifiers(self) -> None:
+        schema, source = self._mixed_schema("Kfsa Iota", "kfsa-iota")
+        place, status = GeoPlace.update_or_create(schema=schema, from_source=source)
+        assert status.value == "created"
+        # the standard association anchors although accommodation
+        # unknown sorts first by (order, slug)
+        assert place.kind_id == _hut_cat().pk
+        # associations persisted WITH their classifiers
+        standard, reduced = _mode_classifier("standard"), _mode_classifier("reduced")
+        assert self._assocs(place) == {
+            (_hut_cat().pk, standard.pk),
+            (_unknown_cat().pk, reduced.pk),
+        }
+
+    def test_update_anchors_standard_and_keeps_classifiers(self) -> None:
+        # the exact staging scenario: place exists (classified), the
+        # import re-runs its schema through --update
+        schema, source = self._mixed_schema("Kfsa Kappa", "kfsa-kappa")
+        GeoPlace.update_or_create(schema=schema, from_source=source)
+        place, _status = GeoPlace.update_or_create(schema=schema, from_source=source)
+        place.refresh_from_db()
+        assert place.kind_id == _hut_cat().pk  # NOT accommodation.unknown
+        standard, reduced = _mode_classifier("standard"), _mode_classifier("reduced")
+        assert self._assocs(place) == {
+            (_hut_cat().pk, standard.pk),
+            (_unknown_cat().pk, reduced.pk),
+        }
+
+    def test_update_over_legacy_null_anchor_reanchors(self) -> None:
+        # legacy pre-classifier rows (bare association) coexist: the
+        # classified spec still anchors, the NULL row is not the kind
+        schema, source = self._mixed_schema("Kfsa Lambda", "kfsa-lambda")
+        place, _status = GeoPlace.update_or_create(schema=schema, from_source=source)
+        GeoPlaceCategory.objects.create(  # legacy classifier-less row
+            geo_place=place, category=_hut_cat()
+        )
+        # simulate the broken inline anchor the legacy write stored
+        GeoPlace.objects.filter(pk=place.pk).update(kind_id=_unknown_cat().pk)
+
+        place, _status = GeoPlace.update_or_create(schema=schema, from_source=source)
+        place.refresh_from_db()
+        assert place.kind_id == _hut_cat().pk
+        standard, reduced = _mode_classifier("standard"), _mode_classifier("reduced")
+        assert self._assocs(place) >= {
+            (_hut_cat().pk, standard.pk),
+            (_unknown_cat().pk, reduced.pk),
+        }  # the legacy NULL row survives as a sub-category (documented)
 
 
 class TestReanchorMigration:
