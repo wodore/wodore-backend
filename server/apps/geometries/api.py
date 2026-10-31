@@ -275,7 +275,11 @@ def anchor_kinds_for(places: Any) -> dict[int, dict[str, Any]]:
     member.
     """
     place_ids = [place.pk for place in places]
-    kind_ids = {place.kind_id for place in places if place.kind_id}
+    # `is not None`, not truthiness: legacy HutType ids were
+    # preserved into Category pks (migration 0002) and
+    # accommodation.unknown carries pk 0 — falsy kind_ids must still
+    # serve their kind member (pk-0 regression, staging evidence).
+    kind_ids = {place.kind_id for place in places if place.kind_id is not None}
     if not place_ids or not kind_ids:
         return {}
     from server.apps.categories.models import Category
@@ -303,7 +307,7 @@ def anchor_kinds_for(places: Any) -> dict[int, dict[str, Any]]:
             assocs.setdefault((assoc.geo_place_id, category_id), assoc)
     anchors: dict[int, dict[str, Any]] = {}
     for place in places:
-        if place.kind_id and place.kind_id in categories:
+        if place.kind_id is not None and place.kind_id in categories:
             anchors[place.pk] = {
                 "category": categories[place.kind_id],
                 "assoc": assocs.get((place.pk, place.kind_id)),
@@ -989,7 +993,9 @@ class PlaceController(ApiController):
             # as search/nearby — the place's main category with its
             # classifier/extra; sub-categories live in `categories`.
             # Gated like the other optional members (review #5).
-            if wants_kind and place.kind_id:
+            # `is not None` — kind pks can be 0 (legacy HutType ids
+            # preserved into Category pks) and 0 is falsy.
+            if wants_kind and place.kind_id is not None:
                 anchor = anchor_kinds_for([place]).get(place.pk)
                 if anchor is not None:
                     result["kind"] = kind_ref_for(

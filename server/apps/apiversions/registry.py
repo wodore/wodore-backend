@@ -231,7 +231,13 @@ REGISTRY: list[VersionChange] = [
             "follow-up) — queries below the default threshold of 0.2 may "
             "see fewer sub-threshold fuzzy matches (trigram-similarity "
             "cutoff), substring matches and the default threshold are "
-            "unaffected."
+            "unaffected. ALSO: the places kind anchor is classifier-"
+            "aware — associations classified mode.standard outrank every "
+            "other association before (order, slug) applies (the D4 "
+            "accommodation.unknown fallback no longer anchors a hut's "
+            "real open type, migration 0074 re-anchors affected rows), "
+            "and kind members are served for anchors at legacy pk 0 "
+            "(accommodation.unknown) that the falsy guard dropped."
         ),
         responses={
             "images_for_hut": _strip_static_map_fallback,

@@ -10,7 +10,11 @@ Pins the spec invariants at HTTP and ORM level:
 - geonames derivation: m2m ``.add()`` never fires the rederive
   receiver (bulk_create sends no post_save), so the import command
   derives explicitly (review #3)
-- the receiver's ``(order, slug)`` invariant across ORM writes
+- the receiver's anchor invariant across ORM writes
+- classifier-aware anchoring (mode.standard defines the kind):
+  mixed standard+reduced, reduced-only, classifier-less regression
+- legacy pk-0 anchors serve the kind member
+- migration 0074 re-anchors pre-rule rows (and reverses)
 """
 
 from types import SimpleNamespace
@@ -53,6 +57,12 @@ def _mode_classifier(slug: str) -> Category:
     return Category.objects.get_or_create(
         slug=slug, parent__slug="mode", defaults={"name": slug}
     )[0]
+
+
+def _unknown_cat() -> Category:
+    """The D4 fallback category — accommodation.unknown at order 0
+    (its production pk is the legacy 0; tests recreate the shape)."""
+    return _child("accommodation", "unknown", order=0)
 
 
 def _make_place(
@@ -242,3 +252,173 @@ class TestReceiverInvariant:
         assoc_shelter.delete()
         place.refresh_from_db()
         assert place.kind_id is None  # no categories — no kind
+
+
+class TestClassifierAwareAnchor:
+    """mode.standard defines the kind (PO decision, anchoring fix).
+
+    The D4 fallback accommodation.unknown carries order 0 — without
+    the classifier-priority tier it anchors over every real open
+    type. Standard associations outrank it; without a standard
+    association the (order, slug) rule applies unchanged.
+    """
+
+    def test_standard_outranks_order_0_unknown(self) -> None:
+        hut, unknown = _hut_cat(), _unknown_cat()  # order 1 vs 0
+        standard, reduced = _mode_classifier("standard"), _mode_classifier("reduced")
+        place = _make_place("Kfsa Alpha", "kfsa-alpha", hut, classifier=standard)
+        GeoPlaceCategory.objects.create(
+            geo_place=place, category=unknown, classifier=reduced
+        )
+        place.refresh_from_db()
+        # order alone (0 < 1) would anchor unknown — the classifier
+        # priority flips it (receiver path)
+        assert place.kind_id == hut.pk
+        assert place.domain == "amenity"
+
+    def test_reduced_only_anchors_by_order_slug(self) -> None:
+        # no mode.standard association: the D4 fallback anchors by
+        # (order, slug) as before
+        unknown = _unknown_cat()
+        place = _make_place(
+            "Kfsa Beta", "kfsa-beta", unknown, classifier=_mode_classifier("reduced")
+        )
+        place.refresh_from_db()
+        assert place.kind_id == unknown.pk
+
+    def test_classifier_less_unknown_wins_by_order(self) -> None:
+        # geonames/OSM regression: no classifiers — pure (order, slug)
+        hut, unknown = _hut_cat(), _unknown_cat()
+        place = _make_place("Kfsa Gamma", "kfsa-gamma", hut)
+        GeoPlaceCategory.objects.create(geo_place=place, category=unknown)
+        place.refresh_from_db()
+        assert place.kind_id == unknown.pk  # order 0 wins — unchanged
+
+    def test_kind_member_reflects_standard_anchor(self, client: Client) -> None:
+        hut, unknown = _hut_cat(), _unknown_cat()
+        standard, reduced = _mode_classifier("standard"), _mode_classifier("reduced")
+        place = _make_place("Kfsa Delta", "kfsa-delta", hut, classifier=standard)
+        GeoPlaceCategory.objects.create(
+            geo_place=place, category=unknown, classifier=reduced
+        )
+        response = client.get(
+            "/v1/geo/places/search",
+            {"q": "Kfsa", "fields[places]": "slug,kind,categories", "lang": "de"},
+        )
+        assert response.status_code == 200, response.content
+        entry = next(r for r in response.json() if r["slug"] == "kfsa-delta")
+        # kind = the standard type; the unknown fallback rides as a
+        # sub-category with its reduced classifier
+        assert entry["kind"]["identifier"] == "accommodation.kfx-hut"
+        assert entry["kind"]["classifier"] == "mode.standard"
+        assert [c["slug"] for c in entry["categories"]] == ["unknown"]
+        assert entry["categories"][0]["classifier"] == "mode.reduced"
+
+
+class TestZeroPkAnchor:
+    """Legacy pk-0 anchors (accommodation.unknown, HutType id 0
+    preserved by categories/0002) must serve the kind member — pk 0
+    is falsy, truthy guards silently dropped it (staging evidence).
+    """
+
+    def test_pk0_anchor_serves_kind_member(self, client: Client) -> None:
+        parent = Category.objects.get(slug="accommodation", parent__slug="amenity")
+        zero, _created = Category.objects.get_or_create(
+            id=0,
+            slug="kfx-zero",
+            parent=parent,
+            defaults={"name": "Zero pk", "order": 0},
+        )
+        assert zero.pk == 0
+        place = _make_place("Kfsa Epsilon", "kfsa-epsilon", zero)
+        place.refresh_from_db()
+        assert place.kind_id == 0  # anchor stored, not dropped
+
+        response = client.get(
+            "/v1/geo/places/search",
+            {"q": "Kfsa Epsilon", "fields[places]": "slug,kind", "lang": "de"},
+        )
+        assert response.status_code == 200, response.content
+        entry = response.json()[0]
+        assert entry["kind"]["identifier"] == "accommodation.kfx-zero"
+
+    def test_pk0_anchor_serves_detail_kind_member(self, client: Client) -> None:
+        parent = Category.objects.get(slug="accommodation", parent__slug="amenity")
+        Category.objects.get_or_create(
+            id=0,
+            slug="kfx-zero",
+            parent=parent,
+            defaults={"name": "Zero pk", "order": 0},
+        )
+        place = _make_place("Kfsa Zeta", "kfsa-zeta", _hut_cat())
+        # pk-0 category at order 0 — anchors over the hut (no
+        # classifiers: pure order rule)
+        GeoPlaceCategory.objects.create(
+            geo_place=place, category=Category.objects.get(id=0)
+        )
+        place.refresh_from_db()
+        assert place.kind_id == 0
+
+        response = client.get(
+            f"/v1/geo/places/{place.slug}",
+            {"fields[places]": "slug,kind"},
+        )
+        assert response.status_code == 200, response.content
+        assert response.json()["kind"]["identifier"] == "accommodation.kfx-zero"
+
+
+class TestReanchorMigration:
+    """Migration 0074 re-anchors rows written under the order-only
+    rule (and reverses). The ORM receiver is classifier-aware now, so
+    the pre-state is forced with a signal-bypassing update — exactly
+    what the 0073 backfill wrote.
+    """
+
+    def test_reanchor_and_reverse(self) -> None:
+        import importlib
+
+        from django.db import connection
+
+        mig = importlib.import_module(
+            "server.apps.geometries.migrations.0074_reanchor_kind_mode_standard"
+        )
+        hut, unknown = _hut_cat(), _unknown_cat()
+        standard, reduced = _mode_classifier("standard"), _mode_classifier("reduced")
+        place = _make_place("Kfsa Eta", "kfsa-eta", hut, classifier=standard)
+        GeoPlaceCategory.objects.create(
+            geo_place=place, category=unknown, classifier=reduced
+        )
+        # pre-state: the order-only rule anchored unknown (0073)
+        GeoPlace.objects.filter(pk=place.pk).update(kind_id=unknown.pk)
+        place.refresh_from_db()
+        assert place.kind_id == unknown.pk
+
+        with connection.cursor() as cursor:
+            cursor.execute(mig.REANCHOR_SQL)
+        place.refresh_from_db()
+        assert place.kind_id == hut.pk  # standard wins
+
+        with connection.cursor() as cursor:
+            cursor.execute(mig.REVERSE_SQL)
+        place.refresh_from_db()
+        assert place.kind_id == unknown.pk  # order-only rule restored
+
+    def test_no_standard_association_untouched(self) -> None:
+        import importlib
+
+        from django.db import connection
+
+        mig = importlib.import_module(
+            "server.apps.geometries.migrations.0074_reanchor_kind_mode_standard"
+        )
+        # reduced-only place: outside the migration's EXISTS scope
+        unknown = _unknown_cat()
+        place = _make_place(
+            "Kfsa Theta", "kfsa-theta", unknown, classifier=_mode_classifier("reduced")
+        )
+        GeoPlace.objects.filter(pk=place.pk).update(kind_id=unknown.pk)
+
+        with connection.cursor() as cursor:
+            cursor.execute(mig.REANCHOR_SQL)
+        place.refresh_from_db()
+        assert place.kind_id == unknown.pk  # unchanged
