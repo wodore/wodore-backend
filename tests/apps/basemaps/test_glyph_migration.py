@@ -54,7 +54,7 @@ def _martin_pks(layers: list[MapLayer]) -> list[int]:
 
 @pytest.mark.django_db
 class TestSeededGlyphTemplates:
-    def test_fresh_seed_is_extensionless(self):
+    def test_fresh_seed_is_extensionless(self) -> None:
         call_command("map_seed", verbosity=0)
         layers = _martin_layers()
         assert layers, "seeded styles reference Martin glyphs"
@@ -66,7 +66,7 @@ class TestSeededGlyphTemplates:
 
 @pytest.mark.django_db
 class TestGlyphMigration:
-    def test_strip_pbf_rewrites_stored_templates_surgically(self):
+    def test_strip_pbf_rewrites_stored_templates_surgically(self) -> None:
         call_command("map_seed", verbosity=0)
 
         # Rows as seeded BEFORE 0010: Martin templates carry the .pbf
@@ -74,7 +74,11 @@ class TestGlyphMigration:
         martin_layers = _martin_layers()
         assert martin_layers, "seeded styles reference Martin glyphs"
         for layer in martin_layers:
-            layer.style["glyphs"] += ".pbf"
+            style = layer.style
+            assert isinstance(style, dict)
+            glyphs = style.get("glyphs")
+            assert isinstance(glyphs, str)
+            style["glyphs"] = glyphs + ".pbf"
             layer.save(update_fields=["style"])
 
         # External font hosts (maptoolkit) also serve .pbf glyph URLs —
