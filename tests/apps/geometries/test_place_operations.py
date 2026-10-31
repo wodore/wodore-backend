@@ -46,9 +46,17 @@ def _clear_identifier_caches() -> None:
 @pytest.fixture
 def hut_category() -> Category:
     parent = Category.objects.get(slug="accommodation", parent__slug="amenity")
+    # production order (50): the D4 unknown fallback sits at 0 — a
+    # hut-type fixture at order 0 (seed/loader default) made the
+    # anchoring tests pass vacuously through the slug tiebreak
+    # (hut < unknown). Force the order: the seed row may already
+    # exist (get_or_create defaults don't apply to it).
     category, _created = Category.objects.get_or_create(
-        slug="hut", parent=parent, defaults={"name": "Hütte"}
+        slug="hut", parent=parent, defaults={"name": "Hütte", "order": 50}
     )
+    if category.order != 50:
+        category.order = 50
+        category.save(update_fields=["order"])
     return category
 
 
@@ -203,11 +211,12 @@ class TestWodoreSeasonalityImport:
     @pytest.fixture(autouse=True)
     def only_my_huts(self, hut_category: Category) -> None:
         Hut.objects.filter(is_active=True).update(is_active=False)
-        # the reduced-without-type fallback resolves onto it
+        # the reduced-without-type fallback resolves onto it (order 0
+        # = production shape; the loader's create-without-order default)
         Category.objects.get_or_create(
             slug="unknown",
             parent=hut_category.parent,
-            defaults={"name": "Unbekannt"},
+            defaults={"name": "Unbekannt", "order": 0},
         )
 
     @staticmethod
@@ -282,6 +291,39 @@ class TestWodoreSeasonalityImport:
         # impossible for wodore huts: hut_type_open is NOT NULL, every
         # hut carries a standard association. Covered at ORM level in
         # test_kind_fk.py::TestClassifierAwareAnchor.)
+
+    def test_update_reimport_keeps_standard_anchor(self, hut_category: Category):
+        """Create + ``--update`` re-import: the open type keeps
+        anchoring and associations keep their classifiers.
+
+        The staging regression after #469: the --update re-import
+        re-derived kinds by (order, slug) alone — accommodation.unknown
+        (order 0) re-anchored over the hut's real open type (order 50)
+        for every hut with reduced facts."""
+        hut = HutFactory(
+            hut_type_open=hut_category,
+            hut_type_closed=None,
+            capacity_open=None,
+            capacity_closed=None,
+            open_monthly={"month_12": "no"},
+        )
+        call_command("import_geoplaces", "-s", "wodore", stdout=self._out())
+        place = self._place(hut)
+        assert place.kind_id == hut_category.pk  # create anchors standard
+
+        call_command("import_geoplaces", "-s", "wodore", "--update", stdout=self._out())
+        place = self._place(hut)
+        place.refresh_from_db()
+        # NOT accommodation.unknown — the update path derives from the
+        # specs' classifiers like every other write path
+        assert place.kind_id == hut_category.pk
+        associations = {
+            (a.category.slug, a.classifier.identifier)  # type: ignore[union-attr]
+            for a in place.category_associations.all()  # type: ignore  # reverse FK: plugin-less inference gap
+            if a.classifier_id
+        }
+        assert ("hut", "mode.standard") in associations
+        assert ("unknown", "mode.reduced") in associations
 
     def test_all_standard_months_no_reduced(self, hut_category: Category):
         """Months all 100 = always standard — no reduced mode appears."""

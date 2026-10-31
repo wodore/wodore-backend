@@ -1106,7 +1106,10 @@ class GeoPlace(TimeStampedModel):
         from ._operation import GeoPlaceOperation
 
         contract = contract_for_group(
-            kind_root_category([spec.category for spec in place_types])
+            # specs (not bare categories): the duck-typed helpers keep
+            # the classifier priority tier — anchor semantics, not just
+            # display order, ride this resolution
+            kind_root_category(place_types)
         )
         if contract is None or not contract.has_operations:
             raise ValidationError(
@@ -1156,7 +1159,8 @@ class GeoPlace(TimeStampedModel):
         from ._seasonality import GeoPlaceSeasonality, Month
 
         contract = contract_for_group(
-            kind_root_category([spec.category for spec in place_types])
+            # specs carry classifiers — same anchor rule as everywhere
+            kind_root_category(place_types)
         )
         if contract is None or not contract.has_seasonality:
             raise ValidationError(
@@ -1199,9 +1203,13 @@ class GeoPlace(TimeStampedModel):
 
         # domain + kind derived on write from the category tree
         # (geoplace-kind-fk D4 — one derivation step, two stored
-        # facts). The input schema declares neither.
-        anchor = anchor_category([spec.category for spec in place_types])
-        derived_domain = place_domain([spec.category for spec in place_types])
+        # facts). The input schema declares neither. Specs (not bare
+        # categories): the anchor rule is classifier-aware —
+        # mode.standard outranks (order, slug); stripping the
+        # classifier regressed mixed mode writes to the order-only
+        # rule (accommodation.unknown at order 0 anchored).
+        anchor = anchor_category(place_types)
+        derived_domain = place_domain(place_types)
 
         # Build place data
         place_data = {
@@ -1454,9 +1462,11 @@ class GeoPlace(TimeStampedModel):
                     categories_updated = True
 
         # domain + kind derived on write from the category tree
-        # (geoplace-kind-fk D4).
-        anchor = anchor_category([spec.category for spec in place_types])
-        derived_domain = place_domain([spec.category for spec in place_types])
+        # (geoplace-kind-fk D4). Specs carry the association
+        # classifiers — the anchor rule needs them (mode.standard
+        # outranks the order-only fallback category).
+        anchor = anchor_category(place_types)
+        derived_domain = place_domain(place_types)
         if "domain" not in protected and place.domain != derived_domain:
             place.domain = derived_domain
             update_fields.append("domain")
@@ -1554,7 +1564,7 @@ class GeoPlace(TimeStampedModel):
         if "extra" not in protected and schema.extra:
             from ._category_extra_schema import validate_place_extra
 
-            validate_place_extra([spec.category for spec in place_types], schema.extra)
+            validate_place_extra(place_types, schema.extra)
             if place.extra != schema.extra:
                 place.extra = {**place.extra, **schema.extra}
                 update_fields.append("extra")
