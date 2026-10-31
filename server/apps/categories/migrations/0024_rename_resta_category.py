@@ -37,6 +37,25 @@ from typing import Any
 from django.db import migrations
 
 
+def _identifier(parent: Any, slug: str) -> str:
+    """The computed ``Category.identifier`` expression, inlined.
+
+    ``identifier`` is a stored computed field (computedfields): its
+    post_save handlers are registered on the REAL model class and do
+    NOT fire for the historical state proxy a migration receives —
+    writes that move ``slug``/``parent`` must update ``identifier``
+    explicitly (same doctrine as 0006_populate_identifier_field).
+    """
+    return f"{parent.slug}.{slug}" if parent is not None else f"root.{slug}"
+
+
+def _rename(category: Any, slug: str) -> None:
+    """Slug rename carrying the computed identifier along."""
+    category.slug = slug
+    category.identifier = _identifier(category.parent, slug)
+    category.save(update_fields=["slug", "identifier"])
+
+
 def _merge_resta_into_restaurant(resta: Any, target: Any, apps: Any) -> None:
     """Re-point every reference from ``resta`` to ``target``, delete ``resta``."""
     Category = apps.get_model("categories", "Category")
@@ -54,45 +73,51 @@ def _merge_resta_into_restaurant(resta: Any, target: Any, apps: Any) -> None:
     # classifier) unique constraint would reject the duplicate row.
     target_pairs = {
         (assoc.geo_place_id, assoc.classifier_id)
-        for assoc in GeoPlaceCategory.objects.filter(category=target)
+        for assoc in GeoPlaceCategory.objects.filter(category=target).order_by()
     }
     reprice_ids: list[int] = []
     drop_ids: list[int] = []
-    for assoc in GeoPlaceCategory.objects.filter(category=resta):
+    for assoc in GeoPlaceCategory.objects.filter(category=resta).order_by():
         key = (assoc.geo_place_id, assoc.classifier_id)
         (drop_ids if key in target_pairs else reprice_ids).append(assoc.pk)
-    GeoPlaceCategory.objects.filter(pk__in=drop_ids).delete()
-    GeoPlaceCategory.objects.filter(pk__in=reprice_ids).update(category=target)
+    GeoPlaceCategory.objects.filter(pk__in=drop_ids).order_by().delete()
+    GeoPlaceCategory.objects.filter(pk__in=reprice_ids).order_by().update(
+        category=target
+    )
 
-    GeoPlace.objects.filter(kind=resta).update(kind=target)
-    Hut.objects.filter(hut_type_open=resta).update(hut_type_open=target)
-    Hut.objects.filter(hut_type_closed=resta).update(hut_type_closed=target)
+    GeoPlace.objects.filter(kind=resta).order_by().update(kind=target)
+    Hut.objects.filter(hut_type_open=resta).order_by().update(hut_type_open=target)
+    Hut.objects.filter(hut_type_closed=resta).order_by().update(hut_type_closed=target)
 
     # Extra schemas: OneToOne per category — the target's own row
     # wins, a legacy row under resta is dropped rather than moved.
     if CategoryExtraSchema.objects.filter(category=target).exists():
-        CategoryExtraSchema.objects.filter(category=resta).delete()
+        CategoryExtraSchema.objects.filter(category=resta).order_by().delete()
     else:
-        CategoryExtraSchema.objects.filter(category=resta).update(category=target)
+        CategoryExtraSchema.objects.filter(category=resta).order_by().update(
+            category=target
+        )
 
     # Map layer links: unique (layer, category, use) — same dedupe.
     target_uses = {
         (link.layer_id, link.use)
-        for link in MapLayerCategory.objects.filter(category=target)
+        for link in MapLayerCategory.objects.filter(category=target).order_by()
     }
     keep_links: list[int] = []
     drop_links: list[int] = []
-    for link in MapLayerCategory.objects.filter(category=resta):
+    for link in MapLayerCategory.objects.filter(category=resta).order_by():
         (drop_links if (link.layer_id, link.use) in target_uses else keep_links).append(
             link.pk
         )
-    MapLayerCategory.objects.filter(pk__in=drop_links).delete()
-    MapLayerCategory.objects.filter(pk__in=keep_links).update(category=target)
+    MapLayerCategory.objects.filter(pk__in=drop_links).order_by().delete()
+    MapLayerCategory.objects.filter(pk__in=keep_links).order_by().update(
+        category=target
+    )
 
     # Children: re-parent to the target. A slug collision means a
     # parallel child exists — fail loudly (deleting resta would
     # CASCADE-delete the child instead of merging it).
-    for child in Category.objects.filter(parent=resta):
+    for child in Category.objects.filter(parent=resta).order_by():
         if Category.objects.filter(parent=target, slug=child.slug).exists():
             msg = (
                 f"Cannot merge resta#{resta.pk} into restaurant#{target.pk}: "
@@ -100,30 +125,46 @@ def _merge_resta_into_restaurant(resta: Any, target: Any, apps: Any) -> None:
             )
             raise RuntimeError(msg)
         child.parent_id = target.pk
-        child.save(update_fields=["parent"])
+        # identifier rides along (computed handlers don't fire here)
+        child.identifier = _identifier(target, child.slug)
+        child.save(update_fields=["parent", "identifier"])
 
-    Category.objects.filter(default=resta).update(default=target)
-    Feature.objects.filter(category=resta).update(category=target)
-    MapLegendSection.objects.filter(category=resta).update(category=target)
-    License.objects.filter(category=resta).update(category=target)
+    Category.objects.filter(default=resta).order_by().update(default=target)
+    Feature.objects.filter(category=resta).order_by().update(category=target)
+    MapLegendSection.objects.filter(category=resta).order_by().update(category=target)
+    License.objects.filter(category=resta).order_by().update(category=target)
 
-    resta.delete()
+    # Raw SQL delete: the ORM collector's RESTRICT existence checks
+    # evaluate related querysets WITH default Meta.ordering — the
+    # expression orderings (Lower("name_i18n")) resolve only on real
+    # modeltrans classes, never on state proxies (same doctrine as
+    # the 0073/0074 backfills). Every reference is re-pointed by now;
+    # a straggler RESTRICT FK still fails loudly at the database.
+    from django.db import connection
+
+    with connection.cursor() as cursor:
+        cursor.execute("DELETE FROM categories_category WHERE id = %s", [resta.pk])
 
 
-def rename_resta_to_restaurant(apps: Any, schema_editor: Any) -> None:
+def rename_resta_to_restaurant(apps: Any, _schema_editor: Any) -> None:
     Category = apps.get_model("categories", "Category")
     Symbol = apps.get_model("symbols", "Symbol")
 
-    for resta in list(Category.objects.filter(slug="resta")):
+    for resta in list(Category.objects.filter(slug="resta").order_by()):
         target = (
+            # order_by(): .first() falls back to pk — proxy-safe and
+            # deterministic (FK/expressive Meta.ordering must not leak
+            # into state-registry queries)
             Category.objects.filter(slug="restaurant", parent_id=resta.parent_id)
             .exclude(pk=resta.pk)
+            .order_by()
             .first()
         )
         if target is None:
             # no sibling restaurant: the historical plain rename
-            resta.slug = "restaurant"
-            resta.save(update_fields=["slug"])
+            # (identifier updated explicitly — computed-field handlers
+            # don't fire on the historical proxy, Claude review PR #473)
+            _rename(resta, "restaurant")
         else:
             # both exist: merge (staging shape) — a plain rename would
             # violate unique_slug_per_parent
@@ -133,10 +174,10 @@ def rename_resta_to_restaurant(apps: Any, schema_editor: Any) -> None:
     # stale slug stops being served; category_sync_assets relinks the
     # surviving category to the existing restaurant symbols
     # (slug+style reuse) — independent of the merge above.
-    Symbol.objects.filter(slug="resta").update(is_active=False)
+    Symbol.objects.filter(slug="resta").order_by().update(is_active=False)
 
 
-def rename_restaurant_to_resta(apps: Any, schema_editor: Any) -> None:
+def rename_restaurant_to_resta(apps: Any, _schema_editor: Any) -> None:
     Category = apps.get_model("categories", "Category")
     Symbol = apps.get_model("symbols", "Symbol")
     # Best-effort reverse of the plain rename only: rename the
@@ -145,13 +186,12 @@ def rename_restaurant_to_resta(apps: Any, schema_editor: Any) -> None:
     # restaurant (forward-only, see module docstring).
     for restaurant in Category.objects.filter(
         slug="restaurant", parent__slug="accommodation"
-    ):
+    ).order_by():
         if not Category.objects.filter(
             slug="resta", parent_id=restaurant.parent_id
         ).exists():
-            restaurant.slug = "resta"
-            restaurant.save(update_fields=["slug"])
-    Symbol.objects.filter(slug="resta").update(is_active=True)
+            _rename(restaurant, "resta")
+    Symbol.objects.filter(slug="resta").order_by().update(is_active=True)
 
 
 class Migration(migrations.Migration):

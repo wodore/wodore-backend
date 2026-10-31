@@ -27,6 +27,7 @@ from server.apps.geometries.models import (
     GeoPlace,
     GeoPlaceCategory,
 )
+from server.apps.licenses.models import License
 
 MIGRATION = importlib.import_module(
     "server.apps.categories.migrations.0024_rename_resta_category"
@@ -93,6 +94,7 @@ class TestRenameOnly:
 
         resta.refresh_from_db()
         assert resta.slug == "restaurant"
+        assert resta.identifier == "rm-rename-group.restaurant"
         assert not Category.objects.filter(slug="resta").exists()
 
         # The reverse is deliberately accommodation-scoped — renaming
@@ -162,6 +164,13 @@ class TestMergeBothExist:
             category=self.resta, schema={"type": "object"}
         )
 
+        # the parent's default pointer + a license ride along too
+        # (one instance: set + save — two calls would save a stale row)
+        parent = _accommodation()
+        parent.default = self.resta
+        parent.save(update_fields=["default"])
+        self.license = License.objects.create(name="Rm licence", category=self.resta)
+
     def test_merge_repoints_and_deletes(self) -> None:
         MIGRATION.rename_resta_to_restaurant(global_apps, None)
 
@@ -169,6 +178,12 @@ class TestMergeBothExist:
         assert not Category.objects.filter(slug="resta").exists()
         self.restaurant.refresh_from_db()
         assert self.restaurant.slug == "restaurant"
+        assert self.restaurant.identifier == "accommodation.restaurant"
+
+        # parent default + license re-pointed
+        assert _accommodation().default.pk == self.restaurant.pk  # type: ignore[union-attr]  # SET_NULL FK: None after deletion
+        self.license.refresh_from_db()
+        assert self.license.category_id == self.restaurant.pk
 
         # kind re-pointed (no silent SET_NULL)
         self.place.refresh_from_db()
@@ -212,9 +227,11 @@ class TestMergeBothExist:
         MIGRATION.rename_restaurant_to_resta(global_apps, None)
 
         # forward-only merge documented: the surviving row renames
-        # back, every re-pointed reference rides along on it
+        # back (identifier carried along — computed handlers are
+        # inert in real runs), every re-pointed reference rides on it
         self.restaurant.refresh_from_db()
         assert self.restaurant.slug == "resta"
+        assert self.restaurant.identifier == "accommodation.resta"
         self.place.refresh_from_db()
         assert self.place.kind_id == self.restaurant.pk
         self.hut.refresh_from_db()
@@ -246,3 +263,62 @@ class TestMergeExtraSchemaCollision:
             ).count()
             == 1
         )
+
+
+class TestHistoricalRegistry:
+    """The staging rehearsal with the registry the REAL migration
+    runner passes: StateApps proxies built from the migration graph
+    (all leaves) — computed-fields post_save handlers are registered
+    on the live model classes only, so they are INERT here exactly
+    like in production (the blocking Claude-review finding: the
+    rename used to leave the stored identifier stale).
+
+    Covers both branches:
+    - merge: resta + restaurant both exist — re-points and survives
+      unique_slug_per_parent;
+    - rename-only: resta alone under an isolated parent — the stored
+      identifier must update explicitly.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _state_apps(self) -> None:
+        from django.db import connection
+        from django.db.migrations.loader import MigrationLoader
+
+        loader = MigrationLoader(connection, replace_migrations=False)
+        # state after every migration (0024 is data-only — the model
+        # shapes equal the pre-0024 shapes the runner would pass)
+        state = loader.project_state(nodes=loader.graph.leaf_nodes())
+        self.apps = state.apps
+
+    def test_merge_and_rename_via_state_registry(self) -> None:
+        # --- merge shape (staging) ---
+        restaurant = _cat("restaurant", order=10)
+        resta = _cat("resta", order=100)
+        place = _make_place("Rm Gamma", "rm-gamma", kind=resta)
+        GeoPlaceCategory.objects.create(
+            geo_place=place, category=resta, classifier=_mode("standard")
+        )
+
+        MIGRATION.rename_resta_to_restaurant(self.apps, None)
+
+        assert not Category.objects.filter(
+            slug="resta", parent=_accommodation()
+        ).exists()
+        place.refresh_from_db()
+        assert place.kind_id == restaurant.pk
+        restaurant.refresh_from_db()
+        assert restaurant.identifier == "accommodation.restaurant"
+
+        # --- rename-only shape (the production path) ---
+        isolated_resta = Category.objects.create(
+            slug="resta", parent=_isolated_parent(), name="resta", order=100
+        )
+
+        MIGRATION.rename_resta_to_restaurant(self.apps, None)
+
+        isolated_resta.refresh_from_db()
+        assert isolated_resta.slug == "restaurant"
+        # the stored computed identifier must not rely on
+        # computedfields post_save hooks (inert on state proxies)
+        assert isolated_resta.identifier == "rm-rename-group.restaurant"
