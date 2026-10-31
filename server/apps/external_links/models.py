@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, override
+from typing import TYPE_CHECKING, Any, override
 
 from modeltrans.fields import TranslationField
 
@@ -809,6 +809,11 @@ class ExternalLink(TimeStampedModel):
         if lang is None:
             lang = translation.get_language()
 
+        # {lang} is substitutable in URLs (SBB-style /{lang} SPA
+        # paths) — the named parameter doubles as the substitution
+        # value for the resolved language.
+        kwargs.setdefault("lang", lang)
+
         # Get URL for the specified language
         url_attr = f"url_{lang}"
         if hasattr(self, url_attr) and getattr(self, url_attr):
@@ -849,3 +854,135 @@ class ExternalLink(TimeStampedModel):
     def description_i18n(self) -> str:
         """Get the translated description."""
         return getattr(self, "description_de", self.description)
+
+
+class ExternalAction(TimeStampedModel):
+    """Open-in action — a curated hand-off of a map feature to an app.
+
+    OpenSpec ``external-actions``: a thin scoping row over an
+    :class:`ExternalLink` (which keeps owning the URL template, i18n
+    label and health checks — D1). Three orthogonal axes decide where
+    the action is offered:
+
+    * ``kinds`` — M2M to the ``map.*`` kind tree; a feature matches
+      when its kind identifier (2-slug ``Category.identifier``, unique
+      per design) is among the action's kinds. Empty = any point,
+      including category-less ones (a ``map``-rooted kind would not
+      match those).
+    * ``countries`` — ISO-3166 alpha-2 list; empty = global. The
+      client passes the code it already has (``adm0_iso`` on Transitland
+      tile features) — the API never resolves coordinates.
+    * ``user`` — NULL = public/curated row (public CDN-cacheable
+      endpoint); set = user-owned private action (the ``/v1/my/``
+      namespace, private and never CDN-cached).
+
+    The render endpoint addresses actions by the backing link's
+    ``identifier`` (the action model deliberately carries none of its
+    own — D6); rendering resolves public-action-for-link OR
+    requester-owned-action-for-link, else 404.
+    """
+
+    link = models.ForeignKey(
+        ExternalLink,
+        on_delete=models.CASCADE,
+        related_name="actions",
+        verbose_name=_("Link"),
+        help_text=_("The link this action scopes (owns the URL template)"),
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        db_index=True,
+        related_name="external_actions",
+        verbose_name=_("User"),
+        help_text=_(
+            "Empty = public/curated action (CDN path); set = private "
+            "user action (served only to this user under /my/)"
+        ),
+    )
+    kinds = models.ManyToManyField(
+        Category,
+        blank=True,
+        related_name="external_actions",
+        verbose_name=_("Kinds"),
+        help_text=_(
+            "Kind-level categories (map.* identifiers) this action "
+            "applies to; empty = any point"
+        ),
+        limit_choices_to={"parent__slug": "map", "is_active": True},
+    )
+    countries = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name=_("Countries"),
+        help_text=_("ISO-3166 alpha-2 codes this action applies to; empty = global"),
+    )
+    order = models.PositiveSmallIntegerField(
+        default=100,
+        db_index=True,
+        verbose_name=_("Order"),
+        help_text=_("Picker ordering (lower first)"),
+    )
+    is_active = models.BooleanField(
+        default=True,
+        db_index=True,
+        verbose_name=_("Active"),
+        help_text=_("Inactive actions are excluded from every endpoint"),
+    )
+
+    if TYPE_CHECKING:
+        link_id: int
+        user_id: int | None
+        objects: models.Manager[ExternalAction]
+
+    class Meta:
+        verbose_name = _("External Action")
+        verbose_name_plural = _("External Actions")
+        ordering = ("order", "pk")
+        indexes = (models.Index(fields=("is_active", "user")),)
+        constraints = (
+            # One PUBLIC action per link; per-user duplicates likewise
+            # rejected (D4 — partial uniques; Postgres treats NULLs as
+            # distinct, hence the conditions).
+            models.UniqueConstraint(
+                fields=("link",),
+                condition=models.Q(user__isnull=True),
+                name="externalactions_public_link_unique",
+            ),
+            models.UniqueConstraint(
+                fields=("user", "link"),
+                condition=models.Q(user__isnull=False),
+                name="externalactions_user_link_unique",
+            ),
+        )
+
+    def __str__(self) -> str:
+        scope = ",".join(self.countries) if self.countries else "global"
+        owner = self.user_id if self.user_id else "public"
+        return f"{self.link.label_i18n} [{scope}, {owner}]"  # type: ignore[attr-defined]  # forward FK label via link
+
+    @override
+    def clean(self) -> None:
+        """Kinds must be kind-level categories of the map tree (D2).
+
+        The 2-slug identifiers start with ``map.`` by construction
+        (children of the map root); the map root itself is NOT
+        targetable — "everything" is the empty kinds list.
+        """
+        super().clean()
+        # An unsaved instance has no pk — the kinds M2M cannot be
+        # queried yet (defer validation to the saved-check path).
+        if self.pk is not None:
+            for kind in self.kinds.all():
+                if not kind.identifier.startswith("map."):
+                    msg = _(
+                        "Kind %(kind)s is not a map kind-level category "
+                        "(identifier must start with 'map.')"
+                    )
+                    raise ValidationError({"kinds": msg % {"kind": kind.identifier}})
+        for code in self.countries:
+            if not (isinstance(code, str) and len(code) == 2 and code.isupper()):
+                msg = _("Country codes must be uppercase ISO-3166 alpha-2")
+                raise ValidationError({"countries": msg % {"code": code}})
