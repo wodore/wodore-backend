@@ -56,6 +56,68 @@ def _rename(category: Any, slug: str) -> None:
     category.save(update_fields=["slug", "identifier"])
 
 
+def _category_foreign_keys(cursor: Any) -> list[tuple[str, str]]:
+    """(table, column) of every single-column FK into categories_category.
+
+    Derived from pg_catalog — never hand-enumerated. The staging
+    incident round 3: availability's hut_type FKs (HutAvailability,
+    HutAvailabilityHistory — and GeoPlace's equivalents) were absent
+    from both the original audit and the review's RESTRICT table;
+    hand-listing is structurally lossy. Identifiers come from the
+    system catalog and are composed via psycopg ``sql`` — never
+    interpolated strings.
+    """
+
+    cursor.execute(
+        """
+        SELECT conrelid::regclass::text AS table_name, a.attname AS column_name
+        FROM pg_constraint c
+        JOIN LATERAL unnest(c.conkey) AS k(attnum) ON true
+        JOIN pg_attribute a
+          ON a.attrelid = c.conrelid AND a.attnum = k.attnum
+        WHERE c.contype = 'f'
+          AND c.confrelid = 'categories_category'::regclass
+          AND cardinality(c.conkey) = 1
+        """
+    )
+    return [(row[0], row[1]) for row in cursor.fetchall()]
+
+
+def _repoint_fk(cursor: Any, table: str, column: str, from_pk: int, to_pk: int) -> None:
+    """Generic FK re-point — identifiers come from pg_catalog (the
+    system's own constraint listing) and are composed via psycopg's
+    sql module; only the pks ride as parameters."""
+    from psycopg import sql
+
+    query = sql.SQL("UPDATE {} SET {} = %s WHERE {} = %s").format(
+        sql.Identifier(*table.split(".")),
+        sql.Identifier(column),
+        sql.Identifier(column),
+    )
+    # safe composition: table/column are pg_catalog-derived identifiers
+    # quoted via sql.Identifier; only pks ride as parameters
+    cursor.execute(query, [to_pk, from_pk])  # nosemgrep
+
+
+def _category_stragglers(cursor: Any, resta_pk: int) -> list[tuple[str, str, int]]:
+    """Rows still referencing resta per FK — the actionable listing
+    the guard raises with before the delete."""
+    from psycopg import sql
+
+    stragglers: list[tuple[str, str, int]] = []
+    for table, column in _category_foreign_keys(cursor):
+        query = sql.SQL("SELECT COUNT(*) FROM {} WHERE {} = %s").format(
+            sql.Identifier(*table.split(".")), sql.Identifier(column)
+        )
+        # safe composition: pg_catalog-derived identifiers quoted via
+        # sql.Identifier; the pk rides as a parameter
+        cursor.execute(query, [resta_pk])  # nosemgrep
+        count = cursor.fetchone()[0]
+        if count:
+            stragglers.append((table, column, count))
+    return stragglers
+
+
 def _merge_resta_into_restaurant(resta: Any, target: Any, apps: Any) -> None:
     """Re-point every reference from ``resta`` to ``target``, delete ``resta``."""
     Category = apps.get_model("categories", "Category")
@@ -134,15 +196,41 @@ def _merge_resta_into_restaurant(resta: Any, target: Any, apps: Any) -> None:
     MapLegendSection.objects.filter(category=resta).order_by().update(category=target)
     License.objects.filter(category=resta).order_by().update(category=target)
 
-    # Raw SQL delete: the ORM collector's RESTRICT existence checks
-    # evaluate related querysets WITH default Meta.ordering — the
-    # expression orderings (Lower("name_i18n")) resolve only on real
-    # modeltrans classes, never on state proxies (same doctrine as
-    # the 0073/0074 backfills). Every reference is re-pointed by now;
-    # a straggler RESTRICT FK still fails loudly at the database.
+    # --- catalog-driven sweep + guard (staging round 3) ---------------
+    # Re-point EVERY remaining single-column FK into categories_category,
+    # then assert zero stragglers with a listing — loud and actionable
+    # before the database error. geometries_geoplace_category.category_id
+    # is excluded (dedupe-managed above — the (place, category, mode)
+    # unique constraint); a multi-column FK would fail at the raw DELETE
+    # below, the DB stays the final net.
     from django.db import connection
 
     with connection.cursor() as cursor:
+        for table, column in _category_foreign_keys(cursor):
+            if (
+                table.endswith("geometries_geoplace_category")
+                and column == "category_id"
+            ):
+                continue
+            _repoint_fk(cursor, table, column, resta.pk, target.pk)
+        stragglers = _category_stragglers(cursor, resta.pk)
+        if stragglers:
+            detail = ", ".join(
+                f"{table}.{column}: {count} row(s)"
+                for table, column, count in stragglers
+            )
+            msg = (
+                f"resta#{resta.pk} still referenced after the merge sweep "
+                f"({detail}) — merge these manually"
+            )
+            raise RuntimeError(msg)
+
+        # Raw SQL delete: the ORM collector's RESTRICT existence checks
+        # evaluate related querysets WITH default Meta.ordering — the
+        # expression orderings (Lower("name_i18n")) resolve only on real
+        # modeltrans classes, never on state proxies (same doctrine as
+        # the 0073/0074 backfills). Every reference is re-pointed and
+        # asserted clean by now; the DB constraint remains the final net.
         cursor.execute("DELETE FROM categories_category WHERE id = %s", [resta.pk])
 
 

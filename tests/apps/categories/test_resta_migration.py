@@ -12,6 +12,7 @@ surviving row, the legacy row is deleted.
 from __future__ import annotations
 
 import importlib
+from datetime import date
 from typing import Any
 
 import pytest
@@ -20,7 +21,9 @@ from tests.factories.huts import HutFactory
 
 from django.apps import apps as global_apps
 from django.contrib.gis.geos import Point
+from django.utils import timezone
 
+from server.apps.availability.models import HutAvailability, HutAvailabilityHistory
 from server.apps.categories.models import Category
 from server.apps.geometries.models import (
     CategoryExtraSchema,
@@ -28,6 +31,7 @@ from server.apps.geometries.models import (
     GeoPlaceCategory,
 )
 from server.apps.licenses.models import License
+from server.apps.organizations.models import Organization
 
 MIGRATION = importlib.import_module(
     "server.apps.categories.migrations.0024_rename_resta_category"
@@ -159,6 +163,36 @@ class TestMergeBothExist:
         # huts typed on the legacy row (RESTRICT would block deletion)
         self.hut = HutFactory(hut_type_open=self.resta, hut_type_closed=self.resta)
 
+        # availability rows typed on the legacy row — the round-3
+        # staging failure: both hut_type FKs were outside every audit
+        # (now covered by the catalog-driven sweep)
+        checked = timezone.now()
+        self.availability = HutAvailability.objects.create(
+            hut=self.hut,
+            availability_date=date(2026, 7, 1),
+            free=5,
+            total=10,
+            occupancy_percent=50.0,
+            occupancy_status="unknown",
+            reservation_status="unknown",
+            first_checked=checked,
+            last_checked=checked,
+            source_organization=Organization.objects.get(slug="wodore"),
+            hut_type=self.resta,
+        )
+        self.availability_history = HutAvailabilityHistory.objects.create(
+            hut=self.hut,
+            availability_date=date(2026, 7, 1),
+            free=5,
+            total=10,
+            occupancy_percent=50.0,
+            occupancy_status="unknown",
+            reservation_status="unknown",
+            first_checked=checked,
+            last_checked=checked,
+            hut_type=self.resta,
+        )
+
         # legacy extra schema rides the merge
         CategoryExtraSchema.objects.create(
             category=self.resta, schema={"type": "object"}
@@ -205,6 +239,12 @@ class TestMergeBothExist:
         self.hut.refresh_from_db()
         assert self.hut.hut_type_open_id == self.restaurant.pk
         assert self.hut.hut_type_closed_id == self.restaurant.pk
+
+        # availability hut_type FKs re-pointed (round-3 staging failure)
+        self.availability.refresh_from_db()
+        assert self.availability.hut_type_id == self.restaurant.pk
+        self.availability_history.refresh_from_db()
+        assert self.availability_history.hut_type_id == self.restaurant.pk
 
         # extra schema moved onto the survivor
         assert CategoryExtraSchema.objects.filter(category=self.restaurant).exists()
@@ -265,6 +305,32 @@ class TestMergeExtraSchemaCollision:
         )
 
 
+class TestStragglerGuard:
+    """The pre-delete guard: zero stragglers passes, remaining
+    references raise with an actionable listing (the synthetic-FK
+    variant is impractical in tests — the catalog result is
+    monkeypatched instead, per the review's allowance)."""
+
+    def test_guard_raises_with_listing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import re
+
+        restaurant = _cat("restaurant", order=10)
+        resta = _cat("resta", order=100)
+
+        def fake_stragglers(_cursor: Any, _resta_pk: int) -> list[tuple[str, str, int]]:
+            return [("public.some_table", "some_col", 3)]
+
+        monkeypatch.setattr(MIGRATION, "_category_stragglers", fake_stragglers)
+
+        with pytest.raises(
+            RuntimeError,
+            match=re.escape("public.some_table.some_col: 3 row(s)"),
+        ):
+            MIGRATION._merge_resta_into_restaurant(resta, restaurant, global_apps)
+        # nothing was deleted — the guard fired first
+        assert Category.objects.filter(pk=resta.pk).exists()
+
+
 class TestHistoricalRegistry:
     """The staging rehearsal with the registry the REAL migration
     runner passes: StateApps proxies built from the migration graph
@@ -299,6 +365,21 @@ class TestHistoricalRegistry:
         GeoPlaceCategory.objects.create(
             geo_place=place, category=resta, classifier=_mode("standard")
         )
+        hut = HutFactory(hut_type_open=resta)
+        checked = timezone.now()
+        availability = HutAvailability.objects.create(
+            hut=hut,
+            availability_date=date(2026, 7, 1),
+            free=5,
+            total=10,
+            occupancy_percent=50.0,
+            occupancy_status="unknown",
+            reservation_status="unknown",
+            first_checked=checked,
+            last_checked=checked,
+            source_organization=Organization.objects.get(slug="wodore"),
+            hut_type=resta,
+        )
 
         MIGRATION.rename_resta_to_restaurant(self.apps, None)
 
@@ -307,6 +388,10 @@ class TestHistoricalRegistry:
         ).exists()
         place.refresh_from_db()
         assert place.kind_id == restaurant.pk
+        # the catalog sweep re-pointed the availability FK too — under
+        # the exact registry the real migration runner uses
+        availability.refresh_from_db()
+        assert availability.hut_type_id == restaurant.pk
         restaurant.refresh_from_db()
         assert restaurant.identifier == "accommodation.restaurant"
 
