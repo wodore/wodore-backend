@@ -1,10 +1,12 @@
+from typing import Any
+
 from django.db import migrations
 import secrets
 import string
 from slugify import slugify as pyslugify
 
 
-def generate_slug(label):
+def generate_slug(label: str) -> str:
     """Generate a simple slug from label."""
     base_slug = pyslugify(label, word_boundary=True)
     base_slug = base_slug[:40].rstrip("-")
@@ -16,7 +18,7 @@ def generate_slug(label):
     return f"{base_slug}-{suffix}"
 
 
-def populate_slugs(apps, schema_editor):
+def populate_slugs(apps: Any, schema_editor: Any) -> None:
     """Populate slugs for existing ExternalLink records."""
     ExternalLink = apps.get_model("external_links", "ExternalLink")
 
@@ -31,7 +33,7 @@ def populate_slugs(apps, schema_editor):
                     break
 
 
-def reverse_populate_slugs(apps, schema_editor):
+def reverse_populate_slugs(apps: Any, schema_editor: Any) -> None:
     """Reverse: Set all slugs to None."""
     ExternalLink = apps.get_model("external_links", "ExternalLink")
     ExternalLink.objects.update(slug=None)

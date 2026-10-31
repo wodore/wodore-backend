@@ -1,3 +1,5 @@
+from typing import Any
+
 from django.db import migrations
 import secrets
 import string
@@ -9,7 +11,7 @@ def generate_identifier():
     return "".join(secrets.choice(charset) for _ in range(6))
 
 
-def populate_identifiers(apps, schema_editor):
+def populate_identifiers(apps: Any, schema_editor: Any) -> None:
     """Populate identifiers for existing ExternalLink records."""
     ExternalLink = apps.get_model("external_links", "ExternalLink")
 
@@ -23,7 +25,7 @@ def populate_identifiers(apps, schema_editor):
                 break
 
 
-def reverse_populate_identifiers(apps, schema_editor):
+def reverse_populate_identifiers(apps: Any, schema_editor: Any) -> None:
     """Reverse: Set all identifiers to None."""
     ExternalLink = apps.get_model("external_links", "ExternalLink")
     ExternalLink.objects.update(identifier=None)
