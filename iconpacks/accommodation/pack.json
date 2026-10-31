@@ -7,16 +7,10 @@
     "source": "wodore-backend PR #314"
   },
   "spec": {
-    "viewBox": "0 0 48 48",
+    "viewBox": "0 0 24 24",
     "live_area": {
-      "padding": 3
+      "padding": 0
     },
-    "stroke": {
-      "width": 3,
-      "linecap": "round",
-      "linejoin": "round"
-    },
-    "fill": "none",
     "allowed_elements": [
       "path",
       "circle",
@@ -25,1572 +19,631 @@
       "polyline",
       "polygon",
       "ellipse"
-    ],
-    "precision": 0.5
+    ]
   },
   "styles": {
-    "import-mono": {
-      "label": "Imported mono (POI style)",
-      "construction": "solid",
-      "color_mode": "mono",
-      "detail": "medium",
-      "fill": "currentColor",
-      "max_nodes": 800,
-      "min_gap": 0,
-      "render_sizes": [24, 48],
-      "note": "Baseline from PR #314 redesign. Refine via pipeline rounds toward a unified style family."
+    "mono-filled": {
+      "extends": "mono-filled",
+      "label": "Mono filled",
+      "size": 24,
+      "min_gap": 1,
+      "max_nodes": 48,
+      "palette": ["#000000"],
+      "style_words": [
+        "solid silhouette",
+        "single color fill",
+        "no strokes. Shoud work as map symbols. Basic  monoton version of the color-flat variant."
+      ],
+      "avoid": ["internal outlines", "gradients"],
+      "recraft_style_id": "c762a802-e56a-4761-a926-87948cdd652b",
+      "recraft_style_hash": "68fdffddd2da081d"
     },
-    "import-primitive": {
-      "label": "Imported primitive (marker)",
-      "construction": "solid",
-      "color_mode": "color",
-      "detail": "medium",
-      "fill": "imported",
-      "max_nodes": 800,
+    "color-flat": {
+      "extends": "color-flat",
+      "label": "Color flat",
+      "size": 24,
       "min_gap": 0,
-      "render_sizes": [24, 48],
-      "note": "Baseline from PR #314: filled shape with white halo stroke for map legibility. Refine via pipeline rounds."
-    },
-    "import-color": {
-      "label": "Imported color (POI style)",
-      "construction": "solid",
-      "color_mode": "color",
-      "detail": "high",
-      "fill": "imported",
       "max_nodes": 1600,
-      "min_gap": 0,
-      "render_sizes": [24, 48],
-      "note": "Baseline from PR #314 redesign. Refine via pipeline rounds toward lineal-color."
+      "palette": [
+        "#007664",
+        "#0092e3",
+        "#009ee8",
+        "#00a3a3",
+        "#00b0f9",
+        "#018871",
+        "#01db89",
+        "#027ec4",
+        "#0378b7",
+        "#04a37a",
+        "#05d898",
+        "#067bbf",
+        "#068fea",
+        "#07a8f5",
+        "#0bec9e",
+        "#0c557a",
+        "#0d344b",
+        "#0f709e",
+        "#11a699",
+        "#12a5bc",
+        "#156b72",
+        "#176560",
+        "#1a3d3c",
+        "#1bacee",
+        "#1c1c1c",
+        "#1d4f55",
+        "#1e3638",
+        "#1e8790",
+        "#20283a",
+        "#224e3b",
+        "#22534f",
+        "#2597d1",
+        "#265c54",
+        "#2673bf",
+        "#29626b",
+        "#296554",
+        "#2c69fe",
+        "#2d1c41",
+        "#2d2e32",
+        "#2dc4b7",
+        "#318178",
+        "#3268d3",
+        "#333a3f",
+        "#346751",
+        "#352043",
+        "#408860",
+        "#473687",
+        "#48365d",
+        "#4fa7a2",
+        "#575757",
+        "#614877",
+        "#617187",
+        "#68c5c1",
+        "#68c6f7",
+        "#694d41",
+        "#6e6d6d",
+        "#74574c",
+        "#796256",
+        "#80543c",
+        "#83ddfc",
+        "#846a15",
+        "#84a8a9",
+        "#8a4b1b",
+        "#8b8b8b",
+        "#8c8b8a",
+        "#8d654c",
+        "#8e6d5e",
+        "#8f6243",
+        "#8fd6b7",
+        "#927f76",
+        "#945e2d",
+        "#946749",
+        "#959595",
+        "#999898",
+        "#99cfd2",
+        "#9a9a9a",
+        "#9dd9d2",
+        "#9fc0d4",
+        "#a0a0a1",
+        "#a0c49a",
+        "#a0c972",
+        "#abcff2",
+        "#b7b6b6",
+        "#bd9a78",
+        "#bfab25",
+        "#c3731f",
+        "#c3c2c2",
+        "#c6c6c5",
+        "#ca9533",
+        "#cecdcd",
+        "#d39f35",
+        "#d3d2d1",
+        "#d3d2d2",
+        "#d5d5d5",
+        "#d7d7d6",
+        "#d89b3a",
+        "#d99a3a",
+        "#e1b35d",
+        "#e1e0df",
+        "#e8c563",
+        "#e8e8e7",
+        "#eaebeb",
+        "#ed954e",
+        "#eea42a",
+        "#f15e2b",
+        "#f23433",
+        "#f2f7f4",
+        "#f3cb82",
+        "#f4bc5c",
+        "#f6ad3b",
+        "#f6bd49",
+        "#f9b13f",
+        "#f9b84c",
+        "#fa3458",
+        "#faaf46",
+        "#fabb47",
+        "#fac564",
+        "#feb434",
+        "#feb533",
+        "#fec058",
+        "#ffc064",
+        "#ffd663",
+        "#ffffff"
+      ],
+      "style_words": [
+        "flat fills",
+        "tile-shaped regions, no outlines",
+        "modern rounded corners"
+      ],
+      "avoid": ["gradients", "strokes"]
     }
   },
   "icons": {
     "accommodation": {
-      "brief": "Category root: generic accommodation marker",
+      "brief": "Generic accommodation: any place offering overnight lodging, independent of its specific type",
       "variants": {
         "mono": {
-          "style": "filled",
+          "style": "mono-filled",
           "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r024",
-              "text": "[keep] unchanged, re-approve after anchor touch"
-            }
-          ],
-          "reference": "hut#mono",
           "chosen": {
-            "run": "r024",
-            "variant": "keep"
+            "run": "r005",
+            "variant": "c1"
           },
-          "content_hash": "d7cf358070bfa42e80a52f9ee0d88339fd27590577e983b1211db5fc55683fad"
+          "content_hash": "5848a27b61bdef799ad9024327d473ff5c2aadbf89a0a1f50f2fb3d08682688d"
         },
         "color": {
-          "style": "flat-color",
+          "style": "color-flat",
           "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r013",
-              "text": "[a2] rated 4/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a1] rated 3/10"
-            },
-            {
-              "round": "r018",
-              "text": "[a1] rated 4/10"
-            },
-            {
-              "round": "r018",
-              "text": "[a2] rated 6/10"
-            },
-            {
-              "round": "r021",
-              "text": "[a5] rated 8/10"
-            },
-            {
-              "round": "r021",
-              "text": "[a4] rated 3/10"
-            },
-            {
-              "round": "r021",
-              "text": "[a1] rated 4/10"
-            },
-            {
-              "round": "r021",
-              "text": "[a2] rated 7/10"
-            }
-          ],
-          "reference": "hut#color",
-          "note": "More different compared to the hut",
           "chosen": {
-            "run": "r021",
-            "variant": "a6"
+            "run": "r006",
+            "variant": "r7"
           },
-          "content_hash": "f9c6ddca69109a1c6bfeb8627f7ce5eecdb008c28c2b17609b4e412cb65bf3e8"
-        },
-        "primitive": {
-          "style": "primitive",
-          "status": "approved",
-          "rejected_ideas": [
-            "redo toward rounded amber family (hut anchor)",
-            "keep imported primitive"
-          ],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r024",
-              "text": "keep imported primitive"
-            },
-            {
-              "round": "r024",
-              "text": "[keep] imported primitive retained per owner"
-            }
-          ],
-          "reference": "hut#primitive",
-          "chosen": {
-            "run": "r024",
-            "variant": "keep"
-          },
-          "content_hash": "f066f90c0582248cc444f9f78f3b1145233e8986b59c2cfe554e1e14711526af"
-        }
-      },
-      "main_color": "#c3731f",
-      "note": "More geberal accomodations, maybe multiple buildings. Simple"
-    },
-    "alp": {
-      "brief": "Alpine farm hut (Alphütte): hut with meadow",
-      "variants": {
-        "mono": {
-          "style": "filled",
-          "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r024",
-              "text": "[keep] unchanged, re-approve after anchor touch"
-            }
-          ],
-          "reference": "hut#mono",
-          "chosen": {
-            "run": "r024",
-            "variant": "keep"
-          },
-          "content_hash": "89a270b081558896cd922b8001f888c281b688d1fa187320c50dd099ece22912"
-        },
-        "color": {
-          "style": "flat-color",
-          "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r018",
-              "text": "[a1] rated 6/10"
-            },
-            {
-              "round": "r018",
-              "text": "[a2] rated 3/10"
-            }
-          ],
-          "reference": "hut#color",
-          "note": "Use color for door",
-          "chosen": {
-            "run": "r020",
-            "variant": "a3"
-          },
-          "content_hash": "677c6b696c725bd48d1e32ccf1889a010147355774f1ed7aec43e8cf08379594"
-        },
-        "primitive": {
-          "style": "primitive",
-          "status": "approved",
-          "rejected_ideas": [
-            "redo toward rounded amber family (hut anchor)",
-            "keep imported primitive"
-          ],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r024",
-              "text": "keep imported primitive"
-            },
-            {
-              "round": "r024",
-              "text": "[keep] imported primitive retained per owner"
-            }
-          ],
-          "reference": "hut#primitive",
-          "chosen": {
-            "run": "r024",
-            "variant": "keep"
-          },
-          "content_hash": "025c17d42d8c25ed65343058f50c53e4803291ad3c2edc23ebae1a78e83d848f"
-        }
-      },
-      "main_color": "#346751",
-      "note": "Should be very different. What does show an alp building?"
-    },
-    "bhotel": {
-      "brief": "Berghotel (mountain hotel): large building, star, altitude feel",
-      "variants": {
-        "mono": {
-          "style": "filled",
-          "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r024",
-              "text": "[keep] unchanged, re-approve after anchor touch"
-            }
-          ],
-          "reference": "hut#mono",
-          "chosen": {
-            "run": "r024",
-            "variant": "keep"
-          },
-          "content_hash": "9c82d8226bccd88638e0139366e25f9e6b1a3791c8339d8bc335ff1f19bc6dc2"
-        },
-        "color": {
-          "style": "flat-color",
-          "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r010",
-              "text": "[a2] rated 3/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a2] rated 7/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a1] rated 3/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a2] rated 8/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a1] rated 7/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a3] rated 3/10"
-            },
-            {
-              "round": "r018",
-              "text": "[a1] rated 7/10"
-            },
-            {
-              "round": "r018",
-              "text": "[a2] rated 2/10"
-            }
-          ],
-          "reference": "hut#color",
-          "note": "Different color",
-          "chosen": {
-            "run": "r020",
-            "variant": "a1"
-          },
-          "content_hash": "26bdf31fd006587a62c5066bb9d21bf33ca5a257844b276d091256e89036b1ab"
-        },
-        "primitive": {
-          "link": "hotel#primitive"
-        }
-      },
-      "main_color": "#8a4b1b",
-      "note": "Color updates"
-    },
-    "bivouac": {
-      "brief": "Bivouac: tiny emergency shelter box",
-      "variants": {
-        "mono": {
-          "style": "filled",
-          "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r024",
-              "text": "[keep] unchanged, re-approve after anchor touch"
-            }
-          ],
-          "reference": "hut#mono",
-          "chosen": {
-            "run": "r024",
-            "variant": "keep"
-          },
-          "content_hash": "555b3bfa6112bacdd7c02f669128ca615854927d293d1280b4faa40f81767901"
-        },
-        "color": {
-          "style": "flat-color",
-          "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r010",
-              "text": "[a2] rated 2/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a1] rated 5/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a2] rated 3/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a1] rated 7/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a2] rated 8/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a4] rated 3/10"
-            },
-            {
-              "round": "r018",
-              "text": "[a1] rated 3/10"
-            },
-            {
-              "round": "r018",
-              "text": "[a2] rated 5/10"
-            },
-            {
-              "round": "r020",
-              "text": "[a1] rated 6/10"
-            },
-            {
-              "round": "r020",
-              "text": "[a2] rated 8/10"
-            },
-            {
-              "round": "r020",
-              "text": "[a3] rated 3/10"
-            }
-          ],
-          "reference": "hut#color",
-          "note": "Change door color. Different color for the roof",
-          "chosen": {
-            "run": "r020",
-            "variant": "a2"
-          },
-          "content_hash": "c327f86323ed1189da25f1dda7b9fb75165a7e2e3f8042d426f1c16ee724932d"
+          "content_hash": "afea501fafc10770a4094e6c546bc54239631cbb177e2afeaaa78af8c012074d"
         },
         "primitive": {
           "link": "hut#primitive"
         }
       },
-      "main_color": "#333a3f",
-      "note": "Window does not look good. Maybe just large door. Smoother. Different color for roofs"
+      "main_color": "#346751",
+      "colors": ["#265c54", "#f4bc5c", "#296554", "#fabb47"]
     },
-    "campgr": {
-      "brief": "Campground: tent on pitch with tree",
+    "alp": {
+      "brief": "An alp — a working mountain farm offering overnight accommodation, often serving its own farm products; not open year-round",
       "variants": {
         "mono": {
-          "style": "filled",
+          "style": "mono-filled",
           "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r024",
-              "text": "[keep] unchanged, re-approve after anchor touch"
-            }
-          ],
-          "reference": "hut#mono",
           "chosen": {
-            "run": "r024",
-            "variant": "keep"
+            "run": "r005",
+            "variant": "c1"
           },
-          "content_hash": "f68691b74ad8e24fde44d63c7dc6473d0b7dfab19d42a7eb3aa65223fb6f62d8"
+          "content_hash": "d4053e4c01b0d884259341b5d7e1e3f360bb2c3eb8d8c1a816bff0f140622d96"
         },
         "color": {
-          "style": "flat-color",
+          "style": "color-flat",
           "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r010",
-              "text": "[a2] rated 4/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a2] rated 6/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a1] rated 7/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a3] rated 7/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a2] rated 4/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a1] rated 7/10"
-            },
-            {
-              "round": "r018",
-              "text": "[a1] rated 7/10"
-            },
-            {
-              "round": "r018",
-              "text": "[a2] rated 3/10"
-            },
-            {
-              "round": "r020",
-              "text": "[a1] rated 7/10"
-            },
-            {
-              "round": "r020",
-              "text": "[a2] rated 3/10"
-            },
-            {
-              "round": "r020",
-              "text": "[a1] rated 7/10"
-            },
-            {
-              "round": "r021",
-              "text": "[a4] rated 4/10"
-            },
-            {
-              "round": "r021",
-              "text": "[a1] rated 8/10"
-            },
-            {
-              "round": "r021",
-              "text": "[a5] rated 5/10"
-            }
-          ],
-          "reference": "hut#color",
-          "note": "Smaller tent.",
           "chosen": {
-            "run": "r021",
-            "variant": "a1"
+            "run": "r006",
+            "variant": "r7"
           },
-          "content_hash": "dead3ce43d7d29a612a400746693a203ccf9952df8be580106187f3c2503e2e0"
+          "content_hash": "646a75ceadfe948e20883cb5dc00e887d79b8bce1ada753b9094783997fcd792"
         },
         "primitive": {
-          "style": "primitive",
-          "status": "approved",
-          "rejected_ideas": [
-            "redo toward rounded amber family (hut anchor)",
-            "keep imported primitive"
-          ],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r024",
-              "text": "keep imported primitive"
-            },
-            {
-              "round": "r024",
-              "text": "[keep] imported primitive retained per owner"
-            }
-          ],
-          "reference": "hut#primitive",
-          "chosen": {
-            "run": "r024",
-            "variant": "keep"
-          },
-          "content_hash": "c0ffec2e249f66109e2e5e2e5a045ed77b79b8b9369696f2c5c0e2ae2b902274"
+          "link": "hut#primitive"
         }
       },
-      "main_color": "#21ab5d",
-      "note": "No tree, more like a tarp?"
+      "main_color": "#346751",
+      "colors": ["#22534f", "#f6bd49", "#d29a2c", "#265c54", "#f4bc5c"]
     },
-    "camping": {
-      "brief": "Camping site: tent",
+    "bhotel": {
+      "brief": "A basic hotel — simple, non-luxurious, affordable lodging, usually a mountain hotel; often with a dormitory (Massenlager) besides private rooms",
       "variants": {
         "mono": {
-          "style": "filled",
+          "style": "mono-filled",
           "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r024",
-              "text": "[keep] unchanged, re-approve after anchor touch"
-            }
-          ],
-          "reference": "hut#mono",
           "chosen": {
-            "run": "r024",
-            "variant": "keep"
+            "run": "r005",
+            "variant": "c1"
           },
-          "content_hash": "47ca6b0cd66c8d5d83ee609a69eb802610db67be767424b98f19aee3e665828c"
+          "content_hash": "a129ca2c46dfb58dbe02ea16c0ef27f675a5d6d1a74639092dd5b260d23ab221"
         },
         "color": {
-          "style": "flat-color",
+          "style": "color-flat",
           "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r010",
-              "text": "[a1] rated 6/10"
-            },
-            {
-              "round": "r010",
-              "text": "[a2] rated 3/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a2] rated 7/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a1] rated 4/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a2] rated 8/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a1] rated 6/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a3] rated 3/10"
-            },
-            {
-              "round": "r018",
-              "text": "[a2] rated 8/10"
-            },
-            {
-              "round": "r018",
-              "text": "[a1] rated 3/10"
-            },
-            {
-              "round": "r020",
-              "text": "[a1] rated 7/10"
-            }
-          ],
-          "reference": "hut#color",
-          "note": "Improve tent",
           "chosen": {
-            "run": "r020",
-            "variant": "a1"
+            "run": "r006",
+            "variant": "g1"
           },
-          "content_hash": "dedcc60569f8efc60d1dffc14da3571496dcfaddf55bf47098fe2e31c1711900"
-        },
-        "primitive": {
-          "style": "primitive",
-          "status": "approved",
-          "rejected_ideas": [
-            "redo toward rounded amber family (hut anchor)",
-            "keep imported primitive"
-          ],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r024",
-              "text": "keep imported primitive"
-            },
-            {
-              "round": "r024",
-              "text": "[keep] imported primitive retained per owner"
-            }
-          ],
-          "reference": "hut#primitive",
-          "chosen": {
-            "run": "r024",
-            "variant": "keep"
-          },
-          "content_hash": "334471834856cd2bbfc574bdae505deffcc14c496592f551133cefa7bd9ff172"
-        }
-      },
-      "main_color": "#3f9da2"
-    },
-    "closed": {
-      "brief": "Closed / out of season: accommodation with strike",
-      "variants": {
-        "mono": {
-          "style": "filled",
-          "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r024",
-              "text": "[keep] unchanged, re-approve after anchor touch"
-            }
-          ],
-          "reference": "hut#mono",
-          "chosen": {
-            "run": "r024",
-            "variant": "keep"
-          },
-          "content_hash": "dcb5b8c6d45607eb96dbeecdce18de251cb269b99061fa47ae6d375a4944fd7a"
-        },
-        "color": {
-          "style": "flat-color",
-          "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r013",
-              "text": "[a2] rated 7/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a1] rated 3/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a3] rated 6/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a1] rated 1/10"
-            },
-            {
-              "round": "r018",
-              "text": "[a1] rated 6/10"
-            },
-            {
-              "round": "r018",
-              "text": "[a2] rated 3/10"
-            }
-          ],
-          "reference": "hut#color",
-          "note": "Different shape. Very simple",
-          "chosen": {
-            "run": "r020",
-            "variant": "a1"
-          },
-          "content_hash": "abda0500baf294ab76942e425eb632451dec71fd4fdc453a86a2ebee3d37ec97"
-        },
-        "primitive": {
-          "style": "primitive",
-          "status": "approved",
-          "rejected_ideas": [
-            "redo toward rounded amber family (hut anchor)",
-            "keep imported primitive"
-          ],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r024",
-              "text": "keep imported primitive"
-            },
-            {
-              "round": "r024",
-              "text": "[keep] imported primitive retained per owner"
-            }
-          ],
-          "reference": "hut#primitive",
-          "chosen": {
-            "run": "r024",
-            "variant": "keep"
-          },
-          "content_hash": "b4830498b6b89707ca6904a0b36518896ecace6d93f8df2501eefd775707041b"
-        }
-      },
-      "main_color": "#575757",
-      "note": "More hut shape, but with cross, closed over it .."
-    },
-    "hostel": {
-      "brief": "Hostel: building with bed mark",
-      "variants": {
-        "mono": {
-          "style": "filled",
-          "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r024",
-              "text": "[keep] unchanged, re-approve after anchor touch"
-            }
-          ],
-          "reference": "hut#mono",
-          "chosen": {
-            "run": "r024",
-            "variant": "keep"
-          },
-          "content_hash": "5c909fdadd6e7e5384b35b883822ce6585b789b7b45c51bc643af9a64395dbbb"
-        },
-        "color": {
-          "style": "flat-color",
-          "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r010",
-              "text": "[a1] rated 6/10"
-            },
-            {
-              "round": "r010",
-              "text": "[a2] rated 3/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a1] rated 7/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a2] rated 3/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a1] rated 8/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a2] rated 7/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a3] rated 4/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a4] rated 4/10"
-            },
-            {
-              "round": "r018",
-              "text": "[a1] rated 4/10"
-            }
-          ],
-          "reference": "hut#color",
-          "note": "",
-          "chosen": {
-            "run": "r020",
-            "variant": "a3"
-          },
-          "content_hash": "4fc49c16453272a408480ab6b4a573f40a50898a7cef0a52ef4bdeb9f47c71b8"
+          "content_hash": "455fb65bc216fcd839d9ca184672ae445eb7ad80e02ff7ea4f1e6a83d0241080"
         },
         "primitive": {
           "link": "hotel#primitive"
         }
       },
       "main_color": "#2673bf",
-      "note": "Improve smoothness and colors"
+      "colors": ["#0177be", "#6cbde9", "#14a6db", "#bbd5e8", "#eaebeb"]
     },
-    "hotel": {
-      "brief": "Hotel: multi-storey building with star",
+    "bivouac": {
+      "brief": "A bivouac (Biwak) — a small, fixed, remote metal shelter capsule sleeping only a few; unlocked, free, first-come first-served; an overnight base for climbs and ski tours, often high up with a hard approach",
       "variants": {
         "mono": {
-          "style": "filled",
+          "style": "mono-filled",
           "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r024",
-              "text": "[keep] unchanged, re-approve after anchor touch"
-            }
-          ],
-          "reference": "hut#mono",
           "chosen": {
-            "run": "r024",
-            "variant": "keep"
+            "run": "r005",
+            "variant": "s1"
           },
-          "content_hash": "afcf4757439d855754c55960ffafdcfd8114e8afb1b1b5126e14c241708407c4"
+          "content_hash": "96476fae13b7ef815665801f223cbb85373ed8c6d60eb05d90a3cc821e7ae41b"
         },
         "color": {
-          "style": "flat-color",
+          "style": "color-flat",
           "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r010",
-              "text": "[a1] rated 7/10"
-            },
-            {
-              "round": "r010",
-              "text": "[a2] rated 3/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a3] rated 3/10"
-            },
-            {
-              "round": "r018",
-              "text": "[a2] rated 4/10"
-            },
-            {
-              "round": "r018",
-              "text": "[a1] rated 5/10"
-            }
-          ],
-          "reference": "hut#color",
-          "note": "Add windows",
           "chosen": {
-            "run": "r021",
-            "variant": "a3"
+            "run": "r006",
+            "variant": "g1"
           },
-          "content_hash": "679c795f0261fe3f165ea79d63cb8f8585c9dc96705ff68cfb9017c26f44ab39"
-        },
-        "primitive": {
-          "style": "primitive",
-          "status": "approved",
-          "rejected_ideas": [
-            "redo toward rounded amber family (hut anchor)",
-            "keep imported primitive"
-          ],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r024",
-              "text": "keep imported primitive"
-            },
-            {
-              "round": "r024",
-              "text": "[keep] imported primitive retained per owner"
-            }
-          ],
-          "reference": "hut#primitive",
-          "chosen": {
-            "run": "r024",
-            "variant": "keep"
-          },
-          "content_hash": "d3a32244ece14e6d0962f44b4e9c9b44943807dfd96db4d1f632e2ddf86bf1e2"
-        }
-      },
-      "main_color": "#29626b",
-      "note": "Does not look to much like a hotel. Check current version .."
-    },
-    "hut": {
-      "brief": "Staffed alpine hut: gabled roof, door, small window",
-      "main_color": "#c3731f",
-      "variants": {
-        "mono": {
-          "style": "filled",
-          "status": "approved",
-          "comments": [
-            {
-              "round": "pr314",
-              "text": "redo toward outline family (mono-line)"
-            },
-            {
-              "round": "r002",
-              "text": "owner: r002 trio not good enough yet — modernize in r003"
-            },
-            {
-              "round": "r003",
-              "text": "[a2] rated 8/10"
-            },
-            {
-              "round": "r003",
-              "text": "[a1] rated 3/10"
-            },
-            {
-              "round": "r003",
-              "text": "[a5] rated 7/10"
-            },
-            {
-              "round": "r004",
-              "text": "[a1] rated 7/10"
-            },
-            {
-              "round": "r004",
-              "text": "[a2] rated 6/10"
-            },
-            {
-              "round": "r004",
-              "text": "[a4] rated 4/10"
-            },
-            {
-              "round": "r024",
-              "text": "[keep] hand-edited anchor re-approved as-is"
-            }
-          ],
-          "content_hash": "90a38a8a8798a3d2e8afb7a640c6aed9287f919c28ed20086b9f30deee81b025",
-          "chosen": {
-            "run": "r024",
-            "variant": "keep"
-          }
-        },
-        "color": {
-          "style": "flat-color",
-          "status": "approved",
-          "comments": [
-            {
-              "round": "pr314",
-              "text": "redo toward outline family (lineal-color)"
-            },
-            {
-              "round": "r002",
-              "text": "owner: r002 trio not good enough yet — modernize in r003"
-            },
-            {
-              "round": "r003",
-              "text": "[a1] rated 7/10"
-            },
-            {
-              "round": "r003",
-              "text": "[a2] rated 7/10"
-            },
-            {
-              "round": "r003",
-              "text": "[a3] rated 7/10"
-            },
-            {
-              "round": "r003",
-              "text": "[a4] rated 2/10"
-            },
-            {
-              "round": "r003",
-              "text": "[a5] rated 8/10"
-            },
-            {
-              "round": "r004",
-              "text": "[a1] rated 8/10"
-            },
-            {
-              "round": "r004",
-              "text": "[a2] rated 6/10"
-            },
-            {
-              "round": "r004",
-              "text": "[a3] rated 2/10"
-            },
-            {
-              "round": "r004",
-              "text": "[a4] rated 6/10"
-            },
-            {
-              "round": "r006",
-              "text": "[a3] rated 8/10"
-            },
-            {
-              "round": "r006",
-              "text": "[a1] rated 7/10"
-            },
-            {
-              "round": "r006",
-              "text": "a3 is close. Improve windows.."
-            }
-          ],
-          "content_hash": "d4dc8caffc87bfb0e100a64a8c2a6bb036e401da5590db7ef6c2face0d2f84d7",
-          "chosen": {
-            "run": "r008",
-            "variant": "a2"
-          }
-        },
-        "primitive": {
-          "style": "primitive",
-          "status": "approved",
-          "comments": [
-            {
-              "round": "pr314",
-              "text": "redo toward outline family (primitive marker)"
-            },
-            {
-              "round": "r002",
-              "text": "owner: r002 trio not good enough yet — modernize in r003"
-            },
-            {
-              "round": "r003",
-              "text": "[a4] rated 8/10"
-            },
-            {
-              "round": "r003",
-              "text": "[a1] rated 8/10"
-            }
-          ],
-          "chosen": {
-            "run": "r003",
-            "variant": "a4"
-          },
-          "content_hash": "29b8f6ff06b47e464d1048d4cec292bf01ddb95cd80eb4a6eecbe9a0123405d6"
-        }
-      }
-    },
-    "resta": {
-      "brief": "Restaurant at accommodation: building with cutlery",
-      "variants": {
-        "mono": {
-          "style": "filled",
-          "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r024",
-              "text": "[keep] unchanged, re-approve after anchor touch"
-            }
-          ],
-          "reference": "hut#mono",
-          "chosen": {
-            "run": "r024",
-            "variant": "keep"
-          },
-          "content_hash": "8ed5ff0c900d2ce5f7205816bdc545dc5f8c1f664ebda406a20aa6b537d6751b"
-        },
-        "color": {
-          "style": "flat-color",
-          "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r013",
-              "text": "[a4] rated 8/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a3] rated 6/10"
-            },
-            {
-              "round": "r018",
-              "text": "[a1] rated 4/10"
-            },
-            {
-              "round": "r020",
-              "text": "[a2] rated 7/10"
-            }
-          ],
-          "reference": "hut#color",
-          "note": "Add walls, improve colors.",
-          "chosen": {
-            "run": "r020",
-            "variant": "a2"
-          },
-          "content_hash": "bf853006a90ea62a663013f13b06c889d7e4481cc0c8a2db04359d74d32e18e0"
-        },
-        "primitive": {
-          "style": "primitive",
-          "status": "approved",
-          "rejected_ideas": [
-            "redo toward rounded amber family (hut anchor)",
-            "keep imported primitive"
-          ],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r024",
-              "text": "keep imported primitive"
-            },
-            {
-              "round": "r024",
-              "text": "[keep] imported primitive retained per owner"
-            }
-          ],
-          "reference": "hut#primitive",
-          "chosen": {
-            "run": "r024",
-            "variant": "keep"
-          },
-          "content_hash": "7cf42d70b2951a363a7d1be6d29d7ea9ef9fabba507b9c5c3f55e1879fb13762"
-        }
-      },
-      "main_color": "#bf211e",
-      "note": "Show better version"
-    },
-    "selfhut": {
-      "brief": "Self-catering hut: hut with cutlery mark, unstaffed",
-      "variants": {
-        "mono": {
-          "style": "filled",
-          "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r024",
-              "text": "[keep] unchanged, re-approve after anchor touch"
-            }
-          ],
-          "reference": "hut#mono",
-          "chosen": {
-            "run": "r024",
-            "variant": "keep"
-          },
-          "content_hash": "f532b682be8d313b178acfb2aa8f922ddd26d21f4a27706538baedc15ef7fc91"
-        },
-        "color": {
-          "style": "flat-color",
-          "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r013",
-              "text": "[a3] rated 8/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a4] rated 5/10"
-            },
-            {
-              "round": "r018",
-              "text": "[a2] rated 3/10"
-            },
-            {
-              "round": "r018",
-              "text": "[a1] rated 6/10"
-            },
-            {
-              "round": "r020",
-              "text": "[a1] rated 7/10"
-            },
-            {
-              "round": "r020",
-              "text": "[a2] rated 7/10"
-            }
-          ],
-          "reference": "hut#color",
-          "note": "More shelterig ..",
-          "chosen": {
-            "run": "r020",
-            "variant": "a2"
-          },
-          "content_hash": "5b5b94a4e84667e01eb0b01e6ed131ba6b98acfa1b85edbed7572ef3abd409c7"
+          "content_hash": "acf430117bc4bcbab272b7a07be9e0af7463fe24136768985be06fd067e12044"
         },
         "primitive": {
           "link": "hut#primitive"
         }
       },
-      "main_color": "#c3731f",
-      "note": "Simplify this building..\nMust look like a building. Sumiliar to bivacu, but proper roof and different colors"
+      "main_color": "#abcff2",
+      "colors": ["#ffffff", "#6cbde9", "#e3e2e1", "#bbd5e8", "#c6c6c5"]
+    },
+    "campgr": {
+      "brief": "A wild camp (Biwakplatz) — open terrain where sleeping out is possible for a night, with no infrastructure and no built shelter",
+      "variants": {
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r005",
+            "variant": "c1"
+          },
+          "content_hash": "b74138af9ff64f68dad306fa08186f3c7b1f603e1f64c6f6c72d2e1f2db2f290"
+        },
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r006",
+            "variant": "r2"
+          },
+          "content_hash": "ccff360eda9359cb86bc62f4dd16b1617fe3f1cdfd70b87c2bdb771ba7b67bb9"
+        },
+        "primitive": {
+          "link": "camping#primitive"
+        }
+      },
+      "main_color": "#8fd6b7",
+      "colors": ["#a0c49a", "#296554"]
+    },
+    "camping": {
+      "brief": "A campground (Campingplatz) — a managed campsite with infrastructure: pitches for tents and basic facilities",
+      "variants": {
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r005",
+            "variant": "c1"
+          },
+          "content_hash": "bdc887c0c0e319d0b1c643241dbe5c39585bf89565fe91925f2806f83091204c"
+        },
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r006",
+            "variant": "r3"
+          },
+          "content_hash": "f4753788c0a06aa2a7b4679efc47dc3f8eb503f380975394d2ac7fbf77c5b243"
+        },
+        "primitive": {
+          "style": "mono-primitive",
+          "status": "approved",
+          "chosen": {
+            "run": "r007",
+            "variant": "v0"
+          },
+          "content_hash": "1a41c297734d849d7671d6cc8410e0df46e0f2bb94f8fe5c966b9f75035e1a7e"
+        }
+      },
+      "main_color": "#bfab25",
+      "colors": ["#f4bc5c", "#e1b35d", "#265c54", "#fabb47", "#d39f35"]
+    },
+    "closed": {
+      "brief": "A closed accommodation — shut and unusable, offering no emergency shelter; typically out of season",
+      "variants": {
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r005",
+            "variant": "c1"
+          },
+          "content_hash": "1b7e13d49c3ab5fd74a6c89ae90f09dd9dd11378dc98cf7d33d95ea29cbe6a54"
+        },
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r006",
+            "variant": "r4"
+          },
+          "content_hash": "2b654b2694c9326fe663b113e7b321f32225c430267bd25a7dc0f85a56072764"
+        },
+        "primitive": {
+          "style": "mono-primitive",
+          "status": "approved",
+          "chosen": {
+            "run": "r007",
+            "variant": "v0"
+          },
+          "content_hash": "2e7efd05cfee807342fba19290d8f52309ce8ff178ad44b009c05c8ad487b1aa"
+        }
+      },
+      "main_color": "#bf211e",
+      "colors": ["#e23740", "#9a9a9a", "#615d6b", "#265c54", "#64666c"]
+    },
+    "hostel": {
+      "brief": "A hostel (Jugendherberge) — budget lodging built around shared dormitories and communal spaces; includes youth hostels and gîtes",
+      "variants": {
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r005",
+            "variant": "c1"
+          },
+          "content_hash": "9638116d0633a5722b44bc3f838f4a04f9464936959b8f0ea00135750f4184ae"
+        },
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r006",
+            "variant": "c1"
+          },
+          "content_hash": "8088a371e95005857be08fe42b11be2aa1cef7c7c94cff766802c84cae60c5c4"
+        },
+        "primitive": {
+          "link": "hotel#primitive"
+        }
+      },
+      "main_color": "#2673bf",
+      "colors": ["#14a6db", "#88c0c6", "#eaebeb", "#027ec4", "#296554"]
+    },
+    "hotel": {
+      "brief": "A hotel — lodging with private rooms, service and comfort",
+      "variants": {
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r005",
+            "variant": "c1"
+          },
+          "content_hash": "7e64c7f7c1ba498febc471208b29f5f3e424ad935441c72fcdaef3640eb4308e"
+        },
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r006",
+            "variant": "r7"
+          },
+          "content_hash": "ad3319c7a9b45e560e208ad6b38c9f84290016542de27936677cdfa40a4c315a"
+        },
+        "primitive": {
+          "style": "mono-primitive",
+          "status": "approved",
+          "chosen": {
+            "run": "r007",
+            "variant": "v0"
+          },
+          "content_hash": "78b57767648b35c06f4cb56a156900d823b891adda1b0a6524b9965bb0b48af3"
+        }
+      },
+      "main_color": "#2673bf",
+      "colors": ["#027ec4", "#2597d1", "#2d2e32", "#fabb47", "#68c6f7"]
+    },
+    "hut": {
+      "brief": "A staffed mountain hut (Hütte, Cabane, Rifugio) — warden-run lodging with dormitory beds and cooked meals; may be unstaffed off-season.",
+      "main_color": "#346751",
+      "variants": {
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r005",
+            "variant": "c1"
+          },
+          "content_hash": "9d98eec4ce83ce36e95cc27199339b1801fa1fc5979cefbfa9210a3874790f6b"
+        },
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r006",
+            "variant": "r7"
+          },
+          "content_hash": "876dfbe248aa62a0fbc12ac3c6d81a4b7876b0b6862ae3e7d76955c031be534c"
+        },
+        "primitive": {
+          "style": "mono-primitive",
+          "status": "approved",
+          "chosen": {
+            "run": "r007",
+            "variant": "v0"
+          },
+          "content_hash": "8c258f8bc7b81153cf9fd05ca700afea0f7192ee77f86be20fde6b1bc93cd54a"
+        }
+      },
+      "colors": ["#775b44", "#22534f", "#f6bd49", "#e3e2e1", "#265c54"]
+    },
+    "selfhut": {
+      "brief": "A self-catering hut (unbewartete Hütte) — unstaffed but usually well equipped, with beds and a kitchen for guests' own provisions; often smaller than a staffed hut",
+      "variants": {
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r005",
+            "variant": "c1"
+          },
+          "content_hash": "249899ec18d9d14382491702b0e7e4c3d79c0d9d7a932798927e95132886048f"
+        },
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r006",
+            "variant": "r8"
+          },
+          "content_hash": "867ecf640662155cd6886e7eff4c10287a7b02ff3939182e52b9f0a97ae21ea8"
+        },
+        "primitive": {
+          "link": "hut#primitive"
+        }
+      },
+      "main_color": "#408c6b",
+      "colors": ["#318178", "#7e614d", "#f4bc5c", "#7a593a", "#694b31"]
     },
     "shelter": {
-      "brief": "Shelter: open-front roof, wind protection",
+      "brief": "A basic weather shelter (einfacher Unterstand) — a simple roofed refuge from the elements, without much infrastructure",
       "variants": {
         "mono": {
-          "style": "filled",
+          "style": "mono-filled",
           "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r024",
-              "text": "[keep] unchanged, re-approve after anchor touch"
-            }
-          ],
-          "reference": "hut#mono",
           "chosen": {
-            "run": "r024",
-            "variant": "keep"
+            "run": "r005",
+            "variant": "s1"
           },
-          "content_hash": "9990229d0acb0db5ef71db42b49d418545f21b564300a696ddeeeb5543330b6c"
+          "content_hash": "44b65d22381c1bbba4655af872a7a2f22ffbe8652a4beb501b52d8007885ac1d"
         },
         "color": {
-          "style": "flat-color",
+          "style": "color-flat",
           "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r010",
-              "text": "[a1] rated 6/10"
-            },
-            {
-              "round": "r010",
-              "text": "[a2] rated 3/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a2] rated 7/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a1] rated 6/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a1] rated 8/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a2] rated 9/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a3] rated 2/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a4] rated 4/10"
-            },
-            {
-              "round": "r018",
-              "text": "[a1] rated 2/10"
-            },
-            {
-              "round": "r018",
-              "text": "[a2] rated 7/10"
-            }
-          ],
-          "reference": "hut#color",
-          "note": "Improve root over walls. Add background",
           "chosen": {
-            "run": "r020",
-            "variant": "a2"
+            "run": "r006",
+            "variant": "v0"
           },
-          "content_hash": "55be7797f636febe96f14237abed2bb7d5720deddcc2d7cee11f21d4810ca4a1"
+          "content_hash": "528d287d0a93bb7e4721daf8d62cf3f93c5ffb8d54b18bdc143146c8d94495bc"
         },
         "primitive": {
-          "style": "primitive",
-          "status": "approved",
-          "rejected_ideas": [
-            "redo toward rounded amber family (hut anchor)",
-            "keep imported primitive"
-          ],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r024",
-              "text": "keep imported primitive"
-            },
-            {
-              "round": "r024",
-              "text": "[keep] imported primitive retained per owner"
-            }
-          ],
-          "reference": "hut#primitive",
-          "chosen": {
-            "run": "r024",
-            "variant": "keep"
-          },
-          "content_hash": "f3151f400490f48a6e0d55851799af14db75e6118ea5fb2108a112d5d487e5d4"
+          "link": "camping#primitive"
         }
       },
-      "main_color": "#29626b",
-      "note": "Improve colors"
+      "main_color": "#7d5a3c",
+      "colors": ["#775b44", "#99c6a7", "#478965", "#ffffff", "#7a593a"]
     },
     "special": {
-      "brief": "Special accommodation: generic mark",
+      "brief": "A special overnight accommodation — a distinctive lodging that fits no other category",
       "variants": {
         "mono": {
-          "style": "filled",
+          "style": "mono-filled",
           "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r024",
-              "text": "[keep] unchanged, re-approve after anchor touch"
-            }
-          ],
-          "reference": "hut#mono",
           "chosen": {
-            "run": "r024",
-            "variant": "keep"
+            "run": "r005",
+            "variant": "c1"
           },
-          "content_hash": "15b3b05d40f2ac54e7cc5a5c525bbf71769c732ffe547e28a52bcc8912ca8bb6"
+          "content_hash": "2a3d706d3d97939b0f66cb1e14594b337cad127ac0c1065bb82b12db0c678378"
         },
         "color": {
-          "style": "flat-color",
+          "style": "color-flat",
           "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r013",
-              "text": "[a4] rated 8/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a3] rated 7/10"
-            },
-            {
-              "round": "r018",
-              "text": "[a2] rated 7/10"
-            },
-            {
-              "round": "r018",
-              "text": "[a1] rated 5/10"
-            },
-            {
-              "round": "r020",
-              "text": "[a1] rated 6/10"
-            },
-            {
-              "round": "r020",
-              "text": "[a2] rated 6/10"
-            },
-            {
-              "round": "r020",
-              "text": "[a1] rated 7/10"
-            },
-            {
-              "round": "r020",
-              "text": "[a2] rated 6/10"
-            },
-            {
-              "round": "r021",
-              "text": "[a4] rated 9/10"
-            },
-            {
-              "round": "r021",
-              "text": "[a1] rated 7/10"
-            },
-            {
-              "round": "r021",
-              "text": "[a1] rated 6/10"
-            }
-          ],
-          "reference": "hut#color",
-          "note": "Looks to similar to a tent",
           "chosen": {
-            "run": "r021",
-            "variant": "a4"
+            "run": "r006",
+            "variant": "r8"
           },
-          "content_hash": "997d658eddb7cea84e0ea396978a8a74bee9b252d2ab6b8a590744793d7d0a69"
+          "content_hash": "8b75f807c453aadf38e5891e12f75c0329e7f2fbf6ee710919734daf4f25f2b9"
         },
         "primitive": {
-          "style": "primitive",
+          "style": "mono-primitive",
           "status": "approved",
-          "rejected_ideas": [
-            "redo toward rounded amber family (hut anchor)",
-            "keep imported primitive"
-          ],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r024",
-              "text": "keep imported primitive"
-            },
-            {
-              "round": "r024",
-              "text": "[keep] imported primitive retained per owner"
-            }
-          ],
-          "reference": "hut#primitive",
           "chosen": {
-            "run": "r024",
-            "variant": "keep"
+            "run": "r007",
+            "variant": "p2"
           },
-          "content_hash": "30227d21254459897527a8e014bfb9f76f38228930b05a692f8879b2e1f5b989"
+          "content_hash": "fcd81badc90d85f7d44e590f4cb9a87138186e4a29daa0c47bca1104c1253ee2"
         }
       },
-      "main_color": "#bfab25"
+      "main_color": "#9dd9d2",
+      "colors": ["#12a5bc", "#145a6f", "#f6bd49", "#12688b", "#f4bc5c"]
     },
     "unknown": {
-      "brief": "Unknown type: question mark over shelter",
+      "brief": "An accommodation whose specific type could not be determined",
       "variants": {
         "mono": {
-          "style": "filled",
+          "style": "mono-filled",
           "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r024",
-              "text": "[keep] unchanged, re-approve after anchor touch"
-            }
-          ],
-          "reference": "hut#mono",
           "chosen": {
-            "run": "r024",
-            "variant": "keep"
+            "run": "r005",
+            "variant": "c1"
           },
-          "content_hash": "ed3247fb0c4faa26cb11ee87b9503715a990303dbe2c5ed6c7a838653ff20109"
+          "content_hash": "72401d0d0dc8fb420fa180e339a25c3bd27b69ee0a7bd7ff81009c7c39a1c3f4"
         },
         "color": {
-          "style": "flat-color",
+          "style": "color-flat",
           "status": "approved",
-          "rejected_ideas": ["redo toward rounded amber family (hut anchor)"],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r010",
-              "text": "[a2] rated 3/10"
-            },
-            {
-              "round": "r013",
-              "text": "[a4] rated 8/10"
-            },
-            {
-              "round": "r018",
-              "text": "[a2] rated 8/10"
-            },
-            {
-              "round": "r020",
-              "text": "[a3] rated 6/10"
-            },
-            {
-              "round": "r020",
-              "text": "[a1] rated 4/10"
-            },
-            {
-              "round": "r021",
-              "text": "[a2] rated 8/10"
-            },
-            {
-              "round": "r021",
-              "text": "[a2] rated 7/10"
-            }
-          ],
-          "reference": "hut#color",
-          "note": "Add background",
           "chosen": {
-            "run": "r021",
-            "variant": "a4"
+            "run": "r006",
+            "variant": "r8"
           },
-          "content_hash": "734c9ff3974de90c8b2e8468db13c538a01e5e6fa61f6269fc39112231032b53"
+          "content_hash": "e600fb2de6237576c87b9838ad150f3e48ec9d3b74feb64a780844d8b556755e"
         },
         "primitive": {
-          "style": "primitive",
+          "style": "mono-primitive",
           "status": "approved",
-          "rejected_ideas": [
-            "redo toward rounded amber family (hut anchor)",
-            "keep imported primitive"
-          ],
-          "comments": [
-            {
-              "round": "r008",
-              "text": "redo toward rounded amber family (hut anchor)"
-            },
-            {
-              "round": "r024",
-              "text": "keep imported primitive"
-            },
-            {
-              "round": "r024",
-              "text": "[keep] imported primitive retained per owner"
-            }
-          ],
-          "reference": "hut#primitive",
           "chosen": {
-            "run": "r024",
-            "variant": "keep"
+            "run": "r007",
+            "variant": "v0"
           },
-          "content_hash": "359744d1454323db1f1276a3e09f3d658619dabf72e1e7f834bb2aba43b07883"
+          "content_hash": "7da589cdd84b0f5fe7f11f36665da49b4e5c798e01daed23a64cf0f002a9ddd6"
         }
       },
       "main_color": "#575757",
-      "note": "Use simple/primitive hut shape"
+      "colors": ["#8c8b8a", "#e3e2e1", "#12a5bc", "#eaebeb", "#c6c6c5"]
+    },
+    "restaurant": {
+      "brief": "A restaurant (Restaurant/Gaststätte) — serves meals but offers no overnight accommodation",
+      "variants": {
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r005",
+            "variant": "c1"
+          },
+          "content_hash": "2ff315616300c91adeb154f4507ba7b988994e3f08dfd31792d6f7794b25e316"
+        },
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r006",
+            "variant": "s1"
+          },
+          "content_hash": "31233cc7b92a8fcbbb44bbe51bf4143ec2a7c499b1d7f186ee0fbae1da672039"
+        },
+        "primitive": {
+          "link": "hotel#primitive"
+        }
+      },
+      "main_color": "#3f9da2",
+      "colors": ["#4fa7a2", "#fabb47", "#99cfd2", "#e1e0df"]
     }
   },
-  "rev": 76,
-  "note": "Keep modern look. Use radius, smooth corners for color version. Use hut color as guide line.",
-  "rules": []
+  "rev": 157,
+  "note": "Shape clusters and color families are two separate axes. Shape anchors: hut (hut family: accommodation, alp, selfhut, bivouac), hotel (building family: bhotel, hostel, restaurant), camping (tent family: campgr) — match the anchor's mass and corner habit. Color families: forest greens = hut family, glacier blues = building family, meadow gold = camping, wood = shelter, mid turquoise = restaurant, glacier-blue ice = bivouac, forest-ice = campgr (wild overnight family — pale mains glow on dark), gray = unknown, red = closed only.",
+  "rules": [],
+  "recraft": {
+    "model": "recraftv4_vector",
+    "n": 4,
+    "style_ids": {
+      "color-flat": "e1ff2162-b11e-4738-aa76-5555aada0fbf"
+    }
+  },
+  "feedback": []
 }
