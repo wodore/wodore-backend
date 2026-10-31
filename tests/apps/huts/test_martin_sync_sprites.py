@@ -2,11 +2,12 @@
 
 The category tree gained map super-roots (geometries migration 0067:
 ``map → super-root (amenity/admin/natural) → contract group → kind``).
-The sprite walk must keep serving one collection per CONTRACT GROUP
+The sprite walk serves ONE collection per contract group
 (``sprites/accommodation/…``, ``sprites/transport/…`` — the names the
 served styles reference, e.g. ``/sprite/accommodation,availability`` in
-basemaps ``seed_lib``) instead of collapsing everything under the
-``map`` namespace root. These tests pin the post-restructure layout.
+basemaps ``seed_lib``). Icon names are the tree path below ``map``
+(``amenity.accommodation.hut``) — vocabulary roots and the map root /
+super-roots own no collection. These tests pin that layout.
 
 pytest-function style on purpose: the tmp-media fixture (keeps symbol
 SVGs out of the repo checkout) is an autouse pytest fixture and does
@@ -81,6 +82,7 @@ def map_tree(db: None) -> dict[str, Category]:
     accommodation = category("accommodation", amenity)
     hut = category("hut", accommodation)
     transport = category("transport", amenity)
+    # vocabulary root — must NOT become a sprite collection anymore
     spot = category("spot", None)
     castle = category("castle", spot)
     return {
@@ -111,30 +113,30 @@ def test_contract_group_is_its_own_collection(
     stats, _ = _run_sync(tmp_path)
 
     sprites = tmp_path / "sprites"
-    assert (sprites / "accommodation/color/root.accommodation.svg").is_file()
-    assert (sprites / "accommodation/color/accommodation.hut.svg").is_file()
-    assert (sprites / "transport/color/root.transport.svg").is_file()
+    assert (sprites / "accommodation/color/amenity.accommodation.svg").is_file()
+    assert (sprites / "accommodation/color/amenity.accommodation.hut.svg").is_file()
+    assert (sprites / "transport/color/amenity.transport.svg").is_file()
     assert set(stats["sprite_dirs"]) >= {"accommodation", "transport"}
 
 
-def test_group_own_icon_keeps_pre_restructure_name(
+def test_icon_names_are_the_tree_path_below_map(
     tmp_path: Path, map_tree: dict[str, Category]
 ) -> None:
-    """``root.<group>``, not the post-0067 identifier.
-
-    The transport overlay fallback is the literal sprite name
-    ``mono/root.transport`` (basemaps seed_lib) — the walk must not
-    rename it to the group's identifier ``amenity.transport``.
-    """
+    """``<domain>.<group>`` / ``<domain>.<group>.<kind>``, derived from
+    the live tree — a group move between super-roots renames its icons
+    without a martin_sync change (the ``root.<slug>`` era names and the
+    collapsed ``map/`` layout are gone)."""
     _run_sync(tmp_path)
 
     sprites = tmp_path / "sprites"
-    assert (sprites / "transport/color/root.transport.svg").is_file()
-    assert not (sprites / "transport/color/amenity.transport.svg").exists()
-    assert not (sprites / "accommodation/color/amenity.accommodation.svg").exists()
+    # the group's own icon is its identifier: <domain>.<group>
+    assert (sprites / "transport/color/amenity.transport.svg").is_file()
+    # the pre-restructure-era name is gone
+    assert not (sprites / "transport/color/root.transport.svg").exists()
+    assert not (sprites / "accommodation/color/root.accommodation.svg").exists()
 
 
-def test_map_root_and_super_roots_get_no_collection(
+def test_map_root_super_roots_and_vocab_roots_get_no_collection(
     tmp_path: Path, map_tree: dict[str, Category]
 ) -> None:
     stats, _ = _run_sync(tmp_path)
@@ -142,18 +144,9 @@ def test_map_root_and_super_roots_get_no_collection(
     sprites = tmp_path / "sprites"
     assert not (sprites / "map").exists()
     assert not (sprites / "amenity").exists()
-    assert "map" not in stats["sprite_dirs"]
-
-
-def test_vocabulary_root_keeps_collection(
-    tmp_path: Path, map_tree: dict[str, Category]
-) -> None:
-    stats, _ = _run_sync(tmp_path)
-
-    sprites = tmp_path / "sprites"
-    assert (sprites / "spot/color/root.spot.svg").is_file()
-    assert (sprites / "spot/color/spot.castle.svg").is_file()
-    assert "spot" in stats["sprite_dirs"]
+    # vocabulary roots (spot/mode/relations/…) are outside the map tree
+    assert not (sprites / "spot").exists()
+    assert "spot" not in stats["sprite_dirs"]
 
 
 def test_include_filters_collections(
@@ -162,7 +155,7 @@ def test_include_filters_collections(
     stats, _ = _run_sync(tmp_path, include=["accommodation"])
 
     sprites = tmp_path / "sprites"
-    assert (sprites / "accommodation/color/accommodation.hut.svg").is_file()
+    assert (sprites / "accommodation/color/amenity.accommodation.hut.svg").is_file()
     assert not (sprites / "transport").exists()
     assert not (sprites / "spot").exists()
     assert set(stats["sprite_dirs"]) == {"accommodation"}
@@ -179,7 +172,8 @@ def test_cleanup_removes_collapsed_map_dir_and_stale_files(
     stale_map = sprites / "map/color/root.map.svg"
     stale_super = sprites / "map/color/map.amenity.svg"
     stale_kind = sprites / "accommodation/color/accommodation.hotel.svg"
-    for path in (stale_map, stale_super, stale_kind):
+    stale_root_name = sprites / "transport/color/root.transport.svg"
+    for path in (stale_map, stale_super, stale_kind, stale_root_name):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"<svg stale/>")
 
@@ -188,5 +182,6 @@ def test_cleanup_removes_collapsed_map_dir_and_stale_files(
     assert not stale_map.exists()
     assert not stale_super.exists()
     assert not stale_kind.exists()
-    assert (sprites / "accommodation/color/accommodation.hut.svg").is_file()
-    assert stats["files_deleted"] == 3
+    assert not stale_root_name.exists()
+    assert (sprites / "accommodation/color/amenity.accommodation.hut.svg").is_file()
+    assert stats["files_deleted"] == 4

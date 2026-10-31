@@ -48,13 +48,17 @@ _HEADER_ENV_TOKEN_RE = re.compile(r"\$\{([A-Z][A-Z0-9_]*)(?::-[^}]*)?\}")
 
 #: Slug of the map namespace root (geometries migration 0067 seeded the
 #: display tree as ``map → super-root (amenity/admin/natural) → contract
-#: group → kind``). Sprite collections must follow the served styles,
-#: not the tree: they keep the pre-restructure names — one per contract
-#: group (``accommodation``, ``transport``, … — ``CategoryQuerySet.
-#: contract_groups``) plus one per vocabulary root that stayed parentless
-#: (``spot``, ``mode``, ``relations``, ``role``, ``uri``, ``emoji`` …).
-#: The ``map`` root and the super-roots are structural domain anchors
-#: (no style-referenced icons) and own no collection.
+#: group → kind``). Sprite collections follow the served styles, not
+#: the full tree: ONE collection per contract group
+#: (``parent__parent__slug="map"`` — ``accommodation``, ``transport``, …,
+#: ``CategoryQuerySet.contract_groups``), named by its slug. Vocabulary
+#: roots (``spot``, ``mode``, ``relations``, ``role``, ``uri``, ``emoji`` …)
+#: own NO collection (owner decision: nothing outside the map tree is
+#: served as map sprites), nor do the ``map`` root and the super-roots
+#: themselves (structural domain anchors, no style-referenced icons).
+#: Icon names inside a collection are the tree path below ``map`` —
+#: ``<domain>.<group>`` for the group's own icon (its identifier),
+#: ``<domain>.<group>.<kind>`` for kinds.
 _MAP_ROOT_SLUG = "map"
 
 
@@ -119,8 +123,8 @@ class Command(BaseCommand):
             type=str,
             default="",
             help="Comma-separated list of sprite collection slugs to include "
-            "(contract groups like accommodation,transport and vocabulary "
-            "roots like spot). If not specified, all collections are included.",
+            "(contract groups like accommodation,transport). If not "
+            "specified, all collections are included.",
         )
         parser.add_argument(
             "--category-variants",
@@ -307,11 +311,15 @@ class Command(BaseCommand):
         expected_files = set()
 
         for collection, children in collections:
-            # Collection file (root.<slug>) + child files (identifier)
+            # Collection's own icon (<domain>.<group>) + kind icons
+            # (<domain>.<group>.<kind>) — same naming as the sync.
             members: list[tuple[Category, str]] = [
-                (collection, f"root.{collection.slug}.svg")
+                (collection, f"{collection.identifier}.svg")
             ]
-            members += [(child, f"{child.identifier}.svg") for child in children]
+            members += [
+                (child, f"{collection.identifier}.{child.slug}.svg")
+                for child in children
+            ]
 
             for category, filename in members:
                 for variant in variants:
@@ -619,30 +627,23 @@ class Command(BaseCommand):
         category_model: type[Category],
         include_list: list[str] | None,
     ) -> list[tuple[Category, list[Category]]]:
-        """Resolve sprite collections with their direct children.
+        """Resolve sprite collections (contract groups) with their children.
 
-        Both shapes share one contract — "collection + one level of
-        children" — which is exactly the layout the served styles
-        address (``/sprite/accommodation,availability``,
-        ``/sprite/transport``, see basemaps ``seed_lib``):
-
-        * vocabulary roots — parentless categories other than the
-          ``map`` namespace root (``spot``, ``mode``, …);
-        * contract groups — children of the super-roots under ``map``
-          (``accommodation``, ``transport``, …): the pre-``0067`` root
-          categories, still named by their plain slug so style URLs
-          survived the tree restructure.
+        Exactly the shape the served styles address
+        (``/sprite/accommodation,availability``, ``/sprite/transport`` —
+        basemaps ``seed_lib``): every contract group under a super-root
+        (``parent__parent__slug="map"``) with its direct children (the
+        kinds). Vocabulary roots (``spot``, ``mode``, ``relations``, …)
+        own no collection — nothing outside the map tree is served as
+        map sprites. Icon names are derived from the live tree path
+        (see :meth:`_sync_sprites`) so a group moving between domains
+        renames its icons without a martin_sync change.
         """
         queryset = category_model.objects.filter(is_active=True)
 
         collections: list[Category] = list(
-            queryset.filter(parent=None)
-            .exclude(slug=_MAP_ROOT_SLUG)
-            .select_related("symbol_color", "symbol_primitive", "symbol_mono")
-        )
-        collections += list(
             queryset.filter(parent__parent__slug=_MAP_ROOT_SLUG).select_related(
-                "symbol_color", "symbol_primitive", "symbol_mono"
+                "parent", "symbol_color", "symbol_primitive", "symbol_mono"
             )
         )
 
@@ -673,13 +674,17 @@ class Command(BaseCommand):
         """Copy sprite SVG files from database (Category -> Symbol -> svg_file).
 
         One sprite collection per :meth:`_sprite_collections` entry:
-        ``sprites/<slug>/<variant>/<icon>.svg``. The collection's own
-        icon is named ``root.<slug>`` — the sprite name the styles
-        reference for it (e.g. the transport overlay fallback
-        ``mono/root.transport``); a contract group's *identifier*
-        (``<super-root>.<slug>`` since 0067) would silently rename it.
-        Children keep their identifier (``<collection>.<child>``,
-        e.g. ``accommodation.hut``) — unchanged by the restructure.
+        ``sprites/<group_slug>/<variant>/<icon>.svg``. Icon names are
+        the category's tree path below ``map``, derived from the live
+        tree at sync time:
+
+        * the group's own icon — its identifier ``<domain>.<group>``
+          (e.g. ``amenity.transport``);
+        * kinds — ``<domain>.<group>.<kind>`` (e.g.
+          ``amenity.transport.train_station``;
+          ``amenity.accommodation.hut``). Kinds' 2-segment identifiers
+          (``transport.train_station``) gain the domain prefix so a
+          future group move between super-roots renames consistently.
         """
         self.stdout.write("\n[1/3] Syncing sprites from database...")
 
@@ -706,7 +711,7 @@ class Command(BaseCommand):
             # Track files copied for this collection
             files_before = stats["files_copied"]
 
-            # The collection's own icon
+            # The collection's own icon — its identifier (<domain>.<group>)
             self._sync_category_sprites(
                 collection,
                 target_base_dir,
@@ -714,7 +719,7 @@ class Command(BaseCommand):
                 dry_run,
                 stats,
                 collection_slug=collection.slug,
-                filename=f"root.{collection.slug}.svg",
+                filename=f"{collection.identifier}.svg",
             )
 
             for child in children:
@@ -725,7 +730,7 @@ class Command(BaseCommand):
                     dry_run,
                     stats,
                     collection_slug=collection.slug,
-                    filename=f"{child.identifier}.svg",
+                    filename=f"{collection.identifier}.{child.slug}.svg",
                 )
 
             # Only track this sprite directory if we actually copied files
@@ -759,9 +764,10 @@ class Command(BaseCommand):
         """
         Sync all style variants for a single category.
 
-        Structure:
-        - Collection: {collection_slug}/{variant}/root.{collection_slug}.svg
-        - Child: {collection_slug}/{variant}/{identifier}.svg
+        Structure (names come from the caller — the tree-path naming
+        documented in ``_sync_sprites``):
+        - Group's own icon: {collection_slug}/{variant}/{domain}.{group}.svg
+        - Kind: {collection_slug}/{variant}/{domain}.{group}.{kind}.svg
 
         Args:
             category: Category instance to sync

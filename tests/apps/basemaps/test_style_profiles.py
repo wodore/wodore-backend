@@ -500,7 +500,7 @@ class TransportVectorContractTests(SimpleTestCase):
         }
         prefix = TRANSPORT_SPRITE_ID + ":"
         assert all(icon.startswith(prefix) for icon in TRANSPORT_ICONS.values())
-        assert TRANSPORT_ICON_FALLBACK == prefix + "mono/root.transport"
+        assert TRANSPORT_ICON_FALLBACK == prefix + "mono/amenity.transport"
 
     def test_circle_layer_contract(self) -> None:
         circle = TRANSPORT_STYLE["layers"][0]

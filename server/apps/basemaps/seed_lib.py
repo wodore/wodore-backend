@@ -259,7 +259,7 @@ def _occupation_day_layer(day: int) -> dict[str, Any]:
                     "image",
                     [
                         "concat",
-                        "wd:color/availability.",
+                        "wd:color/amenity.availability.",
                         [
                             "case",
                             ["<", day, ["get", "days"]],
@@ -268,7 +268,7 @@ def _occupation_day_layer(day: int) -> dict[str, Any]:
                         ],
                     ],
                 ],
-                ["image", "wd:color/availability.unknown"],
+                ["image", "wd:color/amenity.availability.unknown"],
             ],
             "icon-size": [
                 "interpolate",
@@ -502,21 +502,21 @@ HUTS_STYLE: dict[str, Any] = {
                             "image",
                             [
                                 "concat",
-                                "wd:primitive/",
+                                "wd:primitive/amenity.",
                                 ["get", "type_standard_identifier"],
                             ],
                         ],
-                        ["image", "wd:primitive/accommodation.unknown"],
+                        ["image", "wd:primitive/amenity.accommodation.unknown"],
                         # Fallback to mono if primitive isn't served
                         [
                             "image",
                             [
                                 "concat",
-                                "wd-sdf:mono/",
+                                "wd-sdf:mono/amenity.",
                                 ["get", "type_standard_identifier"],
                             ],
                         ],
-                        ["image", "wd-sdf:mono/accommodation.unknown"],
+                        ["image", "wd-sdf:mono/amenity.accommodation.unknown"],
                     ],
                     9,
                     [
@@ -525,20 +525,20 @@ HUTS_STYLE: dict[str, Any] = {
                             "image",
                             [
                                 "concat",
-                                "wd-sdf:mono/",
+                                "wd-sdf:mono/amenity.",
                                 ["get", "type_standard_identifier"],
                             ],
                         ],
-                        ["image", "wd-sdf:mono/accommodation.unknown"],
+                        ["image", "wd-sdf:mono/amenity.accommodation.unknown"],
                         [
                             "image",
                             [
                                 "concat",
-                                "wd:primitive/",
+                                "wd:primitive/amenity.",
                                 ["get", "type_standard_identifier"],
                             ],
                         ],
-                        ["image", "wd:primitive/accommodation.unknown"],
+                        ["image", "wd:primitive/amenity.accommodation.unknown"],
                     ],
                 ],
                 # 48px art. Far out: small (0.1–0.3 like the original).
@@ -638,7 +638,7 @@ def _huts_style_subset() -> dict[str, Any]:
       (``step``/``coalesce``/``image``/``concat``), the label text
       (``>`` comparison in ``text-field``) and SDF halo paints are
       outside the whitelist. The twin keeps a STATIC fallback sprite
-      (``wd-sdf:mono/accommodation.unknown``, runtime-tinted per type
+      (``wd-sdf:mono/amenity.accommodation.unknown``, runtime-tinted per type
       via a ``case``/``has``/``get`` ``icon-color``), bakes the
       ``icon-size`` zoom ladder at the default multiplier (the
       ``huts.icon_scale`` parameter rides on ``*``, not whitelisted),
@@ -680,7 +680,7 @@ def _huts_style_subset() -> dict[str, Any]:
                 },
                 "layout": {
                     "icon-allow-overlap": True,
-                    "icon-image": "wd-sdf:mono/accommodation.unknown",
+                    "icon-image": "wd-sdf:mono/amenity.accommodation.unknown",
                     "icon-size": [
                         "interpolate",
                         ["linear"],
@@ -869,21 +869,23 @@ _TRANSPORT_ICON_FILTER: list[Any] = ["==", ["get", "location_type"], 0]
 #: ``wd`` pack is already present at boot; the transport icons
 #: silently resolved to nothing and stops vanished at z14+). A unique
 #: id makes this overlay's pack load independently, no union merge
-#: needed. Only modes whose category tree actually carries a symbol
-#: get their own icon (verified against the staging
-#: ``/sprite/transport`` pack); everything else — the lifts (cable_car,
-#: gondola, funicular), trolleybus, monorail and unmatched stops —
-#: falls back to the generic root silhouette.
+#: needed. Icon names are the category's tree path below ``map``
+#: (``<domain>.<group>.<kind>`` — martin_sync derives them from the
+#: live tree; the transport group sits in the ``amenity`` domain today).
+#: Only modes whose category tree actually carries a symbol get their
+#: own icon; everything else — the lifts (cable_car, gondola,
+#: funicular), trolleybus, monorail and unmatched stops — falls back to
+#: the group's own silhouette.
 TRANSPORT_SPRITE_ID = "wd-transport"
 
 TRANSPORT_ICONS: dict[str, str] = {
-    "train_station": "wd-transport:mono/transport.train_station",
-    "tram_stop": "wd-transport:mono/transport.tram_stop",
-    "metro_station": "wd-transport:mono/transport.metro_station",
-    "ferry": "wd-transport:mono/transport.ferry",
-    "bus_stop": "wd-transport:mono/transport.bus_stop",
+    "train_station": "wd-transport:mono/amenity.transport.train_station",
+    "tram_stop": "wd-transport:mono/amenity.transport.tram_stop",
+    "metro_station": "wd-transport:mono/amenity.transport.metro_station",
+    "ferry": "wd-transport:mono/amenity.transport.ferry",
+    "bus_stop": "wd-transport:mono/amenity.transport.bus_stop",
 }
-TRANSPORT_ICON_FALLBACK = "wd-transport:mono/root.transport"
+TRANSPORT_ICON_FALLBACK = "wd-transport:mono/amenity.transport"
 
 
 def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
@@ -914,8 +916,8 @@ def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
     Icons come from the Martin sprite pack (``/sprite/transport``
     under the overlay's OWN sprite id ``wd-transport`` — unique per
     layer so the pack always loads, independent of sprite-id
-    collisions) — per-mode where the tree has a symbol, the generic
-    ``mono/root.transport`` silhouette for the rest.
+    collisions) — per-mode where the tree has a symbol, the group's
+    own ``mono/amenity.transport`` silhouette for the rest.
 
     Deliberately subset-clean end to end (owner decision: the full
     profile gained nothing here — no feature-state, no day strips; a
