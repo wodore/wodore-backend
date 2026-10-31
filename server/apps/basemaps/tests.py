@@ -1590,6 +1590,83 @@ class TestProbeShapes:
 
 
 @pytest.mark.django_db
+class TestGlyphMigration:
+    """The 0010 data migration on already-seeded rows: stored Martin
+    ``.pbf`` glyph templates flip to the canonical extension-less route
+    in place; external glyph URLs are untouched (surgical suffix match)."""
+
+    def _migration_module(self):
+        import importlib
+
+        return importlib.import_module(
+            "server.apps.basemaps.migrations.0010_strip_pbf_from_martin_glyph_templates"
+        )
+
+    @staticmethod
+    def _glyphs(layer):
+        style = layer.style
+        if isinstance(style, dict) and isinstance(style.get("glyphs"), str):
+            return style["glyphs"]
+        return ""
+
+    def test_strip_pbf_rewrites_stored_templates_surgically(self):
+        from django.apps import apps as global_apps
+        from django.core.management import call_command
+
+        call_command("map_seed", verbosity=0)
+
+        # Rows as seeded BEFORE 0010: Martin templates carry the .pbf
+        # suffix (both token-prefixed and root-relative forms).
+        martin_layers = [
+            layer
+            for layer in MapLayer.objects.filter(style__isnull=False)
+            if self._glyphs(layer).endswith("/font/{fontstack}/{range}")
+        ]
+        assert martin_layers, "seeded styles reference Martin glyphs"
+        for layer in martin_layers:
+            layer.style["glyphs"] += ".pbf"
+            layer.save(update_fields=["style"])
+
+        # External font hosts (maptoolkit) also serve .pbf glyph URLs —
+        # they must survive the migration byte-for-byte.
+        external_before = {
+            layer.pk: self._glyphs(layer)
+            for layer in MapLayer.objects.filter(style__isnull=False)
+            if self._glyphs(layer).endswith(".pbf")
+            and "/font/{fontstack}/{range}" not in self._glyphs(layer)
+        }
+        assert external_before, "seed includes an external-font layer"
+
+        migration = self._migration_module()
+        migration.strip_pbf(global_apps, None)
+
+        for layer in MapLayer.objects.filter(
+            pk__in=[layer.pk for layer in martin_layers]
+        ):
+            glyphs = self._glyphs(layer)
+            assert glyphs.endswith("/font/{fontstack}/{range}"), glyphs
+            assert ".pbf" not in glyphs, glyphs
+        for pk, glyphs in external_before.items():
+            assert self._glyphs(MapLayer.objects.get(pk=pk)) == glyphs
+
+        # Idempotent: a second pass finds nothing left to strip.
+        migration.strip_pbf(global_apps, None)
+        for layer in MapLayer.objects.filter(
+            pk__in=[layer.pk for layer in martin_layers]
+        ):
+            assert self._glyphs(layer).endswith("/font/{fontstack}/{range}")
+
+        # Reverse restores the suffix on Martin templates only.
+        migration.restore_pbf(global_apps, None)
+        for layer in MapLayer.objects.filter(
+            pk__in=[layer.pk for layer in martin_layers]
+        ):
+            assert self._glyphs(layer).endswith("/font/{fontstack}/{range}.pbf")
+        for pk, glyphs in external_before.items():
+            assert self._glyphs(MapLayer.objects.get(pk=pk)) == glyphs
+
+
+@pytest.mark.django_db
 class TestDateRotation:
     """M2 regression: resolved styles with date params re-key at
     midnight; styles without them keep their ETag."""
