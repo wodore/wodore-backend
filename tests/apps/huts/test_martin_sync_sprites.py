@@ -161,6 +161,40 @@ def test_include_filters_collections(
     assert set(stats["sprite_dirs"]) == {"accommodation"}
 
 
+def test_sprite_files_are_sanitized_for_martin(
+    tmp_path: Path, map_tree: dict[str, Category]
+) -> None:
+    """The staging incident: DB symbols carrying lxml ``ns0:`` prefixes
+    or a root without ``xmlns`` must reach the sprite directory in the
+    default SVG namespace — Martin 1.16's strict XML parser rejects both
+    shapes with ``NoRootNode`` (until now patched by hand on the PVC)."""
+    dirty_ns0 = (
+        b'<svg xmlns:ns0="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+        b'<ns0:path d="M0 0h24v24H0z"/></svg>'
+    )
+    dirty_bare = b'<svg viewBox="0 0 24 24"><path d="M0 0h24v24H0z"/></svg>'
+    hut_symbol = map_tree["hut"].symbol_color
+    group_symbol = map_tree["accommodation"].symbol_color
+    assert hut_symbol is not None and group_symbol is not None
+    hut_symbol.svg_file.save("color__hut.svg", ContentFile(dirty_ns0), save=True)
+    group_symbol.svg_file.save(
+        "color__accommodation.svg", ContentFile(dirty_bare), save=True
+    )
+
+    _run_sync(tmp_path)
+
+    sprites = tmp_path / "sprites"
+    hut_sprite = (
+        sprites / "accommodation/color/amenity.accommodation.hut.svg"
+    ).read_bytes()
+    group_sprite = (
+        sprites / "accommodation/color/amenity.accommodation.svg"
+    ).read_bytes()
+    assert b"ns0" not in hut_sprite
+    assert hut_sprite.startswith(b'<svg xmlns="http://www.w3.org/2000/svg"')
+    assert group_sprite.startswith(b'<svg xmlns="http://www.w3.org/2000/svg"')
+
+
 def test_cleanup_removes_collapsed_map_dir_and_stale_files(
     tmp_path: Path, map_tree: dict[str, Category]
 ) -> None:
