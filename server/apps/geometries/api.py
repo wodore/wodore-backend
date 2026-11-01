@@ -89,7 +89,8 @@ class _GeoSearchQuery(LanguageQuery, GeoPlaceFields):
     domain: list[str] | None = Field(
         None,
         description=(
-            "Filter by super-root domain: 'amenity', 'admin' or 'natural' "
+            "Filter by super-root domain: 'amenity', 'admin', 'natural' or "
+            "'transport' "
             "(the place's domain member; a 'map.' prefix is tolerated)"
         ),
     )

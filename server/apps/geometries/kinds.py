@@ -5,10 +5,10 @@ category — first association by ``(classifier priority, order,
 slug)`` (``mode.standard`` outranks everything, PO decision on the
 geoplace-kind-fk fix); the **contract group**
 is that category's parent (``accommodation`` for a hut); the
-super-roots (``amenity`` / ``admin`` / ``natural``) sit above the
+super-roots (``amenity`` / ``admin`` / ``natural`` / ``transport``) sit above the
 contract groups under the ``map`` namespace root. The stored
 ``GeoPlace.domain`` is the super-root slug — ``amenity``,
-``admin``, ``natural`` — derived on write (consumed by
+``admin``, ``natural``, ``transport`` — derived on write (consumed by
 tile/clustering SQL).
 
 The contract itself lives in the DB (``CategoryKindContract`` on the
@@ -33,16 +33,19 @@ from typing import Any
 MAP_ROOT_SLUG: str = "map"
 
 #: Super-roots directly under ``map`` (domain = the super-root slug).
-SUPER_ROOT_SLUGS: frozenset[str] = frozenset({"amenity", "admin", "natural"})
+SUPER_ROOT_SLUGS: frozenset[str] = frozenset(
+    {"amenity", "admin", "natural", "transport"}
+)
 
 #: Stored ``GeoPlace.domain`` values (super-root identifiers).
 DOMAIN_AMENITY: str = "amenity"
 DOMAIN_ADMIN: str = "admin"
 DOMAIN_NATURAL: str = "natural"
+DOMAIN_TRANSPORT: str = "transport"
 DOMAIN_NONE: str = "none"
 
 _VALID_DOMAIN_SLUGS: frozenset[str] = frozenset(
-    {DOMAIN_AMENITY, DOMAIN_ADMIN, DOMAIN_NATURAL, DOMAIN_NONE}
+    {DOMAIN_AMENITY, DOMAIN_ADMIN, DOMAIN_NATURAL, DOMAIN_TRANSPORT, DOMAIN_NONE}
 )
 
 
@@ -88,7 +91,7 @@ PLACE_KINDS: dict[str, PlaceKind] = {
     "automotive": PlaceKind("amenity"),
     "meteo": PlaceKind("amenity"),
     "availability": PlaceKind("amenity"),
-    "transport": PlaceKind("amenity"),
+    "transport": PlaceKind("transport"),
     "administrative": PlaceKind("admin"),
     "populated_place": PlaceKind("admin"),
     "terrain": PlaceKind("natural"),

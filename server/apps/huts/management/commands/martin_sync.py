@@ -679,11 +679,11 @@ class Command(BaseCommand):
         tree at sync time:
 
         * the group's own icon — its identifier ``<domain>.<group>``
-          (e.g. ``amenity.transport``);
+          (e.g. ``transport.transport``);
         * kinds — ``<domain>.<group>.<kind>`` (e.g.
-          ``amenity.transport.train_station``;
+          ``transport.transport.rail``;
           ``amenity.accommodation.hut``). Kinds' 2-segment identifiers
-          (``transport.train_station``) gain the domain prefix so a
+          (``transport.rail``) gain the domain prefix so a
           future group move between super-roots renames consistently.
         """
         self.stdout.write("\n[1/3] Syncing sprites from database...")

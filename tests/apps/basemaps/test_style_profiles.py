@@ -490,17 +490,17 @@ class TransportVectorContractTests(SimpleTestCase):
             }
         ]
         # per-mode icons only for modes with a category symbol, the
-        # generic root silhouette as fallback
+        # group's own silhouette as fallback
         assert set(TRANSPORT_ICONS) == {
-            "train_station",
-            "tram_stop",
-            "metro_station",
+            "rail",
+            "tram",
+            "metro",
             "ferry",
-            "bus_stop",
+            "bus",
         }
         prefix = TRANSPORT_SPRITE_ID + ":"
         assert all(icon.startswith(prefix) for icon in TRANSPORT_ICONS.values())
-        assert TRANSPORT_ICON_FALLBACK == prefix + "mono/amenity.transport"
+        assert TRANSPORT_ICON_FALLBACK == prefix + "mono/transport.transport"
 
     def test_circle_layer_contract(self) -> None:
         circle = TRANSPORT_STYLE["layers"][0]
@@ -599,7 +599,7 @@ class TransportVectorContractTests(SimpleTestCase):
         the paint (legend parity) — transport_style(colors=...) overrides."""
         from server.apps.basemaps.seed_lib import transport_style
 
-        styled = transport_style({"train_station": "#ff0000"})
+        styled = transport_style({"rail": "#ff0000"})
         color_expr = styled["layers"][0]["paint"]["circle-color"]
         assert color_expr[2] == "#ff0000"  # rail (first mode) overridden
         assert color_expr[4] != "#ff0000"  # tram keeps the fallback
@@ -1370,7 +1370,11 @@ class TransportModeExtrasParityTests(SimpleTestCase):
     no DB round-trip) and data-side (``categories.0022`` mirrors the
     basic route type into each mode child's ``extra`` under
     ``gtfs_route_type`` — admin/other apps can read it). This test keeps
-    the two from drifting apart.
+    the two from drifting apart. Parity is by GTFS CODE: the kind slugs
+    were renamed to Transitland basic route type names
+    (``categories.0025``), so the historical migration dict carries the
+    old slugs while seed_lib carries the new ones — the codes are the
+    contract.
     """
 
     def test_migration_modes_match_seed_lib_table(self) -> None:
@@ -1383,8 +1387,14 @@ class TransportModeExtrasParityTests(SimpleTestCase):
             "server.apps.categories.migrations.0022_transport_mode_colors"
         )
 
-        assert {slug: code for slug, code in TRANSPORT_MODES} == {
-            slug: codes[1] for slug, codes in migration.MODES.items()
-        }
+        # every basic GTFS type is covered on both sides, exactly once
+        seed_lib_codes = [code for _slug, code in TRANSPORT_MODES]
+        migration_codes = [codes[1] for codes in migration.MODES.values()]
+        assert sorted(seed_lib_codes) == sorted(migration_codes)
+        assert len(set(seed_lib_codes)) == len(seed_lib_codes)
+        # each seed_lib mode carries its historical code under its new slug
+        seed_lib_by_code = {code: slug for slug, code in TRANSPORT_MODES}
+        for _color, code in migration.MODES.values():
+            assert seed_lib_by_code[code], f"code {code} missing in seed_lib"
         # the extras key name is stable API for other readers
         assert migration.GTFS_EXTRA_KEY == "gtfs_route_type"

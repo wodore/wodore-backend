@@ -756,16 +756,16 @@ TRANSPORT_SOURCE_ID = "transitland_stops"
 #: stops (``route_types_basic`` absent or empty) fall through to the
 #: neutral ``other`` color.
 TRANSPORT_MODES: tuple[tuple[str, int], ...] = (
-    ("train_station", 2),
-    ("tram_stop", 0),
-    ("metro_station", 1),
+    ("rail", 2),
+    ("tram", 0),
+    ("metro", 1),
     ("monorail", 12),
     ("funicular", 7),
     ("gondola", 6),
-    ("cable_car", 5),
+    ("cablecar", 5),
     ("ferry", 4),
     ("trolleybus", 11),
-    ("bus_stop", 3),
+    ("bus", 3),
 )
 
 #: Seed-time fallback palette (map_seed overlays the live category
@@ -773,16 +773,16 @@ TRANSPORT_MODES: tuple[tuple[str, int], ...] = (
 #: categories migration ran). "other" deliberately has no category —
 #: it is the uncategorized remainder, not a legend entry.
 TRANSPORT_FALLBACK_COLORS: dict[str, str] = {
-    "train_station": "#C60018",  # SBB red (the old layer's "Train")
-    "tram_stop": "#00838F",
-    "metro_station": "#7B1FA2",
+    "rail": "#C60018",  # SBB red (the old layer's "Train")
+    "tram": "#00838F",
+    "metro": "#7B1FA2",
     "monorail": "#455A64",
     "funicular": "#795548",
     "gondola": "#D81B60",  # aerial lift
-    "cable_car": "#FF8F00",  # cable tram
+    "cablecar": "#FF8F00",  # cable tram
     "ferry": "#0079C7",  # the old layer's "Other" blue → ferry
     "trolleybus": "#9E9D24",
-    "bus_stop": "#2d327d",  # Post blue (the old layer's "Bus")
+    "bus": "#2d327d",  # Post blue (the old layer's "Bus")
     "other": "#6D6D6C",
 }
 
@@ -871,21 +871,21 @@ _TRANSPORT_ICON_FILTER: list[Any] = ["==", ["get", "location_type"], 0]
 #: id makes this overlay's pack load independently, no union merge
 #: needed. Icon names are the category's tree path below ``map``
 #: (``<domain>.<group>.<kind>`` — martin_sync derives them from the
-#: live tree; the transport group sits in the ``amenity`` domain today).
+#: live tree; transport is its own domain: ``transport.transport.*``).
 #: Only modes whose category tree actually carries a symbol get their
-#: own icon; everything else — the lifts (cable_car, gondola,
+#: own icon; everything else — the lifts (cablecar, gondola,
 #: funicular), trolleybus, monorail and unmatched stops — falls back to
 #: the group's own silhouette.
 TRANSPORT_SPRITE_ID = "wd-transport"
 
 TRANSPORT_ICONS: dict[str, str] = {
-    "train_station": "wd-transport:mono/amenity.transport.train_station",
-    "tram_stop": "wd-transport:mono/amenity.transport.tram_stop",
-    "metro_station": "wd-transport:mono/amenity.transport.metro_station",
-    "ferry": "wd-transport:mono/amenity.transport.ferry",
-    "bus_stop": "wd-transport:mono/amenity.transport.bus_stop",
+    "rail": "wd-transport:mono/transport.transport.rail",
+    "tram": "wd-transport:mono/transport.transport.tram",
+    "metro": "wd-transport:mono/transport.transport.metro",
+    "ferry": "wd-transport:mono/transport.transport.ferry",
+    "bus": "wd-transport:mono/transport.transport.bus",
 }
-TRANSPORT_ICON_FALLBACK = "wd-transport:mono/amenity.transport"
+TRANSPORT_ICON_FALLBACK = "wd-transport:mono/transport.transport"
 
 
 def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
@@ -917,7 +917,7 @@ def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
     under the overlay's OWN sprite id ``wd-transport`` — unique per
     layer so the pack always loads, independent of sprite-id
     collisions) — per-mode where the tree has a symbol, the group's
-    own ``mono/amenity.transport`` silhouette for the rest.
+    own ``mono/transport.transport`` silhouette for the rest.
 
     Deliberately subset-clean end to end (owner decision: the full
     profile gained nothing here — no feature-state, no day strips; a
