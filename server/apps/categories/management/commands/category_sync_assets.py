@@ -3,11 +3,12 @@ from typing import TYPE_CHECKING, Any, override
 
 from django_admin_runner import register_command
 
-from django.core.files import File
+from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand, CommandParser
 
 from server.apps.licenses.models import License
 from server.apps.symbols.models import Symbol
+from server.apps.symbols.svg import sanitize_svg
 
 if TYPE_CHECKING:
     from server.apps.categories.models import Category
@@ -329,6 +330,16 @@ class Command(BaseCommand):
 
         return None
 
+    def _sanitized_svg(self, svg_path: Path) -> ContentFile[bytes]:
+        """SVG bytes from ``svg_path``, sanitized for Martin sprite parsing.
+
+        The asset sources include lxml artifacts (``ns0:`` element
+        prefixes, missing root ``xmlns``) that Martin's strict XML parser
+        rejects — fix them once, here, so the stored bytes are canonical
+        (see :mod:`server.apps.symbols.svg`). No-op for clean SVGs.
+        """
+        return ContentFile(sanitize_svg(svg_path.read_bytes()), name=svg_path.name)
+
     def _get_or_create_symbol(
         self,
         svg_path: Path,
@@ -359,9 +370,10 @@ class Command(BaseCommand):
                 try:
                     # Delete old file
                     existing.svg_file.delete(save=False)
-                    # Save new file
-                    with open(svg_path, "rb") as f:
-                        existing.svg_file.save(stored_name, File(f), save=True)
+                    # Save new file (sanitized)
+                    existing.svg_file.save(
+                        stored_name, self._sanitized_svg(svg_path), save=True
+                    )
                     self.stdout.write(f"    Updated symbol: {slug} ({style})")
                     return existing, False
                 except Exception as e:
@@ -386,10 +398,11 @@ class Command(BaseCommand):
 
         if not dry_run:
             try:
-                # Save SVG file (style-namespaced, see force-branch note)
+                # Save SVG file (style-namespaced, sanitized)
                 stored_name = f"{style}__{svg_path.name}"
-                with open(svg_path, "rb") as f:
-                    new_symbol.svg_file.save(stored_name, File(f), save=True)
+                new_symbol.svg_file.save(
+                    stored_name, self._sanitized_svg(svg_path), save=True
+                )
 
                 self.stdout.write(f"    Created symbol: {slug} ({style})")
                 return new_symbol, True

@@ -34,6 +34,8 @@ from django_admin_runner import register_command
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 
+from server.apps.symbols.svg import sanitize_svg
+
 if TYPE_CHECKING:
     from server.apps.categories.models import Category
 
@@ -830,6 +832,7 @@ class Command(BaseCommand):
                 dry_run,
                 stats,
                 label=f"{category.slug} ({variant})",
+                sanitize=True,
             )
             copied_any = True
 
@@ -844,8 +847,16 @@ class Command(BaseCommand):
         dry_run: bool,
         stats: dict[str, Any],
         label: str | None = None,
+        sanitize: bool = False,
     ) -> None:
-        """Copy a single file from source to target."""
+        """Copy a single file from source to target.
+
+        ``sanitize`` runs SVG bytes through
+        :func:`server.apps.symbols.svg.sanitize_svg` before comparing /
+        writing — sprite SVGs must parse under Martin's strict XML parser
+        (the staging ``NoRootNode`` incident: ``ns0:`` prefixes, missing
+        root ``xmlns``). Every other file kind copies verbatim.
+        """
         indent = "  "
 
         # Use label if provided, otherwise use filename
@@ -885,6 +896,8 @@ class Command(BaseCommand):
         try:
             existed = target_file.exists()
             file_changed = True
+            # SVG sprite bytes go through the sanitizer (None = verbatim copy)
+            content = sanitize_svg(source_file.read_bytes()) if sanitize else None
 
             # Check if file changed by comparing content
             if existed:
@@ -892,14 +905,20 @@ class Command(BaseCommand):
 
                 # Copy to temp location for comparison
                 temp_target = target_file.parent / f".tmp_{target_file.name}"
-                shutil.copy2(source_file, temp_target)
+                if content is None:
+                    shutil.copy2(source_file, temp_target)
+                else:
+                    temp_target.write_bytes(content)
                 file_changed = not filecmp.cmp(temp_target, target_file, shallow=False)
                 if file_changed:
                     shutil.move(temp_target, target_file)
                 else:
                     temp_target.unlink()
             else:
-                shutil.copy2(source_file, target_file)
+                if content is None:
+                    shutil.copy2(source_file, target_file)
+                else:
+                    target_file.write_bytes(content)
 
             if file_changed:
                 if existed:
