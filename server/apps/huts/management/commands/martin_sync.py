@@ -5,7 +5,7 @@ This command copies config and sprite SVG files needed by Martin from the databa
 to a target directory (typically a Kubernetes PVC mount in production).
 
 Usage:
-    # Sync default categories (transport, accommodation, spot)
+    # Sync default sprite collections (transport, accommodation, spot)
     app martin_sync --target /mnt/martin-pvc
 
     # Sync all categories
@@ -45,6 +45,21 @@ if TYPE_CHECKING:
 #: (``:-`` defaults empty), so an unset registry row degrades to an
 #: unauthenticated upstream instead of a broken config.
 _HEADER_ENV_TOKEN_RE = re.compile(r"\$\{([A-Z][A-Z0-9_]*)(?::-[^}]*)?\}")
+
+#: Slug of the map namespace root (geometries migration 0067 seeded the
+#: display tree as ``map → super-root (amenity/admin/natural) → contract
+#: group → kind``). Sprite collections follow the served styles, not
+#: the full tree: ONE collection per contract group
+#: (``parent__parent__slug="map"`` — ``accommodation``, ``transport``, …,
+#: ``CategoryQuerySet.contract_groups``), named by its slug. Vocabulary
+#: roots (``spot``, ``mode``, ``relations``, ``role``, ``uri``, ``emoji`` …)
+#: own NO collection (owner decision: nothing outside the map tree is
+#: served as map sprites), nor do the ``map`` root and the super-roots
+#: themselves (structural domain anchors, no style-referenced icons).
+#: Icon names inside a collection are the tree path below ``map`` —
+#: ``<domain>.<group>`` for the group's own icon (its identifier),
+#: ``<domain>.<group>.<kind>`` for kinds.
+_MAP_ROOT_SLUG = "map"
 
 
 def resolve_passthrough_headers(config: dict[str, Any]) -> list[str]:
@@ -107,8 +122,9 @@ class Command(BaseCommand):
             "--include",
             type=str,
             default="",
-            help="Comma-separated list of parent/root category slugs to include. "
-            "If not specified, all categories are included.",
+            help="Comma-separated list of sprite collection slugs to include "
+            "(contract groups like accommodation,transport). If not "
+            "specified, all collections are included.",
         )
         parser.add_argument(
             "--category-variants",
@@ -264,8 +280,11 @@ class Command(BaseCommand):
         """
         Remove old sprite files that are no longer in the database.
 
-        This handles cases where category identifiers change (e.g., from slug to identifier)
-        or when categories/symbols are deleted.
+        This handles cases where sprite files outlive their categories:
+        restructured collections (e.g. the map super-root restructure,
+        when contract-group sprites must move out of a collapsed
+        ``map/`` directory), renamed identifiers or deleted
+        categories/symbols.
 
         Only removes files in the sprite directories, never touches config or styles.
         """
@@ -280,47 +299,34 @@ class Command(BaseCommand):
             )
             return
 
-        # Get root categories to check (same filtering as sync)
-        root_categories = Category.objects.filter(
-            is_active=True, parent=None
-        ).select_related("symbol_color", "symbol_primitive", "symbol_mono")
+        # Get sprite collections (same filtering as sync) — the walk
+        # that defines the expected file set below.
+        collections = self._sprite_collections(Category, include_list)
 
-        # Filter by include_list if specified
-        if include_list is not None:
-            root_categories = [
-                cat for cat in root_categories if cat.slug in include_list
-            ]
-
-        if not root_categories:
-            self.stdout.write("  ⚠ No root categories found, skipping cleanup")
+        if not collections:
+            self.stdout.write("  ⚠ No sprite collections found, skipping cleanup")
             return
 
         # Build set of expected file paths (what should exist after sync)
         expected_files = set()
 
-        for root_category in root_categories:
-            # Add root category files
-            for variant in variants:
-                symbol_field = f"symbol_{variant}"
-                symbol = getattr(root_category, symbol_field, None)
-                if symbol and symbol.svg_file:
-                    filename = f"{root_category.identifier}.svg"
-                    expected_files.add(Path(root_category.slug) / variant / filename)
+        for collection, children in collections:
+            # Collection's own icon (<domain>.<group>) + kind icons
+            # (<domain>.<group>.<kind>) — same naming as the sync.
+            members: list[tuple[Category, str]] = [
+                (collection, f"{collection.identifier}.svg")
+            ]
+            members += [
+                (child, f"{collection.identifier}.{child.slug}.svg")
+                for child in children
+            ]
 
-            # Add child category files
-            children = Category.objects.filter(
-                is_active=True, parent=root_category
-            ).select_related("symbol_color", "symbol_primitive", "symbol_mono")
-
-            for child in children:
+            for category, filename in members:
                 for variant in variants:
                     symbol_field = f"symbol_{variant}"
-                    symbol = getattr(child, symbol_field, None)
+                    symbol = getattr(category, symbol_field, None)
                     if symbol and symbol.svg_file:
-                        filename = f"{child.identifier}.svg"
-                        expected_files.add(
-                            Path(root_category.slug) / variant / filename
-                        )
+                        expected_files.add(Path(collection.slug) / variant / filename)
 
         # Find and remove old files
         files_deleted_count = 0
@@ -616,6 +622,46 @@ class Command(BaseCommand):
             self.stdout.write(f"  → {target_file}")
             stats["files_copied"] += 1
 
+    def _sprite_collections(
+        self,
+        category_model: type[Category],
+        include_list: list[str] | None,
+    ) -> list[tuple[Category, list[Category]]]:
+        """Resolve sprite collections (contract groups) with their children.
+
+        Exactly the shape the served styles address
+        (``/sprite/accommodation,availability``, ``/sprite/transport`` —
+        basemaps ``seed_lib``): every contract group under a super-root
+        (``parent__parent__slug="map"``) with its direct children (the
+        kinds). Vocabulary roots (``spot``, ``mode``, ``relations``, …)
+        own no collection — nothing outside the map tree is served as
+        map sprites. Icon names are derived from the live tree path
+        (see :meth:`_sync_sprites`) so a group moving between domains
+        renames its icons without a martin_sync change.
+        """
+        queryset = category_model.objects.filter(is_active=True)
+
+        collections: list[Category] = list(
+            queryset.filter(parent__parent__slug=_MAP_ROOT_SLUG).select_related(
+                "parent", "symbol_color", "symbol_primitive", "symbol_mono"
+            )
+        )
+
+        if include_list is not None:
+            collections = [cat for cat in collections if cat.slug in include_list]
+
+        return [
+            (
+                category,
+                list(
+                    queryset.filter(parent=category).select_related(
+                        "symbol_color", "symbol_primitive", "symbol_mono"
+                    )
+                ),
+            )
+            for category in collections
+        ]
+
     def _sync_sprites(
         self,
         target_path: Path,
@@ -625,27 +671,32 @@ class Command(BaseCommand):
         variants: list[str],
         Category: type[Category],
     ) -> None:
-        """Copy sprite SVG files from database (Category -> Symbol -> svg_file)."""
+        """Copy sprite SVG files from database (Category -> Symbol -> svg_file).
+
+        One sprite collection per :meth:`_sprite_collections` entry:
+        ``sprites/<group_slug>/<variant>/<icon>.svg``. Icon names are
+        the category's tree path below ``map``, derived from the live
+        tree at sync time:
+
+        * the group's own icon — its identifier ``<domain>.<group>``
+          (e.g. ``transport.transport``);
+        * kinds — ``<domain>.<group>.<kind>`` (e.g.
+          ``transport.transport.rail``;
+          ``amenity.accommodation.hut``). Kinds' 2-segment identifiers
+          (``transport.rail``) gain the domain prefix so a
+          future group move between super-roots renames consistently.
+        """
         self.stdout.write("\n[1/3] Syncing sprites from database...")
 
-        # Get root categories (no parent)
-        root_categories = Category.objects.filter(
-            is_active=True, parent=None
-        ).select_related("symbol_color", "symbol_primitive", "symbol_mono")
+        collections = self._sprite_collections(Category, include_list)
 
-        # Filter by include_list if specified
-        if include_list is not None:
-            root_categories = [
-                cat for cat in root_categories if cat.slug in include_list
-            ]
-
-        if not root_categories:
+        if not collections:
             self.stdout.write(
-                self.style.WARNING("  ⚠ No root categories found to sync")
+                self.style.WARNING("  ⚠ No sprite collections found to sync")
             )
             return
 
-        self.stdout.write(f"  Found {len(root_categories)} root categories")
+        self.stdout.write(f"  Found {len(collections)} sprite collections")
 
         # Target: <target>/sprites/
         target_base_dir = target_path / "sprites"
@@ -653,51 +704,48 @@ class Command(BaseCommand):
         # Track sprite directories for config generation
         sprite_dirs = []
 
-        # Process each root category
-        for root_category in root_categories:
-            self.stdout.write(f"\n  Processing root category: {root_category.slug}")
+        # Process each collection
+        for collection, children in collections:
+            self.stdout.write(f"\n  Processing sprite collection: {collection.slug}")
 
-            # Track files copied for this category
+            # Track files copied for this collection
             files_before = stats["files_copied"]
 
-            # Sync the root category itself
+            # The collection's own icon — its identifier (<domain>.<group>)
             self._sync_category_sprites(
-                root_category,
+                collection,
                 target_base_dir,
                 variants,
                 dry_run,
                 stats,
-                parent_slug=root_category.slug,
+                collection_slug=collection.slug,
+                filename=f"{collection.identifier}.svg",
             )
 
-            # Get all children of this root category
-            children = Category.objects.filter(
-                is_active=True, parent=root_category
-            ).select_related("symbol_color", "symbol_primitive", "symbol_mono")
-
-            if children.exists():
-                self.stdout.write(f"    Found {children.count()} children")
-                for child in children:
-                    self._sync_category_sprites(
-                        child,
-                        target_base_dir,
-                        variants,
-                        dry_run,
-                        stats,
-                        parent_slug=root_category.slug,
-                    )
+            for child in children:
+                self._sync_category_sprites(
+                    child,
+                    target_base_dir,
+                    variants,
+                    dry_run,
+                    stats,
+                    collection_slug=collection.slug,
+                    filename=f"{collection.identifier}.{child.slug}.svg",
+                )
 
             # Only track this sprite directory if we actually copied files
             files_after = stats["files_copied"]
-            files_copied_for_category = files_after - files_before
-            if files_copied_for_category > 0:
-                sprite_dirs.append(root_category.slug)
+            files_copied_for_collection = files_after - files_before
+            if files_copied_for_collection > 0:
+                sprite_dirs.append(collection.slug)
                 self.stdout.write(
-                    f"    ✓ Added {root_category.slug} to sprite config ({files_copied_for_category} files)"
+                    f"    ✓ Added {collection.slug} to sprite config "
+                    f"({files_copied_for_collection} files)"
                 )
             else:
                 self.stdout.write(
-                    f"    ⚠ No sprites found for {root_category.slug}, skipping from config"
+                    f"    ⚠ No sprites found for {collection.slug}, "
+                    "skipping from config"
                 )
 
         # Store sprite directories for config generation
@@ -710,25 +758,25 @@ class Command(BaseCommand):
         variants: list[str],
         dry_run: bool,
         stats: dict[str, Any],
-        parent_slug: str,
+        collection_slug: str,
+        filename: str,
     ) -> None:
         """
         Sync all style variants for a single category.
 
-        Structure:
-        - Root category: {parent_slug}/{variant}/{identifier}.svg
-        - Child category: {parent_slug}/{variant}/{identifier}.svg
+        Structure (names come from the caller — the tree-path naming
+        documented in ``_sync_sprites``):
+        - Group's own icon: {collection_slug}/{variant}/{domain}.{group}.svg
+        - Kind: {collection_slug}/{variant}/{domain}.{group}.{kind}.svg
 
         Args:
             category: Category instance to sync
             target_base_dir: Base sprites directory (e.g., ./martin_sync/sprites/)
-            styles: List of styles to sync
-            parent_slug: Root category slug (used as sprite collection name)
+            variants: List of style variants to sync
+            collection_slug: Sprite collection directory name
+            filename: Sprite file name within the variant directory
         """
         stats["categories_processed"] += 1
-
-        # Filename uses the category's identifier (e.g., "accommodation.hut")
-        filename = f"{category.identifier}.svg"
 
         # Track if we copied any files for this category
         copied_any = False
@@ -770,8 +818,8 @@ class Command(BaseCommand):
                 )
                 continue
 
-            # Build target path: {parent_slug}/{variant}/{slug}.svg
-            target_dir = target_base_dir / parent_slug / variant
+            # Build target path: {collection_slug}/{variant}/{filename}
+            target_dir = target_base_dir / collection_slug / variant
             target_file = target_dir / filename
 
             # Copy file
@@ -886,11 +934,23 @@ class Command(BaseCommand):
             or stats["config_changed"]
         )
 
+        def _write_marker(text: str) -> None:
+            """Best-effort marker write — an unwritable target must not
+            fail an otherwise successful sync."""
+            try:
+                with open(marker_file, "w") as f:
+                    f.write(text)
+            except OSError as e:
+                self.stderr.write(
+                    self.style.WARNING(
+                        f"  ⚠ Failed to write marker file {marker_file}: {e}"
+                    )
+                )
+
         if changes_made:
             # Write timestamp - changes detected
             timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-            with open(marker_file, "w") as f:
-                f.write(f"Last modified: {timestamp}\n")
+            _write_marker(f"Last modified: {timestamp}\n")
             self.stdout.write(f"\n✓ Updated marker file: {marker_file}")
         else:
             # Don't update marker file - no changes
@@ -899,8 +959,7 @@ class Command(BaseCommand):
             else:
                 # First run with no changes - create marker anyway
                 timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-                with open(marker_file, "w") as f:
-                    f.write(f"Last modified: {timestamp}\n")
+                _write_marker(f"Last modified: {timestamp}\n")
                 self.stdout.write(f"\n✓ Created marker file: {marker_file}")
 
     def _validate_files(self, target_path: Path, stats: dict[str, Any]) -> None:

@@ -207,7 +207,8 @@ class GeoPlace(TimeStampedModel):
         # geoplace-read-performance)
         verbose_name=_("Domain"),
         help_text=_(
-            "Super-root tier of the place (derived) — amenity / admin / natural / none"
+            "Super-root tier of the place (derived) — amenity / admin / natural / "
+            "transport / none"
         ),
     )
 

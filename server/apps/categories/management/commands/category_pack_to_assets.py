@@ -4,13 +4,14 @@ import tempfile
 from pathlib import Path
 from typing import Any, override
 
-from django_admin_runner import register_command
-
 from django.core.management import call_command
-from django.core.management.base import BaseCommand, CommandParser
+from django.core.management.base import BaseCommand, CommandError, CommandParser
 
 
-@register_command(group="Categories")
+# NOT registered with django_admin_runner on purpose: this command
+# regenerates files inside the repo checkout (assets/) and only makes
+# sense run manually on a developer machine when the icon pack changes —
+# in a deployed container its output would be lost with the container.
 class Command(BaseCommand):
     help = (
         "Regenerate category assets from the iconpacks source of truth. "
@@ -68,7 +69,12 @@ class Command(BaseCommand):
 
         for pid in pack_ids:
             pack_dir = base / pid
-            pack = json.loads((pack_dir / "pack.json").read_text())
+            try:
+                pack = json.loads((pack_dir / "pack.json").read_text())
+            except (OSError, json.JSONDecodeError) as e:
+                raise CommandError(
+                    f"Failed to read pack manifest {pack_dir / 'pack.json'}: {e}"
+                ) from e
             icons = pack["icons"]
 
             with tempfile.TemporaryDirectory() as tmp:
