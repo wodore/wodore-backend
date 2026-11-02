@@ -60,11 +60,12 @@ class TestCategorySymbolSvg:
         assert response["Location"] == child.symbol_color.svg_file.url
 
     def test_redirects_to_svg_with_deep_map_tree_path(self):
-        """Map-tree kind identifiers are three segments deep
-        (``amenity.accommodation.selfhut`` — the tile features'
-        ``type_standard_identifier``): the symbol endpoint must
-        resolve them, not 404 (broken type icon in the hut detail
-        header for callers passing the tile identifier)."""
+        """Full map-tree paths (``amenity.accommodation.selfhut`` — the
+        sprite icon naming convention) also resolve, so a caller that
+        only has the sprite name still gets its symbol. The canonical
+        two-segment identifier (``accommodation.selfhut``, what
+        ``type_standard_identifier`` carries) keeps working via the
+        legacy resolution above."""
         symbol = _make_symbol("test-selfhut")
         map_root = Category.objects.create(slug="map")
         domain = Category.objects.create(slug="test-amenity", parent=map_root)

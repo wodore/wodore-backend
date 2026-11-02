@@ -576,8 +576,34 @@ HUTS_STYLE: dict[str, Any] = {
                     "#718096",
                 ],
                 "icon-halo-color": "#ffffff",
-                "icon-halo-width": 2,
-                "icon-halo-blur": 0.15,
+                # Halo width is ABSOLUTE device pixels — it does NOT
+                # scale with icon-size (style spec). A constant 2px on
+                # the ~14px glyphs around z9 (icon-size 0.3) merged the
+                # per-stroke outlines into one solid white plate; the
+                # same 2px only becomes a thin border at z13+ (36-48px
+                # glyphs) — the “plate at mid zoom, gone when zoomed
+                # in” bug. The ladder tracks the icon-size ramp so the
+                # border stays proportionally thin at every zoom.
+                "icon-halo-width": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    7,
+                    0.5,
+                    9,
+                    0.75,
+                    11,
+                    1.0,
+                    13,
+                    1.5,
+                    16,
+                    2.0,
+                    20,
+                    2.5,
+                ],
+                # No blur: the 0.15 fade made the border read as a soft
+                # translucent glow (and added to the SDF softness).
+                "icon-halo-blur": 0,
                 # Semi-transparent when zoomed out, full opacity when
                 # zoomed in.
                 "icon-opacity": [

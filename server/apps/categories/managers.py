@@ -55,8 +55,13 @@ class CategoryQuerySet(MultilingualQuerySet):
         segments, so the path may start anywhere in the tree —
         ``amenity.accommodation.selfhut`` need not repeat the ``map``
         root (and ``map.amenity.accommodation.selfhut`` works too).
-        Tile feature identifiers (``type_standard_identifier``) are
-        three segments deep; callers feed them straight through here.
+        Tolerance for full tree paths, not a convention change: the
+        canonical identifiers (``Category.identifier``, and the tile /
+        availability ``type_standard_identifier`` built from it) stay
+        two-segment (``accommodation.selfhut``); sprite icon names
+        carry the extra domain segment
+        (``mono/amenity.accommodation.selfhut``) and callers that
+        only have the sprite name can still resolve a symbol.
 
         Returns the category when unique, ``(None, paths)`` when the
         path matches several categories, ``(None, [])`` when nothing

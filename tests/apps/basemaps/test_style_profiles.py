@@ -662,13 +662,25 @@ class HutsIconLadderContractTests(SimpleTestCase):
             )
 
     def test_halo_paint_present(self) -> None:
-        """The white border (halo) paint both zoom branches rely on."""
+        """The white border (halo) paint both zoom branches rely on.
+
+        icon-halo-width is absolute pixels (not scaled by icon-size),
+        so it must follow the icon-size ladder: a constant 2px halo
+        merged into a white plate around the ~14px mid-zoom glyphs.
+        """
         layer = next(
             layer for layer in HUTS_STYLE["layers"] if layer["id"] == "wd-huts"
         )
         paint = layer["paint"]
         assert paint["icon-halo-color"] == "#ffffff"
-        assert paint["icon-halo-width"] == 2
+        # thin at mid zoom, 2px (the owner-approved high-zoom look)
+        # from z16
+        ladder = paint["icon-halo-width"]
+        assert ladder[0] == "interpolate"
+        stops = dict(zip(ladder[3::2], ladder[4::2]))
+        assert stops == {7: 0.5, 9: 0.75, 11: 1.0, 13: 1.5, 16: 2.0, 20: 2.5}
+        # crisp border, no glow
+        assert paint["icon-halo-blur"] == 0
         # runtime tint source: per-type color from the tiles
         assert paint["icon-color"][0] == "coalesce"
 
