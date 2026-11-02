@@ -59,6 +59,56 @@ class TestCategorySymbolSvg:
         assert response.status_code == 302
         assert response["Location"] == child.symbol_color.svg_file.url
 
+    def test_redirects_to_svg_with_deep_map_tree_path(self):
+        """Full map-tree paths (``amenity.accommodation.selfhut`` — the
+        sprite icon naming convention) also resolve, so a caller that
+        only has the sprite name still gets its symbol. The canonical
+        two-segment identifier (``accommodation.selfhut``, what
+        ``type_standard_identifier`` carries) keeps working via the
+        legacy resolution above."""
+        symbol = _make_symbol("test-selfhut")
+        map_root = Category.objects.create(slug="map")
+        domain = Category.objects.create(slug="test-amenity", parent=map_root)
+        group = Category.objects.create(slug="test-accommodation", parent=domain)
+        kind = Category.objects.create(
+            slug="test-selfhut", parent=group, symbol_color=symbol
+        )
+
+        response = Client().get(
+            "/v1/categories/symbol/color/test-amenity/"
+            "test-accommodation.test-selfhut.svg"
+        )
+
+        assert response.status_code == 302
+        assert response["Location"] == kind.symbol_color.svg_file.url
+
+    def test_deep_map_tree_path_from_root(self):
+        """The same kind resolves via the full path from the root."""
+        symbol = _make_symbol("test-selfhut")
+        map_root = Category.objects.create(slug="map")
+        domain = Category.objects.create(slug="test-amenity", parent=map_root)
+        group = Category.objects.create(slug="test-accommodation", parent=domain)
+        Category.objects.create(slug="test-selfhut", parent=group, symbol_color=symbol)
+
+        response = Client().get(
+            "/v1/categories/symbol/color/map/"
+            "test-amenity.test-accommodation.test-selfhut.svg"
+        )
+
+        assert response.status_code == 302
+
+    def test_deep_path_unknown_returns_404(self):
+        map_root = Category.objects.create(slug="map")
+        domain = Category.objects.create(slug="test-amenity", parent=map_root)
+        group = Category.objects.create(slug="test-accommodation", parent=domain)
+        Category.objects.create(slug="test-selfhut", parent=group)
+
+        response = Client().get(
+            "/v1/categories/symbol/color/test-amenity/test-accommodation.test-nope.svg"
+        )
+
+        assert response.status_code == 404
+
     def test_unknown_category_returns_404(self):
         response = Client().get("/v1/categories/symbol/color/test-nope.svg")
 

@@ -50,6 +50,7 @@ from server.apps.symbols.icon_data import (
 from server.apps.symbols.icon_sources import SOURCES, IconSource, SourceSpec
 from server.apps.symbols.icon_sources.base import slugify
 from server.apps.symbols.models import Icon, IconKeyword, Symbol, SymbolCollection
+from server.apps.symbols.svg import sanitize_svg
 
 EMOJIBASE_URL = "https://cdn.jsdelivr.net/npm/emojibase-data@{version}/{path}"
 
@@ -548,7 +549,12 @@ class Command(BaseCommand):
         symbol_slug = f"{pack.slug}-{slug}"
         name = f"{symbol_slug}_{style}.svg"
         storage_name = f"symbols/{name}"
-        content = svg_path.read_bytes()
+        # Sanitize at the read: upstream pack SVGs can carry the same
+        # namespace quirks (prefixed elements, missing root xmlns) that
+        # break strict <img> decoding and Martin's sprite parser — the
+        # stored bytes must be canonical (see sanitize_symbol_storage,
+        # migration 0017).
+        content = sanitize_svg(svg_path.read_bytes())
         symbol = Symbol.objects.filter(slug=symbol_slug, style=style).first()
         if symbol is not None:
             if self._storage_file_current(storage_name, content) or self.dry_run:
@@ -598,7 +604,10 @@ class Command(BaseCommand):
                 folded = fold_keyword(text)
                 if folded:
                     wanted[(locale, folded)] = text
-        existing = {(kw.locale, kw.keyword_folded): kw for kw in icon.keywords.all()}
+        existing = {
+            (kw.locale, kw.keyword_folded): kw
+            for kw in IconKeyword.objects.filter(icon=icon)
+        }
         created = 0
         for (locale, folded), text in wanted.items():
             if (locale, folded) not in existing and not self.dry_run:

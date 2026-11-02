@@ -487,12 +487,17 @@ HUTS_STYLE: dict[str, Any] = {
                 "icon-overlap": "always",
                 "text-overlap": "never",
                 "text-optional": True,
-                # Zoom ladder: primitive (far out, tiny) → mono SDF
-                # (zoomed in, runtime-tinted). Below z9 the primitive
-                # sprite (small colored shape on white ring) reads
-                # better than a glyph at ~5px; from z9 up the SDF mono
-                # glyph with runtime tinting and a white halo border is
-                # the workhorse.
+                # Zoom ladder: primitive shape (far out, tiny) →
+                # mono glyph (zoomed in). BOTH run through the SDF sprite
+                # so the paint props apply at every zoom: icon-color tints
+                # with the per-type color from the tiles and icon-halo-*
+                # draws the white border. The regular (non-SDF) ``wd``
+                # primitive sprite is NOT usable here: its SVGs use
+                # fill="currentColor", which Martin rasterizes to black,
+                # and non-SDF icons ignore icon-color entirely (the black
+                # far-zoom icons bug). Below z9 the simpler primitive
+                # shape reads better at ~5px than the detailed mono
+                # glyph; from z9 up the mono glyph is the workhorse.
                 "icon-image": [
                     "step",
                     ["zoom"],
@@ -502,11 +507,11 @@ HUTS_STYLE: dict[str, Any] = {
                             "image",
                             [
                                 "concat",
-                                "wd:primitive/amenity.",
+                                "wd-sdf:primitive/amenity.",
                                 ["get", "type_standard_identifier"],
                             ],
                         ],
-                        ["image", "wd:primitive/amenity.accommodation.unknown"],
+                        ["image", "wd-sdf:primitive/amenity.accommodation.unknown"],
                         # Fallback to mono if primitive isn't served
                         [
                             "image",
@@ -534,11 +539,11 @@ HUTS_STYLE: dict[str, Any] = {
                             "image",
                             [
                                 "concat",
-                                "wd:primitive/amenity.",
+                                "wd-sdf:primitive/amenity.",
                                 ["get", "type_standard_identifier"],
                             ],
                         ],
-                        ["image", "wd:primitive/amenity.accommodation.unknown"],
+                        ["image", "wd-sdf:primitive/amenity.accommodation.unknown"],
                     ],
                 ],
                 # 48px art. Far out: small (0.1–0.3 like the original).
@@ -571,8 +576,34 @@ HUTS_STYLE: dict[str, Any] = {
                     "#718096",
                 ],
                 "icon-halo-color": "#ffffff",
-                "icon-halo-width": 2,
-                "icon-halo-blur": 0.15,
+                # Halo width is ABSOLUTE device pixels — it does NOT
+                # scale with icon-size (style spec). A constant 2px on
+                # the ~14px glyphs around z9 (icon-size 0.3) merged the
+                # per-stroke outlines into one solid white plate; the
+                # same 2px only becomes a thin border at z13+ (36-48px
+                # glyphs) — the “plate at mid zoom, gone when zoomed
+                # in” bug. The ladder tracks the icon-size ramp so the
+                # border stays proportionally thin at every zoom.
+                "icon-halo-width": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    7,
+                    0.5,
+                    9,
+                    0.75,
+                    11,
+                    1.0,
+                    13,
+                    1.5,
+                    16,
+                    2.0,
+                    20,
+                    2.5,
+                ],
+                # No blur: the 0.15 fade made the border read as a soft
+                # translucent glow (and added to the SDF softness).
+                "icon-halo-blur": 0,
                 # Semi-transparent when zoomed out, full opacity when
                 # zoomed in.
                 "icon-opacity": [

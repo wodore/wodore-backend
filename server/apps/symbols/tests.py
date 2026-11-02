@@ -67,7 +67,9 @@ class TestContentHashedStorage:
 
         symbol = _make_symbol("water", "color")
         # Name shape: symbols/water_<hash10>.svg
-        stem = symbol.svg_file.name.rsplit("/", 1)[-1]
+        name = symbol.svg_file.name
+        assert name is not None
+        stem = name.rsplit("/", 1)[-1]
         assert stem.startswith("water_") and stem.endswith(".svg")
         assert len(stem.split("_")[-1].split(".")[0]) == 10
 
@@ -83,6 +85,8 @@ class TestContentHashedStorage:
         first = symbol.svg_file.name
         symbol.svg_file.save("mountain.svg", ContentFile(b"<svg><changed/></svg>"))
         second = symbol.svg_file.name
+        assert second is not None
+        assert first is not None
         assert second != first
         assert second.rsplit("/", 1)[-1].startswith("mountain_")
 
@@ -111,6 +115,7 @@ class TestContentHashedStorage:
         assert stats["renamed"] >= 1
         symbol.refresh_from_db()
         new_name = symbol.svg_file.name  # type: ignore  # dynamic attr: plugin-less inference gap
+        assert new_name is not None
         assert new_name != legacy_name
         assert default_storage.exists(new_name)
         assert not default_storage.exists(legacy_name)  # old file removed
@@ -156,3 +161,85 @@ class TestCoreStorageHelpers:
         assert default_storage.exists(name)
         stem = name.rsplit("/", 1)[-1]
         assert stem.startswith("logo_") and stem.endswith(".png")
+
+
+SVG_NO_XMLNS = (
+    b'<svg viewBox="0 0 24 24" width="48" height="48">'
+    b'<path fill="#5D4433" d="M0 0h1z"/></svg>'
+)
+SVG_NS0_PREFIX = (
+    b'<svg xmlns:ns0="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+    b'<ns0:path fill="#5D4433" d="M0 0h1z"/></svg>'
+)
+
+
+@pytest.mark.django_db
+class TestSanitizeSymbolStorage:
+    """Migration 0017 — heal stored SVGs a browser cannot decode in <img>."""
+
+    def test_rewrites_malformed_files(self):
+        from django.core.files.storage import default_storage
+
+        # Raw bytes on purpose: svg_file.save must not sanitize (the gap
+        # this migration heals); clean files stay byte-identical.
+        bad_no_ns = _make_symbol("test-selfhut", Symbol.StyleChoices.color)
+        bad_no_ns.svg_file.save(
+            "color__selfhut.svg", ContentFile(SVG_NO_XMLNS), save=True
+        )
+        old_no_ns = bad_no_ns.svg_file.name
+        assert old_no_ns is not None
+        bad_ns0 = _make_symbol("test-hut", Symbol.StyleChoices.color)
+        bad_ns0.svg_file.save("color__hut.svg", ContentFile(SVG_NS0_PREFIX), save=True)
+        old_ns0 = bad_ns0.svg_file.name
+        assert old_ns0 is not None
+        clean = _make_symbol("test-selfhut-mono", Symbol.StyleChoices.mono)
+        clean_name = clean.svg_file.name
+
+        from server.apps.symbols.storage import sanitize_symbol_storage
+
+        stats = sanitize_symbol_storage(Symbol)
+
+        assert stats["sanitized"] == 2
+        assert stats["skipped"] >= 1
+        for symbol, old_name in ((bad_no_ns, old_no_ns), (bad_ns0, old_ns0)):
+            symbol.refresh_from_db()
+            with symbol.svg_file.open("rb") as stored:
+                body = stored.read()
+            root = body[: body.index(b">") + 1]
+            assert b'xmlns="http://www.w3.org/2000/svg"' in root
+            assert b"xmlns:ns0" not in body
+            assert symbol.svg_file.name != old_name  # new content hash
+            assert not default_storage.exists(old_name)  # superseded file gone
+        clean.refresh_from_db()
+        assert clean.svg_file.name == clean_name  # untouched
+
+    def test_dry_run_counts_without_writing(self):
+        symbol = _make_symbol("test-bhotel", Symbol.StyleChoices.color)
+        symbol.svg_file.save("color__bhotel.svg", ContentFile(SVG_NO_XMLNS), save=True)
+        name_before = symbol.svg_file.name
+
+        from server.apps.symbols.storage import sanitize_symbol_storage
+
+        stats = sanitize_symbol_storage(Symbol, dry_run=True)
+
+        assert stats["sanitized"] == 1
+        symbol.refresh_from_db()
+        assert symbol.svg_file.name == name_before
+
+    def test_idempotent(self):
+        from server.apps.symbols.storage import sanitize_symbol_storage
+        from server.apps.symbols.svg import sanitize_svg
+
+        symbol = _make_symbol("test-camping", Symbol.StyleChoices.color)
+        symbol.svg_file.save(
+            "color__camping.svg",
+            ContentFile(sanitize_svg(SVG_NO_XMLNS)),
+            save=True,
+        )
+        name = symbol.svg_file.name
+
+        stats = sanitize_symbol_storage(Symbol)
+
+        assert stats["sanitized"] == 0
+        symbol.refresh_from_db()
+        assert symbol.svg_file.name == name
