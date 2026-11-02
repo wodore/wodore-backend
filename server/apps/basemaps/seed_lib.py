@@ -487,12 +487,17 @@ HUTS_STYLE: dict[str, Any] = {
                 "icon-overlap": "always",
                 "text-overlap": "never",
                 "text-optional": True,
-                # Zoom ladder: primitive (far out, tiny) → mono SDF
-                # (zoomed in, runtime-tinted). Below z9 the primitive
-                # sprite (small colored shape on white ring) reads
-                # better than a glyph at ~5px; from z9 up the SDF mono
-                # glyph with runtime tinting and a white halo border is
-                # the workhorse.
+                # Zoom ladder: primitive shape (far out, tiny) →
+                # mono glyph (zoomed in). BOTH run through the SDF sprite
+                # so the paint props apply at every zoom: icon-color tints
+                # with the per-type color from the tiles and icon-halo-*
+                # draws the white border. The regular (non-SDF) ``wd``
+                # primitive sprite is NOT usable here: its SVGs use
+                # fill="currentColor", which Martin rasterizes to black,
+                # and non-SDF icons ignore icon-color entirely (the black
+                # far-zoom icons bug). Below z9 the simpler primitive
+                # shape reads better at ~5px than the detailed mono
+                # glyph; from z9 up the mono glyph is the workhorse.
                 "icon-image": [
                     "step",
                     ["zoom"],
@@ -502,11 +507,11 @@ HUTS_STYLE: dict[str, Any] = {
                             "image",
                             [
                                 "concat",
-                                "wd:primitive/amenity.",
+                                "wd-sdf:primitive/amenity.",
                                 ["get", "type_standard_identifier"],
                             ],
                         ],
-                        ["image", "wd:primitive/amenity.accommodation.unknown"],
+                        ["image", "wd-sdf:primitive/amenity.accommodation.unknown"],
                         # Fallback to mono if primitive isn't served
                         [
                             "image",
@@ -534,11 +539,11 @@ HUTS_STYLE: dict[str, Any] = {
                             "image",
                             [
                                 "concat",
-                                "wd:primitive/amenity.",
+                                "wd-sdf:primitive/amenity.",
                                 ["get", "type_standard_identifier"],
                             ],
                         ],
-                        ["image", "wd:primitive/amenity.accommodation.unknown"],
+                        ["image", "wd-sdf:primitive/amenity.accommodation.unknown"],
                     ],
                 ],
                 # 48px art. Far out: small (0.1–0.3 like the original).

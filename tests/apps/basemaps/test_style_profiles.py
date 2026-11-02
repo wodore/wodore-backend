@@ -611,6 +611,68 @@ class TransportVectorContractTests(SimpleTestCase):
         validate_subset_style(TRANSPORT_STYLE)
 
 
+class HutsIconLadderContractTests(SimpleTestCase):
+    """The wd-huts icon ladder must reference SDF sprites only.
+
+    Regression: the far-zoom branch pulled icons from the regular
+    ``wd`` primitive sprite. Those SVGs are authored with
+    fill="currentColor", which the sprite rasterizer resolves to
+    black — and non-SDF icons ignore ``icon-color`` paint anyway — so
+    every hut rendered as an untintable black shape below z9. Both
+    step branches must stay on ``wd-sdf:`` names so the type color +
+    white halo paint applies at every zoom.
+    """
+
+    @staticmethod
+    def _icon_name_literals(node: Any) -> set[str]:
+        """Collect icon-name literals (sprite refs and concat prefixes)."""
+        if isinstance(node, str):
+            return {node} if ("/" in node or ":" in node) else set()
+        if isinstance(node, list):
+            names: set[str] = set()
+            for child in node:
+                names |= HutsIconLadderContractTests._icon_name_literals(child)
+            return names
+        return set()
+
+    def test_icon_ladder_is_sdf_only(self) -> None:
+        layer = next(
+            layer for layer in HUTS_STYLE["layers"] if layer["id"] == "wd-huts"
+        )
+        expr = layer["layout"]["icon-image"]
+        assert expr[0] == "step"
+        far, near = expr[2], expr[4]
+        # far zoom: the primitive shape (simpler at ~5px) ...
+        assert self._icon_name_literals(far) == {
+            "wd-sdf:primitive/amenity.",
+            "wd-sdf:primitive/amenity.accommodation.unknown",
+            "wd-sdf:mono/amenity.",
+            "wd-sdf:mono/amenity.accommodation.unknown",
+        }
+        # ... near zoom: the mono glyph
+        assert self._icon_name_literals(near) == {
+            "wd-sdf:mono/amenity.",
+            "wd-sdf:mono/amenity.accommodation.unknown",
+            "wd-sdf:primitive/amenity.",
+            "wd-sdf:primitive/amenity.accommodation.unknown",
+        }
+        for branch in (far, near):
+            assert all(
+                name.startswith("wd-sdf:") for name in self._icon_name_literals(branch)
+            )
+
+    def test_halo_paint_present(self) -> None:
+        """The white border (halo) paint both zoom branches rely on."""
+        layer = next(
+            layer for layer in HUTS_STYLE["layers"] if layer["id"] == "wd-huts"
+        )
+        paint = layer["paint"]
+        assert paint["icon-halo-color"] == "#ffffff"
+        assert paint["icon-halo-width"] == 2
+        # runtime tint source: per-type color from the tiles
+        assert paint["icon-color"][0] == "coalesce"
+
+
 class ClusteringConfigTests(SimpleTestCase):
     def test_seed_schema_passes(self) -> None:
         validate_clustering_config(CLUSTERING_CONFIG)

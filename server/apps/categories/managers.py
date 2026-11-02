@@ -46,14 +46,58 @@ class CategoryQuerySet(MultilingualQuerySet):
         """Select related parent for efficient hierarchy traversal."""
         return self.select_related("parent")
 
+    def _resolve_deep_slug(
+        self, slugs: list[str], is_active: bool = True
+    ) -> tuple["Category | None", list[str]]:
+        """Resolve slug paths deeper than two segments (map tree).
+
+        Matches categories whose ancestor path *ends with* the given
+        segments, so the path may start anywhere in the tree —
+        ``amenity.accommodation.selfhut`` need not repeat the ``map``
+        root (and ``map.amenity.accommodation.selfhut`` works too).
+        Tile feature identifiers (``type_standard_identifier``) are
+        three segments deep; callers feed them straight through here.
+
+        Returns the category when unique, ``(None, paths)`` when the
+        path matches several categories, ``(None, [])`` when nothing
+        matches.
+        """
+        qs = self.active() if is_active else self
+
+        matches: list[Category] = []
+        for category in qs.filter(slug=slugs[-1]).select_related("parent"):
+            ancestor_slugs = [
+                ancestor.slug for ancestor in category.get_ancestors(include_self=True)
+            ]
+            if ancestor_slugs[-len(slugs) :] == slugs:
+                matches.append(category)
+
+        if len(matches) == 1:
+            return matches[0], []
+        if not matches:
+            return None, []
+        paths = sorted(
+            ".".join(
+                ancestor.slug for ancestor in match.get_ancestors(include_self=True)
+            )
+            for match in matches
+        )
+        return None, paths
+
     def resolve_slug(
         self, slug_path: str, is_active: bool = True
     ) -> tuple["Category | None", list[str]]:
         """
-        Resolve a dot or slash notation slug path to a category (max one parent).
+        Resolve a dot or slash notation slug path to a category.
+
+        Paths of one or two segments keep the legacy resolution
+        (root-parent lookup, then the stored two-level ``identifier``
+        column); deeper map-tree paths resolve through
+        :meth:`_resolve_deep_slug`.
 
         Args:
-            slug_path: Dot-separated slug path with max 2 parts (e.g., "parent.child")
+            slug_path: Dot-separated slug path (e.g., "parent.child",
+                "amenity.accommodation.selfhut")
             is_active: Only consider active categories
 
         Returns:
@@ -65,12 +109,16 @@ class CategoryQuerySet(MultilingualQuerySet):
             - "hut" with single match returns (category, [])
             - "hut" with multiple matches returns (None, ["accommodation.hut"])
             - "accommodation.hut" returns (category, []) if found
+            - "amenity.accommodation.selfhut" (map tree, any depth)
+              resolves via the ancestor-suffix walk
             - "invalid" returns (None, [])
         """
         slug_path = slug_path.replace("/", ".")
         slugs = [s.strip() for s in slug_path.split(".") if s.strip()]
-        if not slugs or len(slugs) > 2:
+        if not slugs:
             return None, []
+        if len(slugs) > 2:
+            return self._resolve_deep_slug(slugs, is_active=is_active)
 
         qs = self
         if is_active:
