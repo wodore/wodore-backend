@@ -61,6 +61,18 @@ class Command(BaseCommand):
         pack_id = options.get("pack")
         dry_run = options.get("dry_run", False)
 
+        # Fail fast with a readable message instead of a FileNotFoundError
+        # traceback when run outside a checkout that carries iconpacks/ —
+        # e.g. in a deployed container (BACKEND-DJANGO-1B).
+        if not base.is_dir():
+            raise CommandError(
+                f"{base}/ not found under {Path.cwd()} — this command "
+                "regenerates repo assets from the iconpacks source of truth "
+                "and must run from a checkout that includes iconpacks/, "
+                "never from a deployed container (its output would be lost "
+                "with the container anyway)."
+            )
+
         pack_ids = (
             [pack_id]
             if pack_id
