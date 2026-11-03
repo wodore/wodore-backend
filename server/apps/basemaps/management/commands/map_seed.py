@@ -371,6 +371,74 @@ def _links_legend(
     }
 
 
+def _amenity_overlay_layers() -> list[dict[str, Any]]:
+    """Catalog entries for the amenity overlay family (importance-banded).
+
+    One entry per subtree spec in ``seed_lib.AMENITY_OVERLAYS`` — the
+    accommodations overlay's shape (full + subset twin, subtree category
+    filter/legend links, NO client-side clustering hint: the geoplaces
+    function clusters server-side) with each tier's ``min_zoom`` from
+    the spec. No ``icon_scale`` parameters: the new twins bake the
+    ladder (see ``seed_lib.amenity_overlay_style``).
+    """
+    entries: list[dict[str, Any]] = []
+    for spec in lib.AMENITY_OVERLAYS.values():
+        source_id = f"wd-{spec.subtree}"
+        entries.append(
+            {
+                "slug": spec.subtree,
+                "role": MapLayer.Role.overlay,
+                "name": spec.name,
+                "description": spec.description,
+                # Provisional frontend chip icon (static
+                # overlays/exports/<name>.svg) — swap once dedicated
+                # chips land (accommodations precedent: "huts").
+                "icon": spec.icon,
+                "slot": "ways",
+                "order": spec.order,
+                "min_zoom": spec.min_zoom,
+                "style": lib.AMENITY_OVERLAY_STYLES[spec.subtree],
+                "parameters": {},
+                "variants": [
+                    {
+                        "profile": MapLayer.Profile.subset,
+                        "version": SUBSET_REVISION,
+                        "style": lib.AMENITY_OVERLAY_STYLES_SUBSET[spec.subtree],
+                        "parameters": {},
+                    }
+                ],
+                "attributions": [],
+                "categories": [
+                    {"slug": spec.subtree, "use": "filter"},
+                    {"slug": spec.subtree, "use": "legend"},
+                ],
+                "config": {
+                    "filters": [
+                        {
+                            "id": f"{spec.subtree}Types",
+                            "label": f"{spec.name} types",
+                            "type": "multi-select",
+                            "category": spec.subtree,
+                            "defaultValue": [],
+                            "mapLayers": [
+                                f"{source_id}-clusters",
+                                f"{source_id}-cluster-count",
+                                f"{source_id}-selected",
+                                source_id,
+                            ],
+                            "mapProperty": "category_identifier",
+                            "filterExpression": "in",
+                        }
+                    ]
+                    # NOTE: no config.clustering hint — SERVER-side
+                    # clustering (count>1 features from the geoplaces
+                    # function); a client-side hint would double-cluster.
+                },
+            }
+        )
+    return entries
+
+
 LAYERS: list[dict[str, Any]] = [
     # ── Overlays ──────────────────────────────────────────────────────
     {
@@ -522,6 +590,10 @@ LAYERS: list[dict[str, Any]] = [
             # cluster features); a client-side hint would double-cluster.
         },
     },
+    # The remaining amenity overlays (restaurant, tourism, utilities, …
+    # importance-banded — one entry per seed_lib.AMENITY_OVERLAYS spec;
+    # catalog order sorts them after the hand-curated overlays).
+    *_amenity_overlay_layers(),
     {
         "slug": "transport-stops",
         "role": MapLayer.Role.overlay,
