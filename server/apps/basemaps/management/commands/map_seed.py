@@ -68,6 +68,14 @@ PARAMETERS: list[dict[str, Any]] = [
         "constraints": {"min": 0.5, "max": 2, "step": 0.1},
     },
     {
+        "slug": "accommodations.icon_scale",
+        "kind": MapParameter.Kind.number,
+        "label": "Accommodation icon size",
+        "description": "Scales the accommodation symbols on the map.",
+        "default": 1,
+        "constraints": {"min": 0.5, "max": 2, "step": 0.1},
+    },
+    {
         "slug": "date",
         "kind": MapParameter.Kind.date,
         "label": "Availability date",
@@ -150,6 +158,16 @@ CH_BBOX = (5.7, 45.6, 10.9, 48.1)
 # (colors/widths may hold {{parameter}} tokens). Links reuse
 # external_links.ExternalLink rows (get-or-create by URL).
 LEGENDS: dict[str, dict[str, Any]] = {
+    "accommodations": {
+        "sections": [
+            {
+                "title": "Accommodations",
+                "description": "Accommodation types by symbol (POI database).",
+                "type": "symbol_mono",
+                "category": "accommodation",
+            }
+        ]
+    },
     "huts": {
         "sections": [
             {
@@ -330,7 +348,17 @@ PARAMETERS += [
 
 
 def _fixture_style(name: str) -> dict[str, Any]:
-    return json.loads((FIXTURES / f"{name}.json").read_text())
+    """Load an authored basemap document from ``fixtures/styles``.
+
+    Fail fast with a named fixture — a missing/corrupt file must crash
+    the seed loudly (module import), not seed a silently empty style.
+    """
+    path = FIXTURES / f"{name}.json"
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError) as exc:
+        msg = f"fixture style {path} unreadable: {exc}"
+        raise CommandError(msg) from exc
 
 
 def _links_legend(
@@ -428,6 +456,70 @@ LAYERS: list[dict[str, Any]] = [
         },
         "interaction": {
             "click": {"layers": ["wd-huts"], "behavior": "hut-detail", "min_zoom": 8}
+        },
+    },
+    {
+        "slug": "accommodations",
+        "role": MapLayer.Role.overlay,
+        "name": "Accommodations",
+        "description": (
+            "Hotels, hostels, campsites and huts from the POI database "
+            "(geoplaces vector tiles, server-clustered at low zooms, "
+            "served as MLT through Martin) — first overlay of the geoplaces "
+            "family, the other POI groups follow the same pattern."
+        ),
+        # "huts": the frontend icon set's accommodation-family icon (the
+        # overlay is its POI-database superset); no dedicated icon verified
+        # in the frontend library yet — swap once one exists.
+        "icon": "huts",
+        "slot": "ways",
+        "order": 1,
+        "min_zoom": 5,
+        "style": lib.ACCOMMODATIONS_STYLE,
+        "parameters": {"accommodations.icon_scale": None},
+        "variants": [
+            # Subset twin for the Leaflet fallback: cluster bubbles +
+            # tinted fallback icons, no count labels/text (see
+            # seed_lib._accommodations_style_subset for the surgery
+            # rationale — huts-twin pattern).
+            {
+                "profile": MapLayer.Profile.subset,
+                "version": SUBSET_REVISION,
+                "style": lib.ACCOMMODATIONS_STYLE_SUBSET,
+                # Variant parameters REPLACE the parent list: the twin's
+                # baked icon-size ladder never reads the icon_scale token.
+                "parameters": {},
+            }
+        ],
+        "attributions": [],
+        "categories": [
+            {"slug": "accommodation", "use": "filter"},
+            {"slug": "accommodation", "use": "legend"},
+        ],
+        "config": {
+            "filters": [
+                {
+                    "id": "accommodationTypes",
+                    "label": "Accommodation types",
+                    "type": "multi-select",
+                    "category": "accommodation",
+                    "defaultValue": [],
+                    "mapLayers": [
+                        "wd-accommodations-clusters",
+                        "wd-accommodations-cluster-count",
+                        "wd-accommodations-selected",
+                        "wd-accommodations",
+                    ],
+                    # Option values are the category identifiers
+                    # ("accommodation.hut", …) — same shape as the huts
+                    # overlay's type filter.
+                    "mapProperty": "category_identifier",
+                    "filterExpression": "in",
+                }
+            ]
+            # NOTE: no config.clustering hint — the clustering is
+            # SERVER-side (the geoplaces function source emits count>1
+            # cluster features); a client-side hint would double-cluster.
         },
     },
     {

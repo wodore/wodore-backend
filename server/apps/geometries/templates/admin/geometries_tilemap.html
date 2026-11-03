@@ -59,7 +59,7 @@
                 <div>
                     <label class="block font-semibold text-xs mb-1">Importance Threshold</label>
                     <input type="number" id="importance-threshold" value="50" min="0" max="100" step="5" class="w-24 px-2 py-1 border rounded text-sm">
-                    <span class="text-xs text-gray-500">High-importance POIs (>= this) graduate early</span>
+                    <span class="text-xs text-gray-500">High-importance POIs (&gt;= this) graduate early</span>
                 </div>
                 <div>
                     <label class="block font-semibold text-xs mb-1">Cluster Reference Zoom</label>
@@ -154,16 +154,22 @@
     const tilemapPanel = document.getElementById('tilemap-panel');
     panelToggle.addEventListener('click', () => {
         tilemapPanel.classList.toggle('collapsed');
-        panelToggle.innerHTML = tilemapPanel.classList.contains('collapsed') ? '&#9654;' : '&#9664;';
+        panelToggle.textContent = tilemapPanel.classList.contains('collapsed') ? '\u25B6' : '\u25C0';
     });
 
+    // localStorage/JSON reads must never brick the debug panel — a
+    // corrupted value falls back to the default instead of throwing.
+    function safeParse(raw, fallback) {
+        try { return JSON.parse(raw); } catch (_e) { return fallback; }
+    }
+
     const MARTIN_URL = '{{ martin_tile_url|escapejs }}';
-    const overlayCategories = JSON.parse('{{ overlay_categories_json|escapejs }}');
+    const overlayCategories = safeParse('{{ overlay_categories_json|escapejs }}', []);
 
     // ── Tile URL builder ──
     function buildTileURL() {
         const params = {};
-        params.fields = 'category,color,parent_color,categories_all,sources,importance,count,name,slug';
+        params.fields = 'color,parent_color,parent_slug,categories,sources,importance,count,name,slug';
 
         const clusterRadiusM = document.getElementById('cluster-radius-m').value;
         if (clusterRadiusM) params.cluster_radius_m = clusterRadiusM;
@@ -178,7 +184,7 @@
         const maxFeatures = document.getElementById('max-features').value;
         if (maxFeatures) params.max_features = maxFeatures;
         const cacheVersion = document.getElementById('cache-version').value;
-        if (cacheVersion !== undefined) params.cache_version = cacheVersion;
+        if (cacheVersion) params.cache_version = cacheVersion;
         const cacheTtlDays = document.getElementById('cache-ttl-days').value;
         if (cacheTtlDays !== undefined) params.cache_ttl_days = cacheTtlDays;
 
@@ -193,17 +199,34 @@
 
     function renderOverlays() {
         const container = document.getElementById('overlay-list');
-        const savedOverlays = JSON.parse(localStorage.getItem('poiClusteringOverlays') || '[]');
+        const savedOverlays = safeParse(localStorage.getItem('poiClusteringOverlays') || '[]', []);
         const savedSet = new Set(savedOverlays);
 
-        container.innerHTML = overlayCategories.map(cat => `
-            <div class="flex items-center gap-1.5 py-1 cursor-pointer text-xs">
-                <input type="checkbox" class="overlay-cb" id="overlay-${cat.slug}" value="${cat.slug}"
-                    ${savedSet.has(cat.slug) ? 'checked' : ''} onchange="window._updateOverlays()">
-                <span class="w-3 h-3 rounded-sm inline-block flex-shrink-0" style="background: ${cat.color}"></span>
-                <label for="overlay-${cat.slug}" class="cursor-pointer">${cat.name || cat.slug}</label>
-            </div>
-        `).join('');
+        container.replaceChildren();
+        for (const cat of overlayCategories) {
+            const row = document.createElement('div');
+            row.className = 'flex items-center gap-1.5 py-1 cursor-pointer text-xs';
+
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.className = 'overlay-cb';
+            cb.id = 'overlay-' + cat.slug;
+            cb.value = cat.slug;
+            cb.checked = savedSet.has(cat.slug);
+            cb.addEventListener('change', () => window._updateOverlays());
+
+            const swatch = document.createElement('span');
+            swatch.className = 'w-3 h-3 rounded-sm inline-block flex-shrink-0';
+            swatch.style.background = cat.color;
+
+            const label = document.createElement('label');
+            label.htmlFor = cb.id;
+            label.className = 'cursor-pointer';
+            label.textContent = cat.name || cat.slug;
+
+            row.append(cb, swatch, label);
+            container.append(row);
+        }
 
         updateOverlayCount();
     }
@@ -243,7 +266,7 @@
 
     // ── Settings persistence ──
     function loadSettings() {
-        const s = JSON.parse(localStorage.getItem('poiClusteringSettings') || '{}');
+        const s = safeParse(localStorage.getItem('poiClusteringSettings') || '{}', {});
         if (s.clusterRadiusM) document.getElementById('cluster-radius-m').value = s.clusterRadiusM;
         if (s.clusterMaxZoom) document.getElementById('cluster-max-zoom').value = s.clusterMaxZoom;
         if (s.clusterLowZoomOffset) document.getElementById('cluster-low-zoom-offset').value = s.clusterLowZoomOffset;
@@ -418,8 +441,8 @@
         });
 
         const div = document.getElementById('parent-category-counts');
-        div.innerHTML = Object.keys(counts).length > 0
-            ? Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([c, n]) => '<div>' + c + ': ' + n + '</div>').join('')
+        div.textContent = Object.keys(counts).length > 0
+            ? Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([c, n]) => c + ': ' + n).join(' ')
             : 'No features visible';
     }
 
@@ -431,9 +454,13 @@
     map.on('click', 'pois-raw', (e) => showPopup(e.features[0]));
 
     function showPopup(feature) {
-        document.getElementById('popup-content').innerHTML =
-            '<pre class="bg-gray-100 p-3 rounded text-xs overflow-x-auto max-h-96">' +
-            JSON.stringify(feature.properties, null, 2) + '</pre>';
+        // Feature properties carry OSM-sourced strings (place names) —
+        // textContent only, never markup injection.
+        const host = document.getElementById('popup-content');
+        const pre = document.createElement('pre');
+        pre.className = 'bg-gray-100 p-3 rounded text-xs overflow-x-auto max-h-96';
+        pre.textContent = JSON.stringify(feature.properties, null, 2);
+        host.replaceChildren(pre);
     }
 
     map.on('mouseenter', 'pois-clustered', () => map.getCanvas().style.cursor = 'pointer');
@@ -492,9 +519,13 @@
 
             tileLoadTimes.unshift({ z: c.z, x: c.x, y: c.y, time: loadTime });
             if (tileLoadTimes.length > 10) tileLoadTimes.pop();
-            document.getElementById('recent-tiles').innerHTML = tileLoadTimes.map(t =>
-                '<div class="py-0.5 border-b border-gray-100">z:' + t.z + '/' + t.x + '/' + t.y + ' - <strong>' + t.time.toFixed(1) + 'ms</strong></div>'
-            ).join('');
+            const recent = document.getElementById('recent-tiles');
+            recent.replaceChildren(...tileLoadTimes.map(t => {
+                const row = document.createElement('div');
+                row.className = 'py-0.5 border-b border-gray-100';
+                row.textContent = 'z:' + t.z + '/' + t.x + '/' + t.y + ' - ' + t.time.toFixed(1) + 'ms';
+                return row;
+            }));
 
             if (activeTiles.has(key)) {
                 const a = activeTiles.get(key);
@@ -507,9 +538,13 @@
         if (tile.state === 'errored' || tile.error) {
             tileErrors.unshift({ z: c.z, x: c.x, y: c.y, error: tile.error || 'Unknown error', time: new Date().toLocaleTimeString() });
             if (tileErrors.length > 5) tileErrors.pop();
-            document.getElementById('tile-errors').innerHTML = tileErrors.map(e =>
-                '<div class="py-1 bg-red-50 border-b border-red-100 text-red-700"><strong>ERROR ' + e.time + ':</strong> z:' + e.z + '/' + e.x + '/' + e.y + '<br><span class="text-[10px]">' + e.error + '</span></div>'
-            ).join('');
+            const errors = document.getElementById('tile-errors');
+            errors.replaceChildren(...tileErrors.map(e => {
+                const row = document.createElement('div');
+                row.className = 'py-1 bg-red-50 border-b border-red-100 text-red-700';
+                row.textContent = 'ERROR ' + e.time + ': z:' + e.z + '/' + e.x + '/' + e.y + ' — ' + e.error;
+                return row;
+            }));
             if (activeTiles.has(key)) {
                 const a = activeTiles.get(key);
                 a.status = 'failed';
@@ -524,14 +559,23 @@
 
     function updateActiveTilesDisplay() {
         const div = document.getElementById('active-tiles');
-        if (activeTiles.size === 0) { div.innerHTML = 'No active tiles'; return; }
-        div.innerHTML = Array.from(activeTiles.values()).map(t => {
-            let style = '', text = '';
-            if (t.status === 'loading') { style = 'color:#007cba;'; text = '⏳'; }
-            else if (t.status === 'completed') { style = 'color:#28a745;'; text = '✓ ' + t.loadTime.toFixed(1) + 'ms'; }
-            else if (t.status === 'failed') { style = 'color:#dc3545;text-decoration:line-through;'; text = '✗ Failed'; }
-            return '<div class="py-0.5 border-b border-gray-100" style="' + style + '">' + text + ' z:' + t.z + '/' + t.x + '/' + t.y + '</div>';
-        }).join('');
+        if (activeTiles.size === 0) { div.textContent = 'No active tiles'; return; }
+        div.replaceChildren(...Array.from(activeTiles.values()).map(t => {
+            const row = document.createElement('div');
+            row.className = 'py-0.5 border-b border-gray-100';
+            if (t.status === 'loading') {
+                row.style.color = '#007cba';
+                row.textContent = '\u23F3 z:' + t.z + '/' + t.x + '/' + t.y;
+            } else if (t.status === 'completed') {
+                row.style.color = '#28a745';
+                row.textContent = '\u2713 ' + t.loadTime.toFixed(1) + 'ms z:' + t.z + '/' + t.x + '/' + t.y;
+            } else {
+                row.style.color = '#dc3545';
+                row.style.textDecoration = 'line-through';
+                row.textContent = '\u2717 Failed z:' + t.z + '/' + t.x + '/' + t.y;
+            }
+            return row;
+        }));
     }
 })();
 </script>
