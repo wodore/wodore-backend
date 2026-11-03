@@ -50,6 +50,8 @@ from server.apps.basemaps.management.commands.map_seed import (
 from server.apps.basemaps.models import MapCoverage, MapLayer
 from server.apps.basemaps.resolution import style_endpoint_url
 from server.apps.basemaps.seed_lib import (
+    ACCOMMODATIONS_STYLE,
+    ACCOMMODATIONS_STYLE_SUBSET,
     HUTS_STYLE,
     HUTS_STYLE_SUBSET,
     TRANSPORT_STYLE,
@@ -262,6 +264,26 @@ class SubsetWalkerAccepts(SimpleTestCase):
         validate_subset_style(HUTS_STYLE_SUBSET)
         with pytest.raises(StyleValidationError):
             validate_subset_style(HUTS_STYLE)
+
+    def test_accommodations_subset_twin_passes_walker(self) -> None:
+        """The geoplaces accommodations twin (cluster bubbles + tinted
+        fallback icon) is walker-clean; the FULL document fails on the
+        icon ladder (concat/image/coalesce), the count labels
+        (to-string) and the feature-state selection circle."""
+        validate_subset_style(ACCOMMODATIONS_STYLE_SUBSET)
+        with pytest.raises(StyleValidationError):
+            validate_subset_style(ACCOMMODATIONS_STYLE)
+
+    def test_accommodations_source_mlt_pairing(self) -> None:
+        """The accommodations tiles template carries a query string
+        AFTER the ``.mlt`` suffix (cluster/filter params) — the pairing
+        contract (.mlt path ⇒ ``encoding: mlt``) must hold, and the
+        function-source URL params must survive resolution."""
+        source = ACCOMMODATIONS_STYLE["sources"]["wd-accommodations"]
+        template = source["tiles"][0]
+        assert template.split("?", 1)[0].endswith(".mlt")
+        assert source["encoding"] == "mlt"
+        assert "category_tree=accommodation" in template
 
     def test_equality_operator_with_nested_get_passes(self) -> None:
         """``==`` is whitelisted but NOT identifier-shaped — it must be
