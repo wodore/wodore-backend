@@ -776,11 +776,18 @@ HUTS_STYLE_SUBSET: dict[str, Any] = _huts_style_subset()
 #:   max_label_zoom=11            names ride the tiles from z11 (default
 #:                                14 — labels are the point of this
 #:                                overlay)
+#:   cluster_max_zoom=7            full clustering z5–z7, transition
+#:                                z8–z9 (isolated points go raw early),
+#:                                every place individual from z10 — the
+#:                                function default (6) graduated clusters
+#:                                one zoom too early for a z5-floor
+#:                                overlay (default offset 2 kept)
 #:   cache_ttl_days=1             DB tile cache TTL — a POI edit shows
 #:                                within a day without manual purges
-#: The URL carries a query string so the serve-time ``?v=`` asset
-#: versioning never applies (same trade-off as the availability source:
-#: freshness is bounded by this TTL + the 1-day edge cache_control).
+#: The URL carries a query string; geoplaces is REGISTERED in
+#: ``VERSIONED_TILE_SOURCES`` so the serve-time asset versioning still
+#: appends ``&v=`` (a data re-seed rotates it; freshness is bounded by
+#: the TTL + the 1-day edge cache_control between rotations).
 GEOPLACES_SOURCE = "geoplaces"
 ACCOMMODATIONS_SOURCE_ID = "wd-accommodations"
 
@@ -810,11 +817,12 @@ def accommodations_style() -> dict[str, Any]:
     disc — geoplaces carry no availability) and plus the server-side
     cluster rendering the function source provides:
 
-    * z5–z8 (function's full-clustering zone, defaults): category-colored
-      cluster bubbles with member counts — one per (category, grid cell);
-    * z7–z8 transition: high-importance places already raw (icons) while
+    * z5–z7 (function's full-clustering zone, ``cluster_max_zoom=7``):
+      category-colored cluster bubbles with member counts — one per
+      (category, grid cell);
+    * z8–z9 transition: high-importance places already raw (icons) while
       the rest still clusters;
-    * z9+: raw icons + labels for every place (names from z11 via
+    * z10+: raw icons + labels for every place (names from z11 via
       ``max_label_zoom``), icon ladder primitive → mono like the huts.
     """
     icon_ladder = [
@@ -887,7 +895,8 @@ def accommodations_style() -> dict[str, Any]:
                         # tile size; nothing in this document reads them)
                         "&fields=color,parent_color,parent_slug,"
                         "importance,count,name,slug"
-                        "&max_label_zoom=11&cache_ttl_days=1"
+                        "&max_label_zoom=11&cluster_max_zoom=7"
+                        "&cache_ttl_days=1"
                     )
                 ],
                 "encoding": "mlt",

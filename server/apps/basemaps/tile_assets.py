@@ -86,11 +86,21 @@ TERRAIN_PROBE_TILE = (10, 540, 357)
 
 #: Registered versioned Martin tile sources — opt-in, the single place
 #: of policy. ``deps`` must cover every table the tile view/function
-#: joins (unit-tested against ``HutsForTilesView.ViewMeta.query()``);
-#: an edit to any dep rotates the version. Availability is deliberately
-#: absent (self-rotating via ``?date=``); geoplaces is deferred until a
-#: served style references it. Static terrain routes (hillshade,
-#: contours) are versioned via watcher-observed stored entries instead.
+#: joins (unit-tested against ``HutsForTilesView.ViewMeta.query()`` /
+#: the geoplaces tile function's SQL — see
+#: ``tests/apps/basemaps/test_tile_asset_versions.py``); an edit to any
+#: dep rotates the version. Availability is deliberately absent
+#: (self-rotating via ``?date=``); geoplaces is registered since the
+#: accommodations overlay serves its tiles (a data re-seed must not
+#: leave the CDN on 24 h stale tiles). Static terrain routes
+#: (hillshade, contours) are versioned via watcher-observed stored
+#: entries instead.
+#:
+#: Registering a source also opts its tile URL templates into ``?v=``
+#: rotation when they carry their OWN query string (geoplaces:
+#: ``?category_tree=…&cache_ttl_days=1``) — the version appends as
+#: ``&v=``. Unregistered query URLs (availability's ``?date=``) keep
+#: self-managing their cache key and are never touched.
 VERSIONED_TILE_SOURCES: dict[str, dict[str, Any]] = {
     "huts": {
         "deps": (
@@ -99,6 +109,19 @@ VERSIONED_TILE_SOURCES: dict[str, dict[str, Any]] = {
             "owners.Owner",
             "organizations.Organization",
             "huts.HutOrganizationAssociation",
+        ),
+    },
+    # Every table ``get_geoplaces_for_tiles`` joins (migration
+    # ``geometries.0076`` FUNCTION_SQL) except ``geometries_tile_cache``
+    # — a derived cache, not source data (its rows change on every
+    # miss; rotating on them would be noise).
+    "geoplaces": {
+        "deps": (
+            "geometries.GeoPlace",
+            "geometries.GeoPlaceCategory",
+            "categories.Category",
+            "geometries.GeoPlaceSourceAssociation",
+            "organizations.Organization",
         ),
     },
 }
@@ -201,7 +224,10 @@ def _versionable(url: str) -> bool:
 
 
 def _append_param(url: str, value: str) -> str:
-    return f"{url}?v={value}"
+    """Append ``v=`` to a URL — after its existing query if it has one
+    (registered sources whose tile URLs carry their own params, e.g.
+    geoplaces' ``?category_tree=…``)."""
+    return f"{url}{'&' if '?' in url else '?'}v={value}"
 
 
 def _normalize_probe_url(url: str, origin: str) -> tuple[str, bool]:
@@ -267,16 +293,27 @@ def _tile_source_version(url: str, versions: dict[str, Any], origin: str) -> str
     First path segment is the key — either a computed DB-backed source
     (``VERSIONED_TILE_SOURCES``) or a stored static-route entry
     (``tiles:hillshade`` / ``tiles:contours``, watcher-observed).
+
+    A source registered in ``VERSIONED_TILE_SOURCES`` is versioned even
+    when its URL carries its own query string (geoplaces' category
+    filter params): explicit registration IS the version policy, the
+    version appends as ``&v=``. Per-request ``{{token}}`` parameters
+    still suppress — substitution manages the cache key (availability).
     """
-    if not _versionable(url):
-        return None
     path, is_martin = _normalize_probe_url(url, origin)
     if not is_martin:
         return None
     segments = [s for s in path.split("/") if s]
     if not segments:
         return None
-    return versions.get("tiles", {}).get(segments[0])
+    source = segments[0]
+    if source in VERSIONED_TILE_SOURCES:
+        if "{{" in replace_tile_origin(url, ""):
+            return None
+        return versions.get("tiles", {}).get(source)
+    if not _versionable(url):
+        return None
+    return versions.get("tiles", {}).get(source)
 
 
 def _tile_source_name(url: str, origin: str) -> str | None:
