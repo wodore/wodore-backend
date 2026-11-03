@@ -121,6 +121,37 @@ class AmenityStyleContractTests(SimpleTestCase):
                 1,
             ], subtree
 
+    def test_cluster_radius_stops_strictly_ascending(self) -> None:
+        """MapLibre rejects interpolate stops that are not strictly
+        ascending (hard parse error). Tier C has min_zoom ==
+        cluster_max_zoom + 2, so the radius anchor must be clamped —
+        this guard pins that for every tier, in both documents."""
+
+        def zoom_stops(expression: Any) -> list[float]:
+            if (
+                isinstance(expression, list)
+                and len(expression) >= 4
+                and expression[0] == "interpolate"
+                and expression[2] == ["zoom"]
+            ):
+                return [float(stop) for stop in expression[3::2]]
+            return []
+
+        documents = {
+            "full": lib.AMENITY_OVERLAY_STYLES,
+            "subset": lib.AMENITY_OVERLAY_STYLES_SUBSET,
+        }
+        for kind, styles in documents.items():
+            for subtree, style in styles.items():
+                cluster = next(
+                    layer
+                    for layer in style["layers"]
+                    if layer["id"] == f"wd-{subtree}-clusters"
+                )
+                stops = zoom_stops(cluster["paint"]["circle-radius"])
+                assert len(stops) == 2, (kind, subtree, stops)
+                assert stops[0] < stops[1], (kind, subtree, stops)
+
 
 def _fallbacks(expression: Any) -> set[str]:
     """Static ``image`` literals inside an icon expression tree."""

@@ -1477,6 +1477,10 @@ def amenity_overlay_style(spec: AmenityOverlaySpec) -> dict[str, Any]:
     sprite_id = f"wd-sdf-{subtree}"
     fallback = f"{sprite_id}:mono/amenity.{subtree}"
     raw_floor = spec.cluster_max_zoom + 2
+    # Interpolate zoom stops must be strictly ascending (MapLibre hard
+    # error otherwise). Tier C has min_zoom == cluster_max_zoom + 2, so
+    # clamp the radius anchor one step above the floor.
+    radius_floor = max(raw_floor, spec.min_zoom + 1)
     count_filter: list[Any] = ["==", ["get", "count"], 1]
     cluster_filter: list[Any] = [">", ["get", "count"], 1]
 
@@ -1600,7 +1604,7 @@ def amenity_overlay_style(spec: AmenityOverlaySpec) -> dict[str, Any]:
                             50,
                             12,
                         ],
-                        raw_floor,
+                        radius_floor,
                         [
                             "interpolate",
                             ["linear"],
@@ -1754,6 +1758,9 @@ def amenity_overlay_style_subset(spec: AmenityOverlaySpec) -> dict[str, Any]:
     sprite_id = f"wd-sdf-{subtree}"
     fallback = f"{sprite_id}:mono/amenity.{subtree}"
     raw_floor = spec.cluster_max_zoom + 2
+    # Same ascending-stop clamp as the full builder (tier C degenerate
+    # band: min_zoom == cluster_max_zoom + 2).
+    radius_floor = max(raw_floor, spec.min_zoom + 1)
     count_filter: list[Any] = ["==", ["get", "count"], 1]
     cluster_filter: list[Any] = [">", ["get", "count"], 1]
 
@@ -1798,7 +1805,7 @@ def amenity_overlay_style_subset(spec: AmenityOverlaySpec) -> dict[str, Any]:
                         ["zoom"],
                         spec.min_zoom,
                         7,
-                        raw_floor,
+                        radius_floor,
                         12,
                     ],
                 },
