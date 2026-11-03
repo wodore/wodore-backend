@@ -8,9 +8,13 @@ body instead of redirecting to the SVG.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from django.core.files.base import ContentFile
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import Client
 
 from server.apps.categories.models import Category
@@ -127,3 +131,20 @@ class TestCategorySymbolSvg:
         response = Client().get("/v1/categories/symbol/bogus/test-accommodation.svg")
 
         assert response.status_code == 400
+
+
+class TestCategoryPackToAssets:
+    """``category_pack_to_assets`` guards its source-of-truth directory."""
+
+    def test_fails_fast_without_iconpacks(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Missing iconpacks/ raises a readable CommandError, not a traceback.
+
+        Regression for BACKEND-DJANGO-1B: the command was run on a staging
+        container where ``iconpacks/`` does not exist.
+        """
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(CommandError, match="iconpacks/"):
+            call_command("category_pack_to_assets")
