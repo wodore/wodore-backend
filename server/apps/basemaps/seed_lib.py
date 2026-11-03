@@ -11,6 +11,7 @@ fixture JSON files (``fixtures/styles/``).
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import Any
 
 from server.apps.envvars.registry import resolve_setting
@@ -1247,6 +1248,619 @@ ACCOMMODATIONS_STYLE: dict[str, Any] = accommodations_style()
 #: Subset twin — derived once at import so drift fails the seed gate
 #: loudly (huts/transport pattern).
 ACCOMMODATIONS_STYLE_SUBSET: dict[str, Any] = _accommodations_style_subset()
+
+
+# ── Amenity overlay family (geoplaces per-subtree, importance bands) ─
+
+
+#: Everything the generic builder needs per subtree. The bands are
+#: IMPORTANCE-scaled (live staging counts/averages, verified 2026-11-03):
+#:
+#:   tier A (avg importance >= 50) — restaurant (51.2, 23k),
+#:       health_and_emergency (54.7, 7k), outdoor_services (63.9, 4k):
+#:       min_zoom 5, cluster_max_zoom 7 — accommodation parity (clusters
+#:       z5–7, transition z8–9, individual z10+).
+#:   tier B (~30–50) — groceries (45.1), shopping (38.3), services (35.0),
+#:       finance (33.5), tourism (29.5, 45k places but low importance):
+#:       min_zoom 9, cluster_max_zoom 9 — bubbles at first appearance,
+#:       individual z12+.
+#:   tier C (< 30) — utilities (26.0: toilets, drinking water —
+#:       "only visible when zoomed in close"), automotive (14.2, 44k):
+#:       min_zoom 13, cluster_max_zoom 11 — hybrid at the floor (dense
+#:       pockets clustered, isolated points raw), individual z14+.
+#:
+#: Sprites: every subtree collection serves an SDF pack at
+#: ``/sdf_sprite/<subtree>`` (martin_sync generates them from DB
+#: categories; verified on staging 2026-11-03) with
+#: ``<color|mono|primitive>/amenity.<subtree>[.<leaf>]`` icons — sparse
+#: per-leaf coverage coalesces to the subtree ROOT icon
+#: (``mono/amenity.<subtree>``), the generic per-subtree fallback.
+#: Dedicated iconpacks (accommodation-grade) are a later pass.
+#:
+#: ``icon`` = frontend overlay-chip icon id (static
+#: ``overlays/exports/<name>.svg``) — provisional stand-ins, swap when
+#: dedicated chips land (accommodations precedent: "huts").
+@dataclass(frozen=True)
+class AmenityOverlaySpec:
+    subtree: str
+    name: str
+    description: str
+    icon: str
+    min_zoom: int
+    cluster_max_zoom: int
+    max_label_zoom: int
+    order: int
+
+
+AMENITY_OVERLAYS: dict[str, AmenityOverlaySpec] = {
+    # ── tier A: accommodation parity ──
+    "restaurant": AmenityOverlaySpec(
+        subtree="restaurant",
+        name="Restaurants",
+        description=(
+            "Restaurants, cafés and bars from the POI database "
+            "(geoplaces vector tiles, server-clustered, MLT via Martin)."
+        ),
+        icon="huts",
+        min_zoom=5,
+        cluster_max_zoom=7,
+        max_label_zoom=11,
+        order=12,
+    ),
+    "health_and_emergency": AmenityOverlaySpec(
+        subtree="health_and_emergency",
+        name="Health & emergency",
+        description=(
+            "Doctors, pharmacies and emergency services from the POI "
+            "database (geoplaces vector tiles, server-clustered, MLT "
+            "via Martin)."
+        ),
+        icon="huts",
+        min_zoom=5,
+        cluster_max_zoom=7,
+        max_label_zoom=11,
+        order=13,
+    ),
+    "outdoor_services": AmenityOverlaySpec(
+        subtree="outdoor_services",
+        name="Outdoor services",
+        description=(
+            "Bike rental and repair, showers and other outdoor services "
+            "from the POI database (geoplaces vector tiles, "
+            "server-clustered, MLT via Martin)."
+        ),
+        icon="cycling",
+        min_zoom=5,
+        cluster_max_zoom=7,
+        max_label_zoom=11,
+        order=14,
+    ),
+    # ── tier B: mid importance ──
+    "groceries": AmenityOverlaySpec(
+        subtree="groceries",
+        name="Groceries",
+        description=(
+            "Supermarkets, bakeries and other food shops from the POI "
+            "database (geoplaces vector tiles, server-clustered, MLT "
+            "via Martin)."
+        ),
+        icon="huts",
+        min_zoom=9,
+        cluster_max_zoom=9,
+        max_label_zoom=11,
+        order=15,
+    ),
+    "shopping": AmenityOverlaySpec(
+        subtree="shopping",
+        name="Shopping",
+        description=(
+            "Shops and retail from the POI database (geoplaces vector "
+            "tiles, server-clustered, MLT via Martin)."
+        ),
+        icon="huts",
+        min_zoom=9,
+        cluster_max_zoom=9,
+        max_label_zoom=11,
+        order=16,
+    ),
+    "tourism": AmenityOverlaySpec(
+        subtree="tourism",
+        name="Tourism",
+        description=(
+            "Attractions, museums and viewpoints from the POI database "
+            "(geoplaces vector tiles, server-clustered, MLT via Martin)."
+        ),
+        icon="nature",
+        min_zoom=9,
+        cluster_max_zoom=9,
+        max_label_zoom=11,
+        order=17,
+    ),
+    "services": AmenityOverlaySpec(
+        subtree="services",
+        name="Services",
+        description=(
+            "Hairdressers, repairs and other everyday services from the "
+            "POI database (geoplaces vector tiles, server-clustered, "
+            "MLT via Martin)."
+        ),
+        icon="huts",
+        min_zoom=9,
+        cluster_max_zoom=9,
+        max_label_zoom=11,
+        order=18,
+    ),
+    "finance": AmenityOverlaySpec(
+        subtree="finance",
+        name="Finance",
+        description=(
+            "Banks and ATMs from the POI database (geoplaces vector "
+            "tiles, server-clustered, MLT via Martin)."
+        ),
+        icon="huts",
+        min_zoom=9,
+        cluster_max_zoom=9,
+        max_label_zoom=11,
+        order=19,
+    ),
+    # ── tier C: low importance, close-up only ──
+    "utilities": AmenityOverlaySpec(
+        subtree="utilities",
+        name="Utilities",
+        description=(
+            "Toilets, drinking water and fire pits from the POI database "
+            "(geoplaces vector tiles, visible when zoomed in close, MLT "
+            "via Martin)."
+        ),
+        icon="huts",
+        min_zoom=13,
+        cluster_max_zoom=11,
+        max_label_zoom=13,
+        order=20,
+    ),
+    "automotive": AmenityOverlaySpec(
+        subtree="automotive",
+        name="Automotive",
+        description=(
+            "Parking, fuel and charging from the POI database (geoplaces "
+            "vector tiles, visible when zoomed in close, MLT via "
+            "Martin)."
+        ),
+        icon="transport",
+        min_zoom=13,
+        cluster_max_zoom=11,
+        max_label_zoom=13,
+        order=21,
+    ),
+}
+
+#: Absolute zoom ladders shared with the accommodations overlay — a
+#: marker is the same size at the same zoom whatever the overlay's
+#: floor (MapLibre clamps below the first stop).
+_AMENITY_ICON_SIZE_STOPS: list[tuple[int, float]] = [
+    (7, 0.1),
+    (9, 0.3),
+    (11, 0.55),
+    (13, 0.75),
+    (16, 1.0),
+    (20, 1.25),
+]
+_AMENITY_HALO_STOPS: list[tuple[int, float]] = [
+    (7, 0.5),
+    (9, 0.75),
+    (11, 1.0),
+    (13, 1.5),
+    (16, 2.0),
+    (20, 2.5),
+]
+_AMENITY_TEXT_SIZE_STOPS: list[tuple[int, float]] = [
+    (11, 10),
+    (14, 12.5),
+    (17, 14),
+]
+
+
+def amenity_overlay_style(spec: AmenityOverlaySpec) -> dict[str, Any]:
+    """The geoplaces overlay document for one amenity subtree.
+
+    The accommodations overlay's visual grammar (see
+    :func:`accommodations_style`), parameterized by the subtree's
+    importance band: ``min_zoom`` (source + layers + catalog floor),
+    ``cluster_max_zoom`` (server clustering ceiling; the icon ladder
+    flips mono-first at its transition-zone end, ``cmz + 2``) and
+    ``max_label_zoom`` (names ride the tiles from there). No
+    ``icon_scale`` parameter — the ladder is baked (see
+    ``_work/261103_amenity_overlays.md``).
+    """
+    subtree = spec.subtree
+    source_id = f"wd-{subtree}"
+    sprite_id = f"wd-sdf-{subtree}"
+    fallback = f"{sprite_id}:mono/amenity.{subtree}"
+    raw_floor = spec.cluster_max_zoom + 2
+    # Interpolate zoom stops must be strictly ascending (MapLibre hard
+    # error otherwise). Tier C has min_zoom == cluster_max_zoom + 2, so
+    # clamp the radius anchor one step above the floor.
+    radius_floor = max(raw_floor, spec.min_zoom + 1)
+    count_filter: list[Any] = ["==", ["get", "count"], 1]
+    cluster_filter: list[Any] = [">", ["get", "count"], 1]
+
+    def ladder(stops: list[tuple[int, float]]) -> list[Any]:
+        flat: list[Any] = []
+        for zoom, size in stops:
+            flat.extend((zoom, size))
+        return ["interpolate", ["linear"], ["zoom"], *flat]
+
+    icon_ladder = [
+        "step",
+        ["zoom"],
+        [
+            "coalesce",
+            [
+                "image",
+                [
+                    "concat",
+                    f"{sprite_id}:primitive/amenity.",
+                    ["get", "category_identifier"],
+                ],
+            ],
+            ["image", fallback],
+            [
+                "image",
+                [
+                    "concat",
+                    f"{sprite_id}:mono/amenity.",
+                    ["get", "category_identifier"],
+                ],
+            ],
+            ["image", fallback],
+        ],
+        raw_floor,
+        [
+            "coalesce",
+            [
+                "image",
+                [
+                    "concat",
+                    f"{sprite_id}:mono/amenity.",
+                    ["get", "category_identifier"],
+                ],
+            ],
+            ["image", fallback],
+            [
+                "image",
+                [
+                    "concat",
+                    f"{sprite_id}:primitive/amenity.",
+                    ["get", "category_identifier"],
+                ],
+            ],
+            ["image", fallback],
+        ],
+    ]
+
+    return {
+        "version": 8,
+        "name": subtree,
+        "sources": {
+            source_id: {
+                "type": "vector",
+                # Same contract as wd-accommodations: inline MLT tiles
+                # with the subtree filter; maxzoom 14 — symbols re-place
+                # from z14 ancestors on deeper zooms.
+                "tiles": [
+                    (
+                        "{{env:MARTIN_TILE_URL}}/geoplaces/{z}/{x}/{y}.mlt"
+                        f"?category_tree={subtree}"
+                        "&fields=color,parent_color,parent_slug,"
+                        "importance,count,name,slug"
+                        f"&max_label_zoom={spec.max_label_zoom}"
+                        f"&cluster_max_zoom={spec.cluster_max_zoom}"
+                        "&cache_ttl_days=1"
+                    )
+                ],
+                "encoding": "mlt",
+                "minzoom": spec.min_zoom,
+                "maxzoom": 14,
+                "promoteId": "slug",
+            },
+        },
+        "sprite": [
+            {
+                "id": sprite_id,
+                "url": f"{{{{env:MARTIN_TILE_URL}}}}/sdf_sprite/{subtree}",
+            }
+        ],
+        "glyphs": GLYPHS,
+        "layers": [
+            {
+                # Server-side clusters (count>1): category-colored
+                # bubbles with the member count until the raw icons
+                # graduate at cmz+2 (+1 for the z10+ style flip).
+                "id": f"{source_id}-clusters",
+                "type": "circle",
+                "source": source_id,
+                "source-layer": GEOPLACES_SOURCE,
+                "minzoom": spec.min_zoom,
+                "filter": cluster_filter,
+                "paint": {
+                    "circle-color": ["coalesce", ["get", "color"], "#718096"],
+                    "circle-opacity": 0.45,
+                    "circle-stroke-color": "#ffffff",
+                    "circle-stroke-width": 1.5,
+                    "circle-stroke-opacity": 0.9,
+                    "circle-radius": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        spec.min_zoom,
+                        [
+                            "interpolate",
+                            ["linear"],
+                            ["get", "count"],
+                            2,
+                            7,
+                            10,
+                            9,
+                            50,
+                            12,
+                        ],
+                        radius_floor,
+                        [
+                            "interpolate",
+                            ["linear"],
+                            ["get", "count"],
+                            2,
+                            9,
+                            10,
+                            12,
+                            50,
+                            16,
+                        ],
+                    ],
+                },
+            },
+            {
+                "id": f"{source_id}-cluster-count",
+                "type": "symbol",
+                "source": source_id,
+                "source-layer": GEOPLACES_SOURCE,
+                "minzoom": spec.min_zoom,
+                "filter": cluster_filter,
+                "layout": {
+                    "text-field": ["to-string", ["get", "count"]],
+                    "text-font": ["Barlow Semi Condensed SemiBold", "Noto Sans Bold"],
+                    "text-size": 11,
+                    "text-allow-overlap": True,
+                    "text-ignore-placement": True,
+                },
+                "paint": {
+                    "text-color": "#ffffff",
+                    "text-halo-color": "rgba(34, 78, 59, 0.85)",
+                    "text-halo-width": 1.2,
+                },
+            },
+            {
+                # Selection halo (app-driven feature-state, same shape as
+                # wd-accommodations-selected).
+                "id": f"{source_id}-selected",
+                "type": "circle",
+                "source": source_id,
+                "source-layer": GEOPLACES_SOURCE,
+                "layout": {"visibility": "visible"},
+                "paint": {
+                    "circle-blur": 0.7,
+                    "circle-color": [
+                        "case",
+                        ["boolean", ["feature-state", "color"], False],
+                        ["feature-state", "color"],
+                        "#2673bf",
+                    ],
+                    "circle-opacity": [
+                        "case",
+                        ["boolean", ["feature-state", "selected"], False],
+                        0.7,
+                        0,
+                    ],
+                    "circle-radius": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        7,
+                        10,
+                        15,
+                        40,
+                    ],
+                },
+            },
+            {
+                "id": source_id,
+                "type": "symbol",
+                "source": source_id,
+                "source-layer": GEOPLACES_SOURCE,
+                "minzoom": spec.min_zoom,
+                "filter": count_filter,
+                "layout": {
+                    # Raw places only (count==1); names are '' server-side
+                    # below max_label_zoom so the text simply never
+                    # renders there.
+                    "text-field": ["get", "name"],
+                    "text-size": ladder(_AMENITY_TEXT_SIZE_STOPS),
+                    "text-font": ["Barlow Semi Condensed SemiBold", "Noto Sans Bold"],
+                    "text-anchor": "bottom",
+                    "icon-allow-overlap": True,
+                    "text-allow-overlap": False,
+                    "symbol-sort-key": ["get", "importance"],
+                    "icon-overlap": "always",
+                    "text-overlap": "never",
+                    "text-optional": True,
+                    "icon-image": icon_ladder,
+                    "icon-size": ladder(_AMENITY_ICON_SIZE_STOPS),
+                    "visibility": "visible",
+                },
+                "paint": {
+                    # SDF runtime tinting: category color from the tiles,
+                    # white border around it (huts parity).
+                    "icon-color": ["coalesce", ["get", "color"], "#718096"],
+                    "icon-halo-color": "#ffffff",
+                    "icon-halo-width": ladder(_AMENITY_HALO_STOPS),
+                    "icon-halo-blur": 0,
+                    "icon-opacity": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        5,
+                        0.7,
+                        10,
+                        0.8,
+                        13,
+                        0.9,
+                        16,
+                        1,
+                    ],
+                    "text-opacity": ["step", ["zoom"], 0, spec.max_label_zoom, 1],
+                    "text-color": "#224E3B",
+                    "text-halo-width": 1.2,
+                    "text-halo-color": "rgba(242, 247, 244, 0.9)",
+                    "text-translate": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        7,
+                        ["literal", [0, -6]],
+                        20,
+                        ["literal", [0, -40]],
+                    ],
+                },
+            },
+        ],
+        "metadata": {
+            "wd:slot_layers": [
+                f"{source_id}-clusters",
+                f"{source_id}-cluster-count",
+                f"{source_id}-selected",
+                source_id,
+            ],
+        },
+    }
+
+
+def amenity_overlay_style_subset(spec: AmenityOverlaySpec) -> dict[str, Any]:
+    """Build the subset twin of an amenity overlay (Leaflet).
+
+    Same surgery as the accommodations twin (:func:
+    `_accommodations_style_subset`): cluster bubbles with a zoom-only
+    radius ladder, the raw symbol as a STATIC fallback sprite tinted by
+    the category color via ``case``/``has``/``get`` — no count labels,
+    no text, no feature-state selection circle.
+    """
+    subtree = spec.subtree
+    source_id = f"wd-{subtree}"
+    sprite_id = f"wd-sdf-{subtree}"
+    fallback = f"{sprite_id}:mono/amenity.{subtree}"
+    raw_floor = spec.cluster_max_zoom + 2
+    # Same ascending-stop clamp as the full builder (tier C degenerate
+    # band: min_zoom == cluster_max_zoom + 2).
+    radius_floor = max(raw_floor, spec.min_zoom + 1)
+    count_filter: list[Any] = ["==", ["get", "count"], 1]
+    cluster_filter: list[Any] = [">", ["get", "count"], 1]
+
+    def ladder(stops: list[tuple[int, float]]) -> list[Any]:
+        flat: list[Any] = []
+        for zoom, size in stops:
+            flat.extend((zoom, size))
+        return ["interpolate", ["linear"], ["zoom"], *flat]
+
+    full = amenity_overlay_style(spec)
+    return {
+        "version": 8,
+        "name": subtree,
+        "sources": {
+            source_id: {
+                key: value
+                for key, value in full["sources"][source_id].items()
+                if key != "promoteId"
+            }
+        },
+        "sprite": deepcopy(full["sprite"]),
+        "glyphs": GLYPHS,
+        "layers": [
+            {
+                "id": f"{source_id}-clusters",
+                "type": "circle",
+                "source": source_id,
+                "source-layer": GEOPLACES_SOURCE,
+                "minzoom": spec.min_zoom,
+                "filter": cluster_filter,
+                "paint": {
+                    "circle-color": [
+                        "case",
+                        ["has", "color"],
+                        ["get", "color"],
+                        "#718096",
+                    ],
+                    "circle-opacity": 0.45,
+                    "circle-radius": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        spec.min_zoom,
+                        7,
+                        radius_floor,
+                        12,
+                    ],
+                },
+            },
+            {
+                "id": source_id,
+                "type": "symbol",
+                "source": source_id,
+                "source-layer": GEOPLACES_SOURCE,
+                "minzoom": spec.min_zoom,
+                "filter": count_filter,
+                "layout": {
+                    "icon-image": fallback,
+                    "icon-size": ladder(_AMENITY_ICON_SIZE_STOPS),
+                    "icon-allow-overlap": True,
+                },
+                "paint": {
+                    "icon-color": [
+                        "case",
+                        ["has", "color"],
+                        ["get", "color"],
+                        "#718096",
+                    ],
+                    "icon-opacity": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        5,
+                        0.7,
+                        10,
+                        0.8,
+                        13,
+                        0.9,
+                        16,
+                        1,
+                    ],
+                },
+            },
+        ],
+        "metadata": {"wd:slot_layers": [f"{source_id}-clusters", source_id]},
+    }
+
+
+#: Full overlay documents (fallback palette baked at import; the seed
+#: re-uses the builders directly — huts/accommodations pattern).
+AMENITY_OVERLAY_STYLES: dict[str, dict[str, Any]] = {
+    spec.subtree: amenity_overlay_style(spec) for spec in AMENITY_OVERLAYS.values()
+}
+
+#: Subset twins — derived once at import so drift fails the seed gate
+#: loudly (huts/accommodations pattern).
+AMENITY_OVERLAY_STYLES_SUBSET: dict[str, dict[str, Any]] = {
+    spec.subtree: amenity_overlay_style_subset(spec)
+    for spec in AMENITY_OVERLAYS.values()
+}
 
 
 # ── Transport stops overlay (Transitland vector tiles via Martin) ────
