@@ -129,18 +129,56 @@ postgres:
   # #459's source removal accidentally swallowed it, which folded the
   # function sources under "tables:" and crashed Martin at startup
   # ("missing field `table`").
+  #
+  #   - Cache hits tracked (hits counter)
+  #   - First request: ~1.8s (generates tile)
+  #   - Subsequent requests: ~10ms (cache hit)
+  #
+  #   Function: get_geoplaces_for_tiles(z, x, y, query_params)
+  #   Latest migration: 0076_restore_clustered_geoplaces_tiles (0041
+  #   clustering restored after 0068's template revert)
+  #   URL query params reach the function as `query_params` jsonb:
+  #     /geoplaces/{z}/{x}/{y}?category_tree=accommodation&lang=de
+  #       lang=CODE             language for `name` (de/en/fr/it, default de)
+  #       fields=a,b,c          property gates (default
+  #                            color,parent_color,parent_slug,importance,
+  #                            count,name,slug; `categories`
+  #                            and `sources` arrays only when requested)
+  #       categories=a,b        exact category-slug filter, OR logic
+  #       categories_all=a,b    exact category-slug filter, AND logic
+  #       category_tree=g       subtree filter: slug matched against a
+  #                            linked category's kind, contract group or
+  #                            domain (the OSM import links leaves only —
+  #                            group-level overlay filters need this)
+  #       cluster_max_zoom=Z    full-clustering ceiling (default 6)
+  #       cluster_low_zoom_offset=N  transition zone width (default 2;
+  #                            raw everything above Z+N)
+  #       importance_threshold=N  raw graduation in the transition zone
+  #                            (default 50)
+  #       cluster_radius_m=M    cluster radius at cluster_ref_zoom
+  #                            (default 5000)
+  #       cluster_ref_zoom=Z    radius reference zoom (default 8)
+  #       max_features=N        raw-path feature cap
+  #       max_label_zoom=Z      `name` included from this zoom (default 14)
+  #       cache_ttl_days=N      DB tile cache TTL (default 7, 0 = never
+  #                            persist)
+  #       cache_version=N       bump to invalidate every cached tile
+  #   Feature props: slug, name, importance, count (1 raw / N cluster),
+  #   flat category_slug/category_identifier/category_order/color/
+  #   parent_color/parent_slug, categories/sources (arrays, on
+  #   request). Full contract: geometries models/tiles_view.py.
   functions:
-    #   - Cache hits tracked (hits counter)
-    #   - First request: ~1.8s (generates tile)
-    #   - Subsequent requests: ~10ms (cache hit)
-    #
-    # Function: get_geoplaces_for_tiles_cached(z, x, y, query_params)
-    # Migration: server/apps/geometries/migrations/0036_add_tile_caching.py
     geoplaces:
       # Schema and function name
       schema: public
       function: get_geoplaces_for_tiles
       id_columns: slug
+
+      # MLT (MapLibre Tile) v1 like huts/availability: serve-time
+      # MVT→MLT conversion on the explicit .mlt URL space (the
+      # tile-router strips the suffix and keeps the query params).
+      # No-op on Martin ≥ 1.16 where conversion is implicit.
+      convert_to_mlt: auto
 
       # Cache-Control: 1 day — changes with POI edits (the function-level
       # tile cache in Postgres is the primary defense; this is the edge hint)

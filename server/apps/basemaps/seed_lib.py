@@ -752,6 +752,494 @@ def _huts_style_subset() -> dict[str, Any]:
 HUTS_STYLE_SUBSET: dict[str, Any] = _huts_style_subset()
 
 
+# ── Accommodations overlay (geoplaces function source via Martin) ───
+
+#: The Martin function source id (``functions.geoplaces`` in
+#: ``tile_server/config/martin.yaml``): ``get_geoplaces_for_tiles``
+#: serves one feature per public+active categorized place with
+#: SERVER-side clustering below the raw floor (count>1 features are
+#: grid clusters of the primary category; the transition zone graduates
+#: high-importance POIs raw early). Tile URL params (see the martin.yaml
+#: comment block / ``geometries/models/tiles_view.py`` for the full
+#: contract):
+#:   category_tree=accommodation  subtree filter — the OSM import links
+#:                                LEAF categories only (hotel, campgr,
+#:                                …), the filter matches the linked
+#:                                category's kind, contract group or
+#:                                domain, so the whole accommodation
+#:                                group (under the amenity domain) is one
+#:                                param
+#:   fields=…                    flat color/parent_slug/category_identifier
+#:                                props + the categories array; sources
+#:                                stay off (place detail is fetched by
+#:                                slug)
+#:   max_label_zoom=11            names ride the tiles from z11 (default
+#:                                14 — labels are the point of this
+#:                                overlay)
+#:   cache_ttl_days=1             DB tile cache TTL — a POI edit shows
+#:                                within a day without manual purges
+#: The URL carries a query string so the serve-time ``?v=`` asset
+#: versioning never applies (same trade-off as the availability source:
+#: freshness is bounded by this TTL + the 1-day edge cache_control).
+GEOPLACES_SOURCE = "geoplaces"
+ACCOMMODATIONS_SOURCE_ID = "wd-accommodations"
+
+#: Sprite pack: the SDF mono+primitive silhouettes of the accommodation
+#: collection (the same pack the huts overlay loads as ``wd-sdf``),
+#: under this overlay's OWN id — sprite ids are add-once on the
+#: frontend, a shared id would let whichever pack loads first shadow the
+#: other (transport lesson, see TRANSPORT_SPRITE_ID).
+ACCOMMODATIONS_SPRITE_ID = "wd-sdf-accommodations"
+ACCOMMODATIONS_ICON_FALLBACK = (
+    "wd-sdf-accommodations:mono/amenity.accommodation.unknown"
+)
+
+#: Flat primary-category props the tiles carry (mirror of the function's
+#: raw/cluster projections).
+_ACCOMMODATION_COUNT_FILTER = ["==", ["get", "count"], 1]
+_ACCOMMODATION_CLUSTER_FILTER = [">", ["get", "count"], 1]
+
+
+def accommodations_style() -> dict[str, Any]:
+    """The accommodations overlay style — the huts look on POI data.
+
+    Same visual grammar as :data:`HUTS_STYLE` (mono SDF icons tinted by
+    category color with the white halo ladder, Barlow Semi Condensed
+    labels, selection circle, ``{{<slug>.icon_scale}}`` parameter),
+    minus everything availability-specific (day strips, occupation
+    disc — geoplaces carry no availability) and plus the server-side
+    cluster rendering the function source provides:
+
+    * z5–z8 (function's full-clustering zone, defaults): category-colored
+      cluster bubbles with member counts — one per (category, grid cell);
+    * z7–z8 transition: high-importance places already raw (icons) while
+      the rest still clusters;
+    * z9+: raw icons + labels for every place (names from z11 via
+      ``max_label_zoom``), icon ladder primitive → mono like the huts.
+    """
+    icon_ladder = [
+        "step",
+        ["zoom"],
+        [
+            "coalesce",
+            [
+                "image",
+                [
+                    "concat",
+                    "wd-sdf-accommodations:primitive/amenity.",
+                    ["get", "category_identifier"],
+                ],
+            ],
+            ["image", ACCOMMODATIONS_ICON_FALLBACK],
+            [
+                "image",
+                [
+                    "concat",
+                    "wd-sdf-accommodations:mono/amenity.",
+                    ["get", "category_identifier"],
+                ],
+            ],
+            ["image", ACCOMMODATIONS_ICON_FALLBACK],
+        ],
+        9,
+        [
+            "coalesce",
+            [
+                "image",
+                [
+                    "concat",
+                    "wd-sdf-accommodations:mono/amenity.",
+                    ["get", "category_identifier"],
+                ],
+            ],
+            ["image", ACCOMMODATIONS_ICON_FALLBACK],
+            [
+                "image",
+                [
+                    "concat",
+                    "wd-sdf-accommodations:primitive/amenity.",
+                    ["get", "category_identifier"],
+                ],
+            ],
+            ["image", ACCOMMODATIONS_ICON_FALLBACK],
+        ],
+    ]
+
+    return {
+        "version": 8,
+        "name": "accommodations",
+        "sources": {
+            ACCOMMODATIONS_SOURCE_ID: {
+                "type": "vector",
+                # Inline tiles + MLT like wd-huts (serve-time MVT→MLT on
+                # the explicit .mlt URL space; the tile-router strips the
+                # suffix and forwards the query). minzoom 5 = the overlay
+                # floor; maxzoom 14 — nothing new beyond (names arrive at
+                # z11, symbols re-place from z14 ancestors on deeper
+                # zooms, no further requests).
+                "tiles": [
+                    (
+                        "{{env:MARTIN_TILE_URL}}/geoplaces/{z}/{x}/{y}.mlt"
+                        "?category_tree=accommodation"
+                        # flat color/parent/category_identifier props only
+                        # — the `category` object and `categories` array
+                        # are opt-in fields and stay off (they dominate
+                        # tile size; nothing in this document reads them)
+                        "&fields=color,parent_color,parent_slug,"
+                        "importance,count,name,slug"
+                        "&max_label_zoom=11&cache_ttl_days=1"
+                    )
+                ],
+                "encoding": "mlt",
+                "minzoom": 5,
+                "maxzoom": 14,
+                "promoteId": "slug",
+            },
+        },
+        "sprite": [
+            {
+                "id": ACCOMMODATIONS_SPRITE_ID,
+                "url": "{{env:MARTIN_TILE_URL}}/sdf_sprite/accommodation",
+            }
+        ],
+        "glyphs": GLYPHS,
+        "layers": [
+            {
+                # Server-side clusters (count>1): category-colored
+                # bubbles with the member count — the decluttered
+                # country view until the raw icons graduate at z9.
+                "id": "wd-accommodations-clusters",
+                "type": "circle",
+                "source": ACCOMMODATIONS_SOURCE_ID,
+                "source-layer": GEOPLACES_SOURCE,
+                "minzoom": 5,
+                "filter": _ACCOMMODATION_CLUSTER_FILTER,
+                "paint": {
+                    "circle-color": ["coalesce", ["get", "color"], "#718096"],
+                    "circle-opacity": 0.45,
+                    "circle-stroke-color": "#ffffff",
+                    "circle-stroke-width": 1.5,
+                    "circle-stroke-opacity": 0.9,
+                    "circle-radius": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        5,
+                        [
+                            "interpolate",
+                            ["linear"],
+                            ["get", "count"],
+                            2,
+                            7,
+                            10,
+                            9,
+                            50,
+                            12,
+                        ],
+                        9,
+                        [
+                            "interpolate",
+                            ["linear"],
+                            ["get", "count"],
+                            2,
+                            9,
+                            10,
+                            12,
+                            50,
+                            16,
+                        ],
+                    ],
+                },
+            },
+            {
+                "id": "wd-accommodations-cluster-count",
+                "type": "symbol",
+                "source": ACCOMMODATIONS_SOURCE_ID,
+                "source-layer": GEOPLACES_SOURCE,
+                "minzoom": 5,
+                "filter": _ACCOMMODATION_CLUSTER_FILTER,
+                "layout": {
+                    "text-field": ["to-string", ["get", "count"]],
+                    "text-font": ["Barlow Semi Condensed SemiBold", "Noto Sans Bold"],
+                    "text-size": 11,
+                    "text-allow-overlap": True,
+                    "text-ignore-placement": True,
+                },
+                "paint": {
+                    "text-color": "#ffffff",
+                    "text-halo-color": "rgba(34, 78, 59, 0.85)",
+                    "text-halo-width": 1.2,
+                },
+            },
+            {
+                # Selection halo (app-driven feature-state, same shape as
+                # wd-huts-selected).
+                "id": "wd-accommodations-selected",
+                "type": "circle",
+                "source": ACCOMMODATIONS_SOURCE_ID,
+                "source-layer": GEOPLACES_SOURCE,
+                "layout": {"visibility": "visible"},
+                "paint": {
+                    "circle-blur": 0.7,
+                    "circle-color": [
+                        "case",
+                        ["boolean", ["feature-state", "color"], False],
+                        ["feature-state", "color"],
+                        "#2673bf",
+                    ],
+                    "circle-opacity": [
+                        "case",
+                        ["boolean", ["feature-state", "selected"], False],
+                        0.7,
+                        0,
+                    ],
+                    "circle-radius": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        7,
+                        10,
+                        15,
+                        40,
+                    ],
+                },
+            },
+            {
+                "id": "wd-accommodations",
+                "type": "symbol",
+                "source": ACCOMMODATIONS_SOURCE_ID,
+                "source-layer": GEOPLACES_SOURCE,
+                "minzoom": 5,
+                "filter": _ACCOMMODATION_COUNT_FILTER,
+                "layout": {
+                    # Raw places only (count==1); names are '' server-side
+                    # below z11 (max_label_zoom) so the text simply never
+                    # renders there.
+                    "text-field": ["get", "name"],
+                    "text-size": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        11,
+                        10,
+                        14,
+                        12.5,
+                        17,
+                        14,
+                    ],
+                    "text-font": ["Barlow Semi Condensed SemiBold", "Noto Sans Bold"],
+                    "text-anchor": "bottom",
+                    "icon-allow-overlap": True,
+                    "text-allow-overlap": False,
+                    "symbol-sort-key": ["get", "importance"],
+                    "icon-overlap": "always",
+                    "text-overlap": "never",
+                    "text-optional": True,
+                    "icon-image": icon_ladder,
+                    "icon-size": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        7,
+                        ["*", 0.1, "{{accommodations.icon_scale}}"],
+                        9,
+                        ["*", 0.3, "{{accommodations.icon_scale}}"],
+                        11,
+                        ["*", 0.55, "{{accommodations.icon_scale}}"],
+                        13,
+                        ["*", 0.75, "{{accommodations.icon_scale}}"],
+                        16,
+                        ["*", 1.0, "{{accommodations.icon_scale}}"],
+                        20,
+                        ["*", 1.25, "{{accommodations.icon_scale}}"],
+                    ],
+                    "visibility": "visible",
+                },
+                "paint": {
+                    # SDF runtime tinting: category color from the tiles,
+                    # white border around it (huts parity).
+                    "icon-color": ["coalesce", ["get", "color"], "#718096"],
+                    "icon-halo-color": "#ffffff",
+                    "icon-halo-width": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        7,
+                        0.5,
+                        9,
+                        0.75,
+                        11,
+                        1.0,
+                        13,
+                        1.5,
+                        16,
+                        2.0,
+                        20,
+                        2.5,
+                    ],
+                    "icon-halo-blur": 0,
+                    "icon-opacity": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        5,
+                        0.7,
+                        10,
+                        0.8,
+                        13,
+                        0.9,
+                        16,
+                        1,
+                    ],
+                    "text-opacity": ["step", ["zoom"], 0, 11, 1],
+                    "text-color": "#224E3B",
+                    "text-halo-width": 1.2,
+                    "text-halo-color": "rgba(242, 247, 244, 0.9)",
+                    "text-translate": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        7,
+                        ["literal", [0, -6]],
+                        20,
+                        ["literal", [0, -40]],
+                    ],
+                },
+            },
+        ],
+        "metadata": {
+            "wd:slot_layers": [
+                "wd-accommodations-clusters",
+                "wd-accommodations-cluster-count",
+                "wd-accommodations-selected",
+                "wd-accommodations",
+            ],
+        },
+    }
+
+
+def _accommodations_style_subset() -> dict[str, Any]:
+    """Build the subset twin of the accommodations overlay (Leaflet).
+
+    Same surgery classes as the huts twin (:func:`_huts_style_subset`):
+
+    * **kept trimmed**: the cluster bubbles (zoom-only radius ladder —
+      the count-scaled nested interpolate and the white stroke are
+      outside subset v0.1) and the raw symbol — STATIC fallback sprite
+      (``mono/amenity.accommodation.unknown``), runtime-tinted by the
+      category color via ``case``/``has``/``get``, baked icon-size
+      ladder (the ``icon_scale`` parameter rides on ``*``, not
+      whitelisted). No text (the fallback draws labels client-side).
+    * **dropped**: the cluster count labels (``to-string``), the
+      feature-state selection circle.
+    """
+    return {
+        "version": 8,
+        "name": "accommodations",
+        "sources": {
+            ACCOMMODATIONS_SOURCE_ID: {
+                key: value
+                for key, value in accommodations_style()["sources"][
+                    ACCOMMODATIONS_SOURCE_ID
+                ].items()
+                if key != "promoteId"
+            }
+        },
+        "sprite": deepcopy(accommodations_style()["sprite"]),
+        "glyphs": GLYPHS,
+        "layers": [
+            {
+                "id": "wd-accommodations-clusters",
+                "type": "circle",
+                "source": ACCOMMODATIONS_SOURCE_ID,
+                "source-layer": GEOPLACES_SOURCE,
+                "minzoom": 5,
+                "filter": _ACCOMMODATION_CLUSTER_FILTER,
+                "paint": {
+                    "circle-color": [
+                        "case",
+                        ["has", "color"],
+                        ["get", "color"],
+                        "#718096",
+                    ],
+                    "circle-opacity": 0.45,
+                    "circle-radius": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        5,
+                        7,
+                        9,
+                        12,
+                    ],
+                },
+            },
+            {
+                "id": "wd-accommodations",
+                "type": "symbol",
+                "source": ACCOMMODATIONS_SOURCE_ID,
+                "source-layer": GEOPLACES_SOURCE,
+                "minzoom": 5,
+                "filter": _ACCOMMODATION_COUNT_FILTER,
+                "layout": {
+                    "icon-image": ACCOMMODATIONS_ICON_FALLBACK,
+                    "icon-size": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        7,
+                        0.1,
+                        9,
+                        0.3,
+                        11,
+                        0.55,
+                        13,
+                        0.75,
+                        16,
+                        1.0,
+                        20,
+                        1.25,
+                    ],
+                    "icon-allow-overlap": True,
+                },
+                "paint": {
+                    "icon-color": [
+                        "case",
+                        ["has", "color"],
+                        ["get", "color"],
+                        "#718096",
+                    ],
+                    "icon-opacity": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        5,
+                        0.7,
+                        10,
+                        0.8,
+                        13,
+                        0.9,
+                        16,
+                        1,
+                    ],
+                },
+            },
+        ],
+        "metadata": {
+            "wd:slot_layers": ["wd-accommodations-clusters", "wd-accommodations"]
+        },
+    }
+
+
+#: Full accommodations overlay document (fallback palette baked at
+#: import; tests import this — the seed re-uses the builder directly).
+ACCOMMODATIONS_STYLE: dict[str, Any] = accommodations_style()
+
+#: Subset twin — derived once at import so drift fails the seed gate
+#: loudly (huts/transport pattern).
+ACCOMMODATIONS_STYLE_SUBSET: dict[str, Any] = _accommodations_style_subset()
+
+
 # ── Transport stops overlay (Transitland vector tiles via Martin) ────
 
 #: The Martin source id (``passthrough.sources`` in

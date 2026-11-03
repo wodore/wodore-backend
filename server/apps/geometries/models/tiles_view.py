@@ -25,12 +25,15 @@ Latest migration: server/apps/geometries/migrations/0041_optimize_tile_performan
   "cluster_max_zoom": 6,                  // Max zoom for clustering - default: 6
   "cluster_low_zoom_offset": 2,           // Extra zooms for transition - default: 2
   "importance_threshold": 50,             // Importance for early raw graduation - default: 50
-  "cluster_radius_m": 5000.0,             // Cluster radius in meters at ref zoom - default: auto
+  "cluster_radius_m": 5000.0,             // Cluster radius in meters at ref zoom - default: 5000
   "cluster_ref_zoom": 8,                  // Reference zoom for cluster_radius_m - default: 8
   "max_features": 10000,                  // Max features per tile - default: null (no limit)
   "max_label_zoom": 14,                   // Only include name above this zoom - default: 14
-  "fields": "category,color,importance,count,name,slug",  // Fields to include - default: see list
-  "cache_ttl_days": 7,                    // Cache TTL in days - default: 7
+  "fields": "color,parent_color,parent_slug,importance,count,name,slug",  // Fields to include - default: see list
+  "categories": "hut,hotel",               // Exact category-slug filter (OR logic) - default: null
+  "categories_all": "hut,parking",         // Exact category-slug filter (AND logic) - default: null
+  "category_tree": "accommodation",        // Subtree filter: slug matched against kind, group or domain (OR) - default: null
+  "cache_ttl_days": 7,                    // Cache TTL in days - default: 7, 0 disables persistence
   "cache_version": 1                      // Bump to invalidate all cached tiles - default: 1
 }
 ```
@@ -39,6 +42,28 @@ Latest migration: server/apps/geometries/migrations/0041_optimize_tile_performan
 - **z <= cluster_max_zoom**: All POIs clustered by (category, grid_cell). Cluster radius scales with zoom.
 - **cluster_max_zoom < z <= max+offset**: Transition zone. High-importance POIs (>= threshold) shown raw, low-importance still clustered with shrinking grid.
 - **z > max+offset**: All POIs raw (no clustering).
+
+### Feature Properties
+One feature per place (its primary category — lowest tree ``order``);
+cluster features aggregate their members' primary category.
+
+- ``slug``, ``name`` (empty below ``max_label_zoom``), ``importance``
+- ``count`` — 1 for raw places, N for clusters
+- flat styling/filtering props: ``category_slug``,
+  ``category_identifier``, ``category_order``, ``color``,
+  ``parent_color``, ``parent_slug``
+- ``categories`` — jsonb array of ALL the place's categories (only when
+  ``fields`` names it; absent for cluster features). NOTE: there is no
+  ``category`` object property — ST_AsMVT flattens jsonb objects into
+  top-level keys (an object's ``name``/``slug``/``color`` would shadow
+  the feature's own columns), so the object was dropped from the
+  projections entirely; its data lives in the flat props above.
+- ``sources`` — jsonb array of source associations (only when ``fields``
+  names it; absent for cluster features)
+
+Note: the OSM importer links LEAF categories only — group-level or
+ domain-level filtering needs the ``category_tree`` param, not
+ ``categories``.
 
 ### Caching Behavior
 - Tiles cached in `geometries_tile_cache` table
@@ -105,6 +130,17 @@ tile = GeoPlacesForTilesView.objects.get_tile(12, 1234, 2345, {"cluster_max_zoom
   - COUNT(*) instead of COUNT(DISTINCT slug) for clusters
   - MATERIALIZED CTE hint on sampled_pois
   - martin.yaml: buffer 64→16, maxzoom 20/24→16 for all point layers
+- 2026-11-03: Restore + extend after 0068's accidental revert (migration
+  `0076_restore_clustered_geoplaces_tiles`): 0068 rebuilt the function from
+  0028's pre-clustering template for the kind_slug rename, silently dropping
+  the 0032-0041 clustering/caching. The restore re-bases on 0041 and adds:
+  - one feature per place (primary category by tree order) instead of one
+    feature per geoplace-category row
+  - flat category_slug/category_identifier/category_order/parent_slug props
+  - `categories`/`categories_all` exact filters (carried from the 0028 template)
+  - `category_tree` subtree filter (kind/group/domain ancestor match)
+  - `cluster_radius_m` default 5000 (a missing param emptied clustered tiles)
+  - `cache_ttl_days <= 0` skips cache persistence
 """
 
 from typing import Any
@@ -226,7 +262,14 @@ class GeoPlacesForTilesView(PostgresViewModel):
     # Organization sources (array of objects with slug and source_id)
     sources = models.JSONField(default=list)
 
-    class Meta:
+    # Subclass psqlextra's concrete Meta (Django's documented model-
+    # inheritance pattern) so override checkers accept the inner class;
+    # ``abstract = False`` MUST be re-declared — ModelBase probes it with
+    # getattr (inheritance-aware) and the base Meta sets abstract=True.
+    # Django's Options reads Meta options from the subclass's own
+    # __dict__ only, so nothing else leaks from the base.
+    class Meta(PostgresViewModel.Meta):
+        abstract = False
         managed = False
         db_table = "geoplaces_for_tiles"
 
