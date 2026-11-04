@@ -446,8 +446,11 @@ BEGIN
         -- so anchor-snapping alone cannot reproduce membership exactly.
         -- The cell ids ARE the grouping keys — a client that pins
         -- cell_x/cell_y gets the exact member set by construction.
-        cell_x,
-        cell_y
+        -- Cast to int: the helper's ROUND() yields float8, which MVT
+        -- would encode as a 64-bit double (wire type 1) — ints encode
+        -- as varints like every other property.
+        cell_x::int AS cell_x,
+        cell_y::int AS cell_y
 
       FROM membership
 
