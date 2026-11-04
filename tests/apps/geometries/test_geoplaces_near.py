@@ -220,11 +220,14 @@ class TestClusterCountSync:
     """Every cluster feature's count == near(anchor, z).count.
 
     Probes each tier band shape: tier A (cluster_max_zoom 7), B (9)
-    and C (11) — full-clustering zooms and the hybrid transition band
-    (where the importance split decides membership).
+    and C (11) — full-clustering zooms, the hybrid transition band
+    (where the importance split decides membership) AND the 50 m grid
+    floor at z == cmz+2 (Opus review S3): the last clustered zoom,
+    where tile quantization (~±9.5 m at z9) is a real fraction of the
+    cell and boundary-adjacent anchors are most likely to drift.
     """
 
-    BANDS = ((7, (5, 6, 7, 8)), (9, (9, 10)), (11, (11, 12)))
+    BANDS = ((7, (5, 6, 7, 8, 9)), (9, (9, 10, 11)), (11, (11, 12, 13)))
 
     def test_cluster_counts_match_near_counts(self, client: Client) -> None:
         checked = 0

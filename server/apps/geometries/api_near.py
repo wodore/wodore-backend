@@ -33,6 +33,7 @@ Visibility mirrors the tiles: public, active, categorised places only
 from __future__ import annotations
 
 import json
+import math
 from typing import Any, Literal, LiteralString
 
 import psycopg.sql
@@ -239,8 +240,8 @@ WITH membership AS (
     %(params)s::jsonb
   ) m
   WHERE m.is_clustered
-    AND m.cell_x = ROUND(ST_X(ST_Transform(ST_GeomFromText(%(anchor)s, 4326), 3857)) / m.grid_size)
-    AND m.cell_y = ROUND(ST_Y(ST_Transform(ST_GeomFromText(%(anchor)s, 4326), 3857)) / m.grid_size)
+    AND m.cell_x = ROUND(ST_X(ST_Transform(ST_GeomFromText(%(anchor)s, 4326), 3857)) / NULLIF(m.grid_size, 0))
+    AND m.cell_y = ROUND(ST_Y(ST_Transform(ST_GeomFromText(%(anchor)s, 4326), 3857)) / NULLIF(m.grid_size, 0))
     AND (%(category_identifier)s::text IS NULL OR m.category_identifier = %(category_identifier)s)
   ORDER BY {}
   LIMIT %(limit)s OFFSET %(offset)s
@@ -368,7 +369,13 @@ class GeoPlacesNearController(ApiController):
                     {
                         "anchor": anchor_wkt,
                         "params": _json(params),
-                        "margin": radius + 1000,
+                        # The bbox prefilter is in PROJECTED 3857 units
+                        # while the exact ST_DWithin filter below is in
+                        # ground meters — radius projected units cover
+                        # only radius*cos(lat) ground meters, silently
+                        # dropping the ~0.68R–R annulus at 47°N. Scale
+                        # the margin by 1/cos(lat) (Opus review S1).
+                        "margin": (radius + 1000) / math.cos(math.radians(query.lat)),
                         "radius": radius,
                         "limit": query.limit,
                         "offset": query.offset,
