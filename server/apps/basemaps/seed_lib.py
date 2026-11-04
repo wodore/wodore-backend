@@ -890,12 +890,14 @@ def accommodations_style() -> dict[str, Any]:
                     (
                         "{{env:MARTIN_TILE_URL}}/geoplaces/{z}/{x}/{y}.mlt"
                         "?category_tree=accommodation"
-                        # flat color/parent/category_identifier props only
-                        # — the `category` object and `categories` array
-                        # are opt-in fields and stay off (they dominate
-                        # tile size; nothing in this document reads them)
+                        # flat color/parent/category_identifier props plus
+                        # elevation (popups) — the `category` object and
+                        # `categories` array are opt-in fields and stay off
+                        # (they dominate tile size; nothing in this
+                        # document reads them)
                         "&fields=color,parent_color,parent_slug,"
-                        "importance,count,name,slug"
+                        "category_identifier,importance,count,name,slug,"
+                        "elevation"
                         "&max_label_zoom=11&cluster_max_zoom=7"
                         "&cache_ttl_days=1"
                     )
@@ -1552,7 +1554,8 @@ def amenity_overlay_style(spec: AmenityOverlaySpec) -> dict[str, Any]:
                         "{{env:MARTIN_TILE_URL}}/geoplaces/{z}/{x}/{y}.mlt"
                         f"?category_tree={subtree}"
                         "&fields=color,parent_color,parent_slug,"
-                        "importance,count,name,slug"
+                        "category_identifier,importance,count,name,slug,"
+                        "elevation"
                         f"&max_label_zoom={spec.max_label_zoom}"
                         f"&cluster_max_zoom={spec.cluster_max_zoom}"
                         "&cache_ttl_days=1"

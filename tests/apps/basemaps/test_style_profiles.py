@@ -284,6 +284,10 @@ class SubsetWalkerAccepts(SimpleTestCase):
         assert template.split("?", 1)[0].endswith(".mlt")
         assert source["encoding"] == "mlt"
         assert "category_tree=accommodation" in template
+        # popup props ride the fields list (tile-function opt-in,
+        # migration geometries.0077): elevation + category_identifier
+        assert "category_identifier" in template
+        assert "elevation" in template
 
     def test_equality_operator_with_nested_get_passes(self) -> None:
         """``==`` is whitelisted but NOT identifier-shaped — it must be
