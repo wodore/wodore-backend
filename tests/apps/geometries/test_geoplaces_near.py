@@ -248,7 +248,44 @@ class TestClusterCountSync:
                 assert clusters, (cmz, z)
                 for feature in clusters:
                     lon, lat = _to_lnglat(feature)
+                    # EXACT path: pin the emitted cell ids — MVT
+                    # quantization of the anchor can cross a 50 m
+                    # floor-cell boundary (the singleton drift the
+                    # anchor-only path exhibits at z == cmz+2).
+                    assert feature["props"].get("cell_x") is not None, (
+                        cmz,
+                        z,
+                        feature["props"],
+                    )
                     response = client.get(
+                        NEAR_URL,
+                        {
+                            "lat": f"{lat:.6f}",
+                            "lon": f"{lon:.6f}",
+                            "z": z,
+                            "cluster_max_zoom": cmz,
+                            "category_tree": "amenity",
+                            "category_identifier": feature["props"][
+                                "category_identifier"
+                            ],
+                            "cell_x": feature["props"]["cell_x"],
+                            "cell_y": feature["props"]["cell_y"],
+                            "limit": 25,
+                        },
+                    )
+                    assert response.status_code == 200, response.content
+                    body = response.json()
+                    assert body["count"] == feature["props"]["count"], (
+                        cmz,
+                        z,
+                        feature["props"],
+                    )
+                    assert len(body["data"]) == min(body["count"], 25)
+                    checked += 1
+                    # FALLBACK path (no cell pin): identical for every
+                    # zoom EXCEPT the floor band, where quantization
+                    # drift is legal — document the caveat there.
+                    fallback = client.get(
                         NEAR_URL,
                         {
                             "lat": f"{lat:.6f}",
@@ -262,15 +299,21 @@ class TestClusterCountSync:
                             "limit": 25,
                         },
                     )
-                    assert response.status_code == 200, response.content
-                    body = response.json()
-                    assert body["count"] == feature["props"]["count"], (
-                        cmz,
-                        z,
-                        feature["props"],
-                    )
-                    assert len(body["data"]) == min(body["count"], 25)
-                    checked += 1
+                    assert fallback.status_code == 200
+                    fbody = fallback.json()
+                    if z <= cmz + 1:
+                        assert fbody["count"] == feature["props"]["count"], (
+                            cmz,
+                            z,
+                            feature["props"],
+                        )
+                    else:
+                        # floor band (z == cmz+2): singleton drift allowed
+                        assert fbody["count"] in (0, feature["props"]["count"]), (
+                            cmz,
+                            z,
+                            feature["props"],
+                        )
         # sanity: the sweep exercised clusters of several sizes/zooms
         assert checked >= 12
 

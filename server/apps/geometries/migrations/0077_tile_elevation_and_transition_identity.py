@@ -440,7 +440,14 @@ BEGIN
         COUNT(*)::int AS count,
         ''::text AS name,
         ''::text AS slug,
-        NULL::int AS elevation
+        NULL::int AS elevation,
+        -- Cell identity for the near endpoint: MVT quantization of the
+        -- anchor (~±10 m at z9) can cross a 50 m floor cell boundary,
+        -- so anchor-snapping alone cannot reproduce membership exactly.
+        -- The cell ids ARE the grouping keys — a client that pins
+        -- cell_x/cell_y gets the exact member set by construction.
+        cell_x,
+        cell_y
 
       FROM membership
 
@@ -474,7 +481,9 @@ BEGIN
         -- name still respects the max_label_zoom gate).
         CASE WHEN need_name THEN resolved_name ELSE ''::text END AS name,
         slug,
-        CASE WHEN need_elevation THEN elevation ELSE NULL::int END AS elevation
+        CASE WHEN need_elevation THEN elevation ELSE NULL::int END AS elevation,
+        NULL::int AS cell_x,
+        NULL::int AS cell_y
 
       FROM membership
 
@@ -655,7 +664,9 @@ BEGIN
         END AS name,
 
         slug,
-        CASE WHEN need_elevation THEN elevation ELSE NULL::int END AS elevation
+        CASE WHEN need_elevation THEN elevation ELSE NULL::int END AS elevation,
+        NULL::int AS cell_x,
+        NULL::int AS cell_y
 
       FROM places
       LEFT JOIN poi_categories pca ON pca.geo_place_id = places.id
@@ -710,8 +721,7 @@ class Migration(migrations.Migration):
         migrations.RunSQL(
             sql=GRID_SIZE_SQL,
             reverse_sql=(
-                "DROP FUNCTION IF EXISTS geoplaces_cluster_grid_size"
-                "(integer, jsonb);"
+                "DROP FUNCTION IF EXISTS geoplaces_cluster_grid_size(integer, jsonb);"
             ),
         ),
         migrations.RunSQL(

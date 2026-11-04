@@ -145,6 +145,23 @@ class GeoPlacesNearQuery(LanguageQuery):
         ),
         json_schema_extra={"example": "accommodation.hut"},
     )
+    cell_x: int | None = Field(
+        None,
+        description=(
+            "EXACT cluster pin: the clicked feature's cell_x tile "
+            "property. MVT quantization of the anchor (~±10 m at z9) "
+            "can cross a 50 m floor-cell boundary, so anchor snapping "
+            "alone cannot reproduce singleton membership at the hybrid "
+            "floor — passing the emitted cell ids makes the member set "
+            "exact by construction. Falls back to anchor snapping when "
+            "absent."
+        ),
+    )
+    cell_y: int | None = Field(
+        None,
+        description="EXACT cluster pin: the clicked feature's cell_y "
+        "tile property (see cell_x).",
+    )
     fields: str | None = Field(
         None,
         description=(
@@ -240,8 +257,8 @@ WITH membership AS (
     %(params)s::jsonb
   ) m
   WHERE m.is_clustered
-    AND m.cell_x = ROUND(ST_X(ST_Transform(ST_GeomFromText(%(anchor)s, 4326), 3857)) / NULLIF(m.grid_size, 0))
-    AND m.cell_y = ROUND(ST_Y(ST_Transform(ST_GeomFromText(%(anchor)s, 4326), 3857)) / NULLIF(m.grid_size, 0))
+    AND m.cell_x = COALESCE(%(cell_x)s::int, ROUND(ST_X(ST_Transform(ST_GeomFromText(%(anchor)s, 4326), 3857)) / NULLIF(m.grid_size, 0)))
+    AND m.cell_y = COALESCE(%(cell_y)s::int, ROUND(ST_Y(ST_Transform(ST_GeomFromText(%(anchor)s, 4326), 3857)) / NULLIF(m.grid_size, 0)))
     AND (%(category_identifier)s::text IS NULL OR m.category_identifier = %(category_identifier)s)
   ORDER BY {}
   LIMIT %(limit)s OFFSET %(offset)s
@@ -355,6 +372,12 @@ class GeoPlacesNearController(ApiController):
                         "params": _json(params),
                         "margin": margin,
                         "category_identifier": query.category_identifier,
+                        "cell_x": query.cell_x
+                        if query.cell_x is not None and query.cell_y is not None
+                        else None,
+                        "cell_y": query.cell_y
+                        if query.cell_x is not None and query.cell_y is not None
+                        else None,
                         "limit": query.limit,
                         "offset": query.offset,
                     },
