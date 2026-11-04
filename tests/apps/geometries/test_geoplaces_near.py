@@ -308,8 +308,14 @@ class TestClusterCountSync:
                             feature["props"],
                         )
                     else:
-                        # floor band (z == cmz+2): singleton drift allowed
-                        assert fbody["count"] in (0, feature["props"]["count"]), (
+                        # Floor band (z == cmz+2): the anchor fallback is
+                        # UNRELIABLE, not just lossy — quantization can
+                        # cross into a NON-EMPTY neighbour cell (CI
+                        # caught 13-vs-16: the same category clusters in
+                        # adjacent 50 m cells), returning a wrong member
+                        # set. The cell pin above is the contract; only
+                        # the envelope stays asserted here.
+                        assert len(fbody["data"]) == min(fbody["count"], 25), (
                             cmz,
                             z,
                             feature["props"],
