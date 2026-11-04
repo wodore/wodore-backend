@@ -16,7 +16,7 @@ The `get_geoplaces_for_tiles()` function provides dynamic tile generation with:
 - Database-level tile caching with TTL and cache versioning
 
 ### Function Location
-Latest migration: server/apps/geometries/migrations/0041_optimize_tile_performance.py
+Latest migration: server/apps/geometries/migrations/0077_tile_elevation_and_transition_identity.py
 
 ### Query Parameters
 ```json
@@ -29,7 +29,7 @@ Latest migration: server/apps/geometries/migrations/0041_optimize_tile_performan
   "cluster_ref_zoom": 8,                  // Reference zoom for cluster_radius_m - default: 8
   "max_features": 10000,                  // Max features per tile - default: null (no limit)
   "max_label_zoom": 14,                   // Only include name above this zoom - default: 14
-  "fields": "color,parent_color,parent_slug,importance,count,name,slug",  // Fields to include - default: see list
+  "fields": "color,parent_color,parent_slug,importance,count,name,slug",  // Fields to include - default: see list (elevation is opt-in via fields)
   "categories": "hut,hotel",               // Exact category-slug filter (OR logic) - default: null
   "categories_all": "hut,parking",         // Exact category-slug filter (AND logic) - default: null
   "category_tree": "accommodation",        // Subtree filter: slug matched against kind, group or domain (OR) - default: null
@@ -49,9 +49,18 @@ cluster features aggregate their members' primary category.
 
 - ``slug``, ``name`` (empty below ``max_label_zoom``), ``importance``
 - ``count`` — 1 for raw places, N for clusters
+- ``elevation`` — only when ``fields`` names it; individual features
+  (full-raw path and the clustered path's transition twin) only —
+  cluster features never carry it
 - flat styling/filtering props: ``category_slug``,
   ``category_identifier``, ``category_order``, ``color``,
   ``parent_color``, ``parent_slug``
+- the transition-zone twin (graduated individuals at
+  ``cluster_max_zoom < z <= max+offset``) carries the real ``slug``
+  and the language-resolved ``name`` (still gated by
+  ``max_label_zoom``); full-clustering-zone cluster features stay
+  anonymous (``''`` name/slug — clients resolve them via
+  ``GET /v1/geoplaces/near`` on click)
 - ``categories`` — jsonb array of ALL the place's categories (only when
   ``fields`` names it; absent for cluster features). NOTE: there is no
   ``category`` object property — ST_AsMVT flattens jsonb objects into
@@ -141,6 +150,22 @@ tile = GeoPlacesForTilesView.objects.get_tile(12, 1234, 2345, {"cluster_max_zoom
   - `category_tree` subtree filter (kind/group/domain ancestor match)
   - `cluster_radius_m` default 5000 (a missing param emptied clustered tiles)
   - `cache_ttl_days <= 0` skips cache persistence
+- 2026-11-03 (later): Shared membership + elevation + transition identity
+  (migration `0077_tile_elevation_and_transition_identity`):
+  `geoplaces_cluster_grid_size` (the grid formula, one definition) and
+  `geoplaces_cluster_membership` (visibility/category filters, primary
+  category, cell snap, hybrid split) become the shared SQL core the
+  clustered path aggregates — and the `GET /v1/geoplaces/near`
+  endpoint queries for cluster members (counts cannot drift; SYNC
+  comments at both call sites, invariant pinned in
+  `tests/apps/geometries/test_geoplaces_near.py`); `elevation` joins the
+  opt-in `fields` surface (individual features only — NULL/absent for
+  clusters and when not requested, so non-opting consumers' tiles stay
+  byte-identical); the transition-zone raw twin carries real `slug`/
+  `name` instead of `''` (identity for promoteId/popups in the hybrid
+  band — names still gated by `max_label_zoom`); the migration purges
+  `geometries_tile_cache` (the identity fix rides no query param, so
+  stale rows would survive until TTL).
 """
 
 from typing import Any

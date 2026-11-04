@@ -70,6 +70,19 @@ class AmenityStyleContractTests(SimpleTestCase):
             assert "cache_ttl_days=1" in template, subtree
             assert "fields=color,parent_color,parent_slug," in template, subtree
 
+    def test_tile_url_fields_carry_popup_props(self) -> None:
+        """Amenity popups render from tile properties: elevation and
+        the per-kind icon key (category_identifier) ride the fields
+        list (opt-in in the tile function — migration 0077)."""
+        for subtree in EXPECTED_BANDS:
+            for styles in (
+                lib.AMENITY_OVERLAY_STYLES,
+                lib.AMENITY_OVERLAY_STYLES_SUBSET,
+            ):
+                template: str = styles[subtree]["sources"][f"wd-{subtree}"]["tiles"][0]
+                assert "category_identifier" in template, subtree
+                assert "elevation" in template, subtree
+
     def test_source_zooms_match_tier(self) -> None:
         for subtree, (floor, _cmz, _label) in EXPECTED_BANDS.items():
             source = lib.AMENITY_OVERLAY_STYLES[subtree]["sources"][f"wd-{subtree}"]

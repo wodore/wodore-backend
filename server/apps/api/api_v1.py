@@ -34,6 +34,7 @@ from server.apps.external_links import api as external_links_api
 from server.apps.feedbacks import api as feedbacks_api
 from server.apps.geometries import api as geo_api
 from server.apps.geometries import api_images as geo_images_api
+from server.apps.geometries import api_near as geo_near_api
 from server.apps.huts.api import paths as huts_paths
 from server.apps.meteo import api as meteo_api
 from server.apps.organizations import api as organizations_api
@@ -52,6 +53,10 @@ def build_router() -> Router:
     # Tags mirror the former per-router tags (OpenAPI grouping).
     router.include(Router("geo/images/", geo_images_api.paths, tags=["geoimages"]))
     router.include(Router("geo/", geo_api.paths, tags=["geometries"]))
+    # Geoplaces near endpoint (amenity popups): the shared-membership
+    # cluster lookups live at /v1/geoplaces/near — a top-level prefix,
+    # not under geo/ (frontend codes against the literal path).
+    router.include(Router("geoplaces/", geo_near_api.paths, tags=["geometries"]))
     router.include(Router("categories/", categories_api.paths, tags=["category"]))
     router.include(Router("map/", map_api.paths, tags=["map"]))
     router.include(Router("huts/", huts_paths, tags=["hut"]))
