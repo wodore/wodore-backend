@@ -237,13 +237,24 @@ jobs:
   # (the same generator `yarn gen:api` uses) and typecheck a smoke
   # consumer. Catches schema shapes that break the wodore_v1.d.ts build
   # before the frontend repo notices.
-  # -- Map style spec validation (styl) -------------------------------
-  # Full-profile inline seed styles are validated against the real
-  # MapLibre style spec by the styl Rust binary (github.com/navidnabavi/styl)
-  # -- the reference implementation is a Node toolchain, so the server
-  # runtime never depends on it; only CI does (style-profiles-subset D6).
-  # Subset rows are walker-owned and gated in the test suite (pure
-  # Python, no external binary).
+  # -- Map style spec validation (styl + the maplibre validator) ---
+  # Every inline seed style (FULL and SUBSET profiles — the subset
+  # twins are dumped since the 2026-11-06 incident; a subset document
+  # is a full style by construction) is validated twice:
+  #
+  # 1. styl (Rust binary, github.com/navidnabavi/styl) — E-code lint
+  #    strictness on authored styles (the reference implementation is
+  #    a Node toolchain, so the server runtime never depends on it).
+  # 2. @maplibre/maplibre-gl-style-spec validateStyleMin — the
+  #    AUTHORITATIVE spec and the exact call the frontend gates
+  #    served styles with. styl v0.0.6's ruleset does not implement
+  #    every expression rule: the 2026-11-06 staging incident shipped
+  #    an icon-size zoom-product expression that MapLibre rejects but
+  #    styl passed. The subset walker keeps running in the test suite
+  #    as the third, python-only gate.
+  #
+  # The job NAME stays "Map style spec (styl)" — branch protection
+  # keys on the check name; do not rename without updating protection.
   map-style-spec:
     name: Map style spec (styl)
     runs-on: ubuntu-latest
@@ -255,6 +266,11 @@ jobs:
         uses: ./.github/actions/setup-venv
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
 
       - name: Install styl
         run: |
@@ -273,6 +289,20 @@ jobs:
           sudo apt-get install -y --no-install-recommends gdal-bin
       - name: Dump seed styles
         run: uv run python manage.py dump_map_styles --out .style-dump
+
+      - name: Validate styles (authoritative maplibre style-spec)
+        run: |
+          # The frontend's own gate (validateStyleMin from
+          # @maplibre/maplibre-gl-style-spec): the ground truth every
+          # served document must pass. Pin WITH the frontend dependency
+          # (wodore-frontend-quasar package.json) and MapLayer.version —
+          # bump them together.
+          mkdir -p .spec-validate
+          npm install --silent --prefix .spec-validate \
+            @maplibre/maplibre-gl-style-spec@26.4.4
+          cp scripts/validate_map_styles_spec.mjs .spec-validate/
+          node .spec-validate/validate_map_styles_spec.mjs \
+            .style-dump server/apps/basemaps/fixtures/styles
 
       - name: Validate styles (E-code spec violations)
         run: |

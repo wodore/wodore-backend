@@ -31,11 +31,11 @@ inv lint                     # ruff lint + format check
 
 ## Environments & URLs
 
-| Environment | API / OpenAPI | Frontend |
-|---|---|---|
-| Local | <http://localhost:8000/v1/openapi.json> | <http://localhost:9000> |
-| Staging | <https://hub.stg.wodore.com> | <https://stg.wodore.com> |
-| Production | <https://hub.wodore.com> | <https://wodore.com> |
+| Environment | API / OpenAPI                           | Frontend                 |
+| ----------- | --------------------------------------- | ------------------------ |
+| Local       | <http://localhost:8000/v1/openapi.json> | <http://localhost:9000>  |
+| Staging     | <https://hub.stg.wodore.com>            | <https://stg.wodore.com> |
+| Production  | <https://hub.wodore.com>                | <https://wodore.com>     |
 
 - Deployed OpenAPI may lag during active development.
 - API CDN hosts: `hub.cdn.wodore.com` / `hub.cdn.stg.wodore.com` (BunnyCDN);
@@ -64,10 +64,10 @@ never ship changelog entries inside PRs. Full conventions:
 
 Two feature flags (see `server/settings/components/oidc.py`):
 
-| Mode | Flags | Admin login | Frontend/API auth |
-|---|---|---|---|
-| Zitadel (prod/staging default) | `OIDC_ENABLED=true` | OIDC SSO | Zitadel tokens (introspection) |
-| Local (dev/test default) | `LOCAL_AUTH_ENABLED=true` | classic Django login (`app createsuperuser`) | built-in provider at `/oauth/local/` |
+| Mode                           | Flags                     | Admin login                                  | Frontend/API auth                    |
+| ------------------------------ | ------------------------- | -------------------------------------------- | ------------------------------------ |
+| Zitadel (prod/staging default) | `OIDC_ENABLED=true`       | OIDC SSO                                     | Zitadel tokens (introspection)       |
+| Local (dev/test default)       | `LOCAL_AUTH_ENABLED=true` | classic Django login (`app createsuperuser`) | built-in provider at `/oauth/local/` |
 
 - `LOCAL_AUTH_ENABLED=true` is hard-refused outside `DJANGO_ENV=development|test`.
 - OIDC enabled + provider unreachable = startup fails fast (`ImproperlyConfigured`).
@@ -347,7 +347,7 @@ the **lane** database (the main checkout's `app` targets dev).
   repoints the shared containers at the worktree's copies (an empty pgdata
   makes the dev database appear "wiped"). Use the lane scripts; run
   `docker compose` only in the main checkout.
-- Tile work *can* happen in a worktree: `scripts/lane-martin.sh start`
+- Tile work _can_ happen in a worktree: `scripts/lane-martin.sh start`
   runs a lane-scoped martin + tile-router serving the lane DB on the lane
   port (`lane-run.sh` points `MARTIN_TILE_URL` there automatically).
   Work on the **shared** martin instance (image updates, shared config)
@@ -372,7 +372,7 @@ included FIRST in the settings list (before logging config). Rules:
   health checks are never traced (sampler excludes `/health/`).
 - **PII stays off**: `send_default_pii=False` is fixed — do not flip
   without a privacy review. Caveat: this only covers SDK-attached data —
-  PII that app code writes *into log messages* still flows into
+  PII that app code writes _into log messages_ still flows into
   breadcrumbs and error events; keep tokens/emails out of log calls.
 - **django-q2 failures** reach Sentry via the in-repo error reporter
   (`server/core/q2_sentry.py`, wired through `Q_CLUSTER["error_reporter"]`)
@@ -404,8 +404,15 @@ stays profile-agnostic; subset clients never receive full variants).
   `styl_ignored_rules: ["*"]`. New subset rows are tagged manually in
   `map_seed` — never auto-tagged.
 - **CI**: `validate_map_styles` sweep in the tests job + the
-  `map-style-spec` job (styl over `dump_map_styles` output +
-  `fixtures/styles/`).
+  `map-style-spec` job: **styl** (E-code lint) AND the authoritative
+  `@maplibre/maplibre-gl-style-spec` validator (`scripts/
+validate_map_styles_spec.mjs` — the exact call the frontend gates
+  served styles with) over `dump_map_styles` output (ALL profiles,
+  parameter tokens resolved) + `fixtures/styles/`. styl v0.0.6 lacks
+  expression rules MapLibre enforces (the 2026-11-06 invalid-zoom-
+  expression incident shipped through styl-clean) — never rely on
+  styl alone; the maplibre validator is the ground truth (pin its
+  version WITH the frontend dependency).
 
 Caching: layer entries carry `style_version` (appended to `style_url` as
 `&v=`) — a matching `?v=` serves immutable (1 y); unversioned fetches allow
