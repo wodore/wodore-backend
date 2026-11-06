@@ -832,6 +832,30 @@ _CLUSTER_COUNT_SCALE: list[Any] = [
     1.8,
 ]
 
+
+def _cluster_icon_size(
+    stops: list[tuple[int, float]], multiplier: Any = None
+) -> list[Any]:
+    """Cluster icon-size: zoom ladder with per-stop count scaling.
+
+    ``["zoom"]`` may only feed a TOP-LEVEL ``interpolate``/``step`` —
+    the naive ``["*", zoom-ladder, count-scale]`` product is rejected
+    by MapLibre's validator (staging incident 2026-11-06: every
+    full-profile POI overlay served an "invalid style document";
+    styl's ruleset did not flag it, the frontend's validator did).
+    Multiplying each stop VALUE by the count scale is the equivalent
+    legal composite (stop values may be data expressions).
+    """
+    flat: list[Any] = []
+    for zoom, size in stops:
+        factors: list[Any] = [size]
+        if multiplier is not None:
+            factors.append(multiplier)
+        factors.append(_CLUSTER_COUNT_SCALE)
+        flat.extend((zoom, ["*", *factors]))
+    return ["interpolate", ["linear"], ["zoom"], *flat]
+
+
 #: Subset twins cannot multiply the zoom ladder by the count scale
 #: (the Leaflet-class whitelist has no ``*`` operator) — their cluster
 #: icons render ~1.35× the raw size at every zoom, count-independent
@@ -986,27 +1010,10 @@ def accommodations_style() -> dict[str, Any]:
                 "filter": _ACCOMMODATION_CLUSTER_FILTER,
                 "layout": {
                     "icon-image": icon_ladder,
-                    "icon-size": [
-                        "*",
-                        [
-                            "interpolate",
-                            ["linear"],
-                            ["zoom"],
-                            7,
-                            ["*", 0.1, "{{accommodations.icon_scale}}"],
-                            9,
-                            ["*", 0.3, "{{accommodations.icon_scale}}"],
-                            11,
-                            ["*", 0.55, "{{accommodations.icon_scale}}"],
-                            13,
-                            ["*", 0.75, "{{accommodations.icon_scale}}"],
-                            16,
-                            ["*", 1.0, "{{accommodations.icon_scale}}"],
-                            20,
-                            ["*", 1.25, "{{accommodations.icon_scale}}"],
-                        ],
-                        _CLUSTER_COUNT_SCALE,
-                    ],
+                    "icon-size": _cluster_icon_size(
+                        _AMENITY_ICON_SIZE_STOPS,
+                        multiplier="{{accommodations.icon_scale}}",
+                    ),
                     "icon-allow-overlap": True,
                     "icon-overlap": "always",
                     "symbol-sort-key": ["get", "importance"],
@@ -1602,11 +1609,7 @@ def amenity_overlay_style(spec: AmenityOverlaySpec) -> dict[str, Any]:
                 "filter": cluster_filter,
                 "layout": {
                     "icon-image": icon_ladder,
-                    "icon-size": [
-                        "*",
-                        ladder(_AMENITY_ICON_SIZE_STOPS),
-                        _CLUSTER_COUNT_SCALE,
-                    ],
+                    "icon-size": _cluster_icon_size(_AMENITY_ICON_SIZE_STOPS),
                     "icon-allow-overlap": True,
                     "icon-overlap": "always",
                     "symbol-sort-key": ["get", "importance"],

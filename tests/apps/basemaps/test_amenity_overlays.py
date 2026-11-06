@@ -145,18 +145,58 @@ class AmenityStyleContractTests(SimpleTestCase):
             assert cluster["type"] == "symbol", subtree
             assert f"wd-{subtree}-cluster-count" not in by_id, subtree
             size = cluster["layout"]["icon-size"]
-            assert size[0] == "*", subtree
-            zoom_ladder, count_scale = size[1], size[2]
-            assert zoom_ladder[0] == "interpolate" and zoom_ladder[2] == ["zoom"], (
-                subtree
-            )
-            # count scale: 2 → 1.1, 12 → 1.8 (MapLibre clamps beyond)
-            assert count_scale[2] == ["get", "count"], subtree
-            assert count_scale[3::2] == [2, 12], subtree
-            assert count_scale[4::2] == [1.1, 1.8], subtree
+            # TOP-LEVEL zoom interpolate (the only legal zoom shape —
+            # see test_no_zoom_outside_toplevel_interpolate) with
+            # per-stop values ["*", base, count-scale]
+            assert size[0] == "interpolate" and size[2] == ["zoom"], subtree
+            stops = [float(stop) for stop in size[3::2]]
+            values = size[4::2]
             # stops strictly ascending (MapLibre hard parse error)
-            stops = [float(stop) for stop in zoom_ladder[3::2]]
             assert stops == sorted(stops) and len(set(stops)) == len(stops), subtree
+            for value in values:
+                assert value[0] == "*", (subtree, value)
+                count_scale = value[2]
+                # count scale: 2 → 1.1, 12 → 1.8 (MapLibre clamps beyond)
+                assert count_scale[2] == ["get", "count"], subtree
+                assert count_scale[3::2] == [2, 12], subtree
+                assert count_scale[4::2] == [1.1, 1.8], subtree
+
+    def test_no_zoom_outside_toplevel_interpolate(self) -> None:
+        """MapLibre's expression spec: ["zoom"] may ONLY be the input
+        of a TOP-LEVEL step/interpolate — anywhere else the whole
+        document is rejected (staging incident 2026-11-06: all eleven
+        full-profile POI overlays served "invalid style documents"
+        after an icon-size ``["*", zoom-ladder, count-scale]`` product;
+        styl's ruleset did not flag it, the frontend validator did).
+        This walker enforces the rule on every generated document."""
+
+        def assert_zoom_legal(expr: Any, top: bool, path: str) -> None:
+            if not isinstance(expr, list):
+                return
+            if expr and expr[0] in ("interpolate", "step"):
+                if expr[2] == ["zoom"]:  # legal exactly here, at top
+                    assert top, f"zoom-interpolate nested at {path}"
+                for child in expr[3:]:
+                    assert_zoom_legal(child, False, path)
+                return
+            for child in expr:
+                if child == ["zoom"]:
+                    msg = f"bare zoom outside top-level input at {path}"
+                    assert top, msg
+                else:
+                    assert_zoom_legal(child, False, path)
+
+        documents = {
+            "accommodations": lib.ACCOMMODATIONS_STYLE,
+            "accommodations-subset": lib.ACCOMMODATIONS_STYLE_SUBSET,
+            **lib.AMENITY_OVERLAY_STYLES,
+            **{f"{k}-subset": v for k, v in lib.AMENITY_OVERLAY_STYLES_SUBSET.items()},
+        }
+        for name, style in documents.items():
+            for layer in style["layers"]:
+                for section in ("layout", "paint"):
+                    for key, expr in (layer.get(section) or {}).items():
+                        assert_zoom_legal(expr, True, f"{name}:{layer['id']}.{key}")
 
     def test_subset_cluster_icons_oversize_raw_ladder(self) -> None:
         """Subset twins: static-sprite cluster icons at a strictly
