@@ -1,4 +1,0 @@
-grenzfall: 7/10 — Gut. → rework
-
-1 hut(s) processed, 1 assessed, 1 moved to rework
-✓ Assessing hut descriptions... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% • 0:00:00

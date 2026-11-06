@@ -1,2 +1,0 @@
-assessed hut:testhuette-berner: {'assessed': 1, 'duplicates': 0, 'pins': 1}
-Done: 1 places, 0 failed.
