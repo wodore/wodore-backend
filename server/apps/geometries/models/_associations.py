@@ -1,8 +1,12 @@
+from typing import Any, override
+
 from computedfields.models import ComputedFieldsModel
 
 from modeltrans.manager import MultilingualManager
 
 from django.contrib.gis.db import models
+from django.core.exceptions import ValidationError
+from django.db.models import OuterRef, Subquery, signals
 from django.utils.translation import gettext_lazy as _
 
 from server.apps.categories.models import Category
@@ -30,6 +34,11 @@ class DeletePolicy(models.TextChoices):
 
 
 class GeoPlaceImageAssociation(TimeStampedModel):
+    # Mirror of HutImageAssociation's score bands: provider pins stay in
+    # 0–89, curated content would live in 90–99 (geoplaces currently have no
+    # uploads — kept for parity so pin_place_images can clamp uniformly).
+    PROVIDER_SCORE_MAX = 89
+
     image = models.ForeignKey(
         Image, on_delete=models.CASCADE, db_index=True, related_name="geoplace_details"
     )
@@ -42,13 +51,15 @@ class GeoPlaceImageAssociation(TimeStampedModel):
     score = models.PositiveSmallIntegerField(
         blank=True,
         null=True,
-        help_text=_("Display score — higher is shown first."),
+        help_text=_(
+            "Display score — higher is shown first; pinned external images stay in 0–89."
+        ),
     )
 
     def __str__(self) -> str:
         return f"{self.geo_place} <> {self.image}"
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Image and Geo Place Association")
         ordering = ("geo_place__name", "-score", "id")
         constraints = (
@@ -129,7 +140,7 @@ class GeoPlaceSourceAssociation(TimeStampedModel, ComputedFieldsModel):
         help_text=_("Source precedence for field conflicts (lower number wins)"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Geo Place and Organization Association")
         indexes = [
             models.Index(fields=["priority"]),
@@ -194,7 +205,7 @@ class GeoPlaceExternalLink(models.Model):
         help_text=_("Display order for this link"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Geo Place Link")
         verbose_name_plural = _("Geo Place Links")
         ordering = ["order", "id"]
@@ -214,7 +225,20 @@ class GeoPlaceExternalLink(models.Model):
 
 
 class GeoPlaceCategory(TimeStampedModel):
-    """Through model for GeoPlace <-> Category with optional classifier."""
+    """Through model for GeoPlace <-> Category with operation modes.
+
+    OpenSpec ``geoplace-capacity-and-types-via-categories`` (revised
+    design): an association pairs a category with an operation mode —
+    the ``classifier`` references a ``mode.*`` child (today
+    ``mode.standard`` / ``mode.reduced``). A hut imports as up to two
+    associations (standard operation, reduced operation), each
+    carrying its mode's typed attributes in ``extra`` (the
+    accommodation schema: ``capacity``). ``extra`` is validated
+    against the category subtree's ``CategoryExtraSchema`` (JSON
+    Schema, admin-manageable); values the source does not publish are
+    omitted (``None``-valued keys dropped, never stored as null),
+    unknown keys are preserved.
+    """
 
     geo_place = models.ForeignKey(
         "GeoPlace",
@@ -228,6 +252,11 @@ class GeoPlaceCategory(TimeStampedModel):
         db_index=True,
         related_name="geo_place_associations",
     )
+    #: Runtime FK id attribute (None while unsaved) — pyrefly does not
+    #: synthesize ``<fk>_id`` attributes; explicit annotation per the
+    #: repo idiom (see _category_extra_schema.py).
+    geo_place_id: int
+    category_id: int | None
     classifier = models.ForeignKey(
         Category,
         on_delete=models.SET_NULL,
@@ -235,16 +264,19 @@ class GeoPlaceCategory(TimeStampedModel):
         blank=True,
         db_index=True,
         related_name="classifications",
-        help_text=_("Optional classifier for this association (e.g., seasonal status)"),
+        help_text=_("Operation mode for this association (a mode.* child category)"),
     )
     extra = models.JSONField(
         default=dict,
         blank=True,
         verbose_name=_("Extra"),
-        help_text=_("Category-specific overflow data (JSON)"),
+        help_text=_(
+            "Per-association attributes — validated against the "
+            "category's extra schema (JSON Schema)"
+        ),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         db_table = "geometries_geoplace_category"
         verbose_name = _("Geo Place Category Association")
         verbose_name_plural = _("Geo Place Category Associations")
@@ -261,9 +293,16 @@ class GeoPlaceCategory(TimeStampedModel):
             models.Index(fields=["classifier"], name="gpc_classifier_idx"),
         ]
         constraints = [
+            # One association per (place, category, mode) — the
+            # two-association operating-mode model pairs a category
+            # with mode.standard AND mode.reduced when open and closed
+            # types coincide (e.g. unknown/unknown). NULL classifiers
+            # are not distinct (PG15+ ``nulls_distinct``) so a NULL row
+            # stays unique per category too.
             models.UniqueConstraint(
-                fields=["geo_place", "category"],
-                name="geoplacecategory_unique_place_category",
+                fields=["geo_place", "category", "classifier"],
+                nulls_distinct=False,
+                name="geoplacecategory_unique_place_category_mode",
             ),
         ]
 
@@ -272,3 +311,252 @@ class GeoPlaceCategory(TimeStampedModel):
         return (
             f"{self.geo_place.name_i18n} -> {self.category.identifier}{classifier_str}"
         )
+
+    @override
+    def clean(self) -> None:
+        super().clean()
+        self.validate_attributes(self.category, self.classifier, self.extra)
+
+    @classmethod
+    def validate_attributes(
+        cls,
+        category: "Category | None",
+        classifier: "Category | None",
+        extra: dict[str, Any],
+    ) -> None:
+        """Shared validation for every write path (D3).
+
+        ``clean()`` (admin forms), the schema upsert and the wodore
+        import all funnel through here — Django calls ``clean()`` on
+        none of the latter two paths. The classifier must be a child
+        of one of the **kind's allowed classifier subtrees**
+        (``CategoryKindContract.allowed_classifiers`` — the DB
+        contract on the kind's group, admin-editable; a missing
+        contract allows none);
+        ``extra`` is validated against the category subtree's
+        ``CategoryExtraSchema`` (no schema → free-form; corrupt
+        stored schema → fail open, logged).
+        """
+        from ..kinds import kind_contract_state
+
+        if classifier is not None:
+            parent = classifier.parent
+            _contract, allowed = kind_contract_state(category)
+            if parent is None or parent.slug not in allowed:
+                raise ValidationError(
+                    {
+                        "classifier": _(
+                            "Classifier must be a child of one of this "
+                            "kind's allowed categories (allowed: %(allowed)s)."
+                        )
+                        % {"allowed": ", ".join(allowed) or _("none")}
+                    }
+                )
+        cls.validate_extra(category, extra)
+
+    @classmethod
+    def validate_extra(cls, category: "Category | None", extra: dict[str, Any]) -> None:
+        """Validate ``extra`` against the category's extra schema.
+
+        No schema on the category subtree → free-form (forward-
+        compatible); a corrupt stored schema fails open (loud log at
+        compile time, no validation) — writes never brick.
+        """
+        from ._category_extra_schema import resolve_extra_schema
+
+        schema_row = resolve_extra_schema(category)
+        if schema_row is None:
+            return
+        validator = schema_row.compiled_validator()
+        if validator is None:
+            return
+        error = next(validator.iter_errors(extra), None) if extra else None
+        if error is not None:
+            raise ValidationError(
+                {
+                    "extra": _(
+                        "Value does not match the category's extra schema: %(error)s"
+                    )
+                    % {"error": error.message}
+                }
+            )
+
+    @classmethod
+    def normalize_extra(cls, extra: dict[str, Any] | None) -> dict[str, Any]:
+        """Drop ``None``-valued keys (unknown keys preserved).
+
+        A value the source does not publish is omitted, not stored
+        as ``null`` — an empty dict means no published attributes.
+        """
+        if not extra:
+            return {}
+        return {key: value for key, value in extra.items() if value is not None}
+
+
+class GeoPlaceParty(TimeStampedModel):
+    """Role-classified association between a GeoPlace and a Party.
+
+    Mirrors the ``classifier`` pattern of ``GeoPlaceCategory``: the
+    ``role`` FK must reference a category under the ``role`` parent
+    (validated in ``clean()`` and the schema write path), and multiple
+    roles for the same place–party pair are separate rows — one role
+    classifier per row.
+    """
+
+    geo_place = models.ForeignKey(
+        "GeoPlace",
+        on_delete=models.CASCADE,
+        db_index=True,
+        related_name="party_associations",
+        verbose_name=_("Geo Place"),
+    )
+    party = models.ForeignKey(
+        "parties.Party",
+        on_delete=models.RESTRICT,
+        db_index=True,
+        related_name="geo_place_associations",
+        verbose_name=_("Party"),
+    )
+    role = models.ForeignKey(
+        Category,
+        on_delete=models.RESTRICT,
+        db_index=True,
+        related_name="party_associations",
+        verbose_name=_("Role"),
+        help_text=_("Role this party plays for the place (role.* category)"),
+    )
+    #: Runtime FK id attribute (None while unsaved) — same idiom as
+    #: ``GeoPlaceCategory.category_id`` above.
+    role_id: int | None
+    order = models.PositiveSmallIntegerField(
+        default=0,
+        db_index=True,
+        verbose_name=_("Order"),
+        help_text=_("Display order among same-role associations"),
+    )
+
+    class Meta:
+        verbose_name = _("Geo Place Party Association")
+        verbose_name_plural = _("Geo Place Party Associations")
+        ordering = ["geo_place", "role", "order", "id"]
+        indexes = [
+            models.Index(
+                fields=["party", "geo_place"],
+                name="gpp_party_place_idx",
+            ),
+            models.Index(
+                fields=["geo_place", "role"],
+                name="gpp_place_role_idx",
+            ),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["geo_place", "party", "role"],
+                name="geoplaceparty_unique_place_party_role",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.geo_place.name_i18n} → {self.party.name_i18n}"
+            f" [{self.role.identifier}]"
+        )
+
+    @override
+    def clean(self) -> None:
+        super().clean()
+        if self.role_id:
+            parent = self.role.parent
+            if parent is None or parent.slug != "role":
+                raise ValidationError(
+                    {
+                        "role": _(
+                            "Role must be a role.* category "
+                            "(a child of the 'role' parent)."
+                        )
+                    }
+                )
+
+
+def _rederive_place_kind(geo_place_id: int) -> None:
+    """Keep ``GeoPlace.kind`` (+ ``domain``) in sync on ORM writes.
+
+    The import/schema paths derive both inline (bulk paths skip
+    signals anyway); this receiver covers everything else — admin
+    inline edits, ORM scripts, shell — so the FK always equals the
+    first association by anchor order (classifier priority, then
+    ``(order, slug)``) after any write (geoplace-kind-fk spec
+    invariant).
+
+    Fail-safe by design: historical-migration states (MigrationExecutor
+    tests) fire this with schemas where ``kind`` may not exist — a
+    signal must never break the triggering write.
+    """
+    from ..kinds import order_by_anchor, place_domain
+    from ._geoplace import GeoPlace
+
+    try:
+        associations = list(
+            GeoPlaceCategory.objects.filter(geo_place_id=geo_place_id)
+            .select_related("category", "classifier")
+            .exclude(category_id__isnull=True)
+        )
+        # kind_id via atomic subquery — a Python-read anchor can be
+        # deleted before the UPDATE lands (historical-migration
+        # collectors); the deferred FK violation then surfaces at
+        # teardown's SET CONSTRAINTS ALL IMMEDIATE, uncatchable here.
+        # The subquery reads current rows at UPDATE time: kind_id is
+        # NULL or an existing category, never a dangling ref.
+        first_assoc = order_by_anchor(
+            GeoPlaceCategory.objects.filter(
+                geo_place=OuterRef("pk"),
+                # only associations whose category still exists — the
+                # historical-migration collector deletes categories before
+                # their association rows, leaving transient dangles
+                category_id__in=Category.objects.values("id"),
+            )
+        ).values("category_id")[:1]
+        GeoPlace.objects.filter(pk=geo_place_id).update(
+            kind_id=Subquery(first_assoc),
+            domain=place_domain(associations),
+        )
+    except Exception:  # signal guard — see docstring
+        # never break the triggering write, but never hide a real
+        # derivation bug either — the receiver is the ONLY sync path
+        # for admin inline edits (Opus review #4)
+        import logging
+
+        logging.getLogger(__name__).exception(
+            "rederive_place_kind failed for place %s", geo_place_id
+        )
+        return
+
+
+def _on_association_saved(
+    sender: Any, instance: "GeoPlaceCategory", **kwargs: Any
+) -> None:
+    update_fields = kwargs.get("update_fields")
+    if update_fields and set(update_fields) <= {"extra", "modified"}:
+        # extra-only saves cannot move the anchor: kind is the category
+        # FK, and classifier/extra ride the association row itself —
+        # skipping kills the N-UPDATE storm on schema upserts that
+        # save() every association row (Opus review #6)
+        return
+    _rederive_place_kind(instance.geo_place_id)
+
+
+def _on_association_deleted(
+    sender: Any, instance: "GeoPlaceCategory", **kwargs: Any
+) -> None:
+    if instance.geo_place_id is not None:
+        _rederive_place_kind(instance.geo_place_id)
+
+
+signals.post_save.connect(
+    _on_association_saved, sender=GeoPlaceCategory, dispatch_uid="rederive_place_kind"
+)
+signals.post_delete.connect(
+    _on_association_deleted,
+    sender=GeoPlaceCategory,
+    dispatch_uid="rederive_place_kind",
+)

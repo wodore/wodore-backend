@@ -4,24 +4,29 @@ Core base models for wodore-backend.
 This module provides base model classes that should be used throughout the project.
 """
 
+import datetime
+from typing import Any
+
 from django.db import models
 from django.utils.timezone import now
 from django.utils.translation import gettext_lazy as _
 
 
-class _AutoCreatedField(models.DateTimeField):
+class _AutoCreatedField(models.DateTimeField[datetime.datetime, datetime.datetime]):
     """
     A DateTimeField that automatically populates itself at object creation.
     By default, sets editable=False, default=now.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         kwargs.setdefault("editable", False)
         kwargs.setdefault("default", now)
         super().__init__(*args, **kwargs)
 
 
-class _AutoLastModifiedField(models.DateTimeField):
+class _AutoLastModifiedField(
+    models.DateTimeField[datetime.datetime, datetime.datetime]
+):
     """
     A DateTimeField for tracking last modification time.
 
@@ -38,10 +43,27 @@ class _AutoLastModifiedField(models.DateTimeField):
     The trigger is defined at the model level (TimeStampedModel.Meta.triggers).
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         kwargs.setdefault("editable", False)
         kwargs.setdefault("default", now)
         super().__init__(*args, **kwargs)
+
+
+def _abstract_meta(meta: type) -> type:
+    """Mark a nested model ``Meta`` abstract — Django's only mechanism
+    for abstract bases — while keeping the symbol's checker-visible type
+    plain ``type``.
+
+    A direct ``class Meta: abstract = True`` makes type checkers treat
+    every subclass's own ``class Meta`` as a structural override of a
+    non-empty base (the canonical pyright/Django false positive: the
+    subclass Metas legitimately lack ``abstract``). Setting the flag
+    through this helper keeps runtime semantics byte-identical — the
+    same class object, the attribute present before Django's ModelBase
+    reads it — and leaves the symbol assignable for every engine.
+    """
+    meta.abstract = True  # type: ignore  # Django Meta attr not on `type`
+    return meta
 
 
 class TimeStampedModel(models.Model):
@@ -65,4 +87,9 @@ class TimeStampedModel(models.Model):
     modified = _AutoLastModifiedField(_("modified"))
 
     class Meta:
-        abstract = True
+        pass
+
+    # Abstract via the helper above: runtime-identical to
+    # ``class Meta: abstract = True`` but checker-compatible for every
+    # subclass's own nested Meta (see _abstract_meta).
+    Meta = _abstract_meta(Meta)

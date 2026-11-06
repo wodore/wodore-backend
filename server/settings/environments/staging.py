@@ -12,8 +12,8 @@ from server.settings.environments.production import *
 ENVIRONMENT = "staging"
 
 # Cache configuration - use different prefix to avoid conflicts
-if "default" in CACHES:  # pyright: ignore[reportUndefinedVariable]
-    CACHES["default"]["KEY_PREFIX"] = "staging"  # pyright: ignore[reportUndefinedVariable]
+if "default" in CACHES:  # type: ignore
+    CACHES["default"]["KEY_PREFIX"] = "staging"  # type: ignore
 
 # Session cookie - different name to prevent conflicts with production
 SESSION_COOKIE_NAME = "sessionid_staging"
@@ -33,11 +33,16 @@ STAGING_EMAIL_WHITELIST = (
 )
 
 # Add staging-specific middleware for headers
-MIDDLEWARE = list(MIDDLEWARE)  # pyright: ignore[reportUndefinedVariable]
+MIDDLEWARE = list(MIDDLEWARE)  # type: ignore
 # Add robots tag to prevent indexing (environment header is already in common.py)
 MIDDLEWARE.insert(0, "server.middleware.headers.RobotsTagMiddleware")
-MIDDLEWARE = tuple(MIDDLEWARE)  # pyright: ignore[reportUndefinedVariable]
+MIDDLEWARE = tuple(MIDDLEWARE)  # type: ignore
 
 # Note: the Zitadel SessionRefresh middleware is appended by
 # production.py (inherited above via `from ... import *`); do not add it
 # again here or it runs twice.
+
+# Dev demo pages (mapcompare etc.) — available on staging for superusers
+# only (the view checks is_superuser when DEBUG is off):
+INSTALLED_APPS += ("server.apps.demos",)  # type: ignore
+DEMOS_ENABLED = True

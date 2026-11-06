@@ -1,3 +1,4 @@
+from typing import Any, override
 from urllib.parse import urlparse
 
 import requests
@@ -5,11 +6,15 @@ from mozilla_django_oidc.auth import OIDCAuthenticationBackend
 
 # from django.contrib import admin
 # from django.contrib.auth.models import Permission, User
-from django.contrib.auth.models import Group, User
+from django.contrib.auth.models import Group
+
+from server.apps.accounts.models import User
 
 
 class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimported]
-    def _prepare_request_with_custom_host(self, url: str, request_kwargs: dict = None):
+    def _prepare_request_with_custom_host(
+        self, url: str, request_kwargs: dict[str, Any] | None = None
+    ) -> tuple[str, dict[str, Any]]:
         """
         Modify URL and headers if OIDC_ISSUER_INTERNAL_URL is configured.
         This allows using an internal service URL while preserving the public hostname in the Host header.
@@ -40,7 +45,7 @@ class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimp
 
         return url, request_kwargs
 
-    def retrieve_matching_jwk(self, token):
+    def retrieve_matching_jwk(self, token):  # type: ignore[override]
         """Override to add Host header support for JWKS endpoint
 
         Returns a PEM-formatted key string (not a JWK dict) for PyJWT compatibility.
@@ -79,7 +84,8 @@ class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimp
 
         return None
 
-    def get_token(self, payload):
+    @override
+    def get_token(self, payload: dict[str, Any]) -> Any:
         """Override to add Host header support for token endpoint"""
         auth = None
         if self.get_settings("OIDC_TOKEN_USE_BASIC_AUTH", False):
@@ -98,7 +104,10 @@ class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimp
         response.raise_for_status()
         return response.json()
 
-    def get_userinfo(self, access_token, id_token, payload):
+    @override
+    def get_userinfo(
+        self, access_token: str, id_token: str | None, payload: dict[str, Any]
+    ) -> Any:
         """Override to add Host header support for userinfo endpoint"""
         url, kwargs = self._prepare_request_with_custom_host(self.OIDC_OP_USER_ENDPOINT)
 
@@ -114,10 +123,11 @@ class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimp
         user_response.raise_for_status()
         return user_response.json()
 
-    def get_username(self, claims: dict) -> str | None:
+    @override
+    def get_username(self, claims: dict[str, Any]) -> str | None:
         return claims.get("sub")
 
-    def get_groups(self, claims: dict) -> list[str]:
+    def get_groups(self, claims: dict[str, Any]) -> list[str]:
         permClaim = (
             "urn:zitadel:iam:org:project:"
             + self.get_settings("ZITADEL_PROJECT")
@@ -127,7 +137,7 @@ class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimp
             return [k.replace("group:", "") for k in claims[permClaim] if "group:" in k]
         return ["user"]
 
-    def get_permissions(self, claims: dict) -> list[str]:
+    def get_permissions(self, claims: dict[str, Any]) -> list[str]:
         permClaim = (
             "urn:zitadel:iam:org:project:"
             + self.get_settings("ZITADEL_PROJECT")
@@ -138,7 +148,7 @@ class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimp
             return [k for k in claims[permClaim] if "perm:" in k]
         return []
 
-    def update_user_groups(self, user: User, claims: dict) -> User:
+    def update_user_groups(self, user: User, claims: dict[str, Any]) -> User:
         zitadel_groups = self.get_groups(claims)
         zitadel_perms = self.get_permissions(claims)
         user_groups = list(user.groups.all())
@@ -156,16 +166,26 @@ class PermissionBackend(OIDCAuthenticationBackend):  # type: ignore[no-any-unimp
                 user.groups.remove(ugroup)
         return user
 
-    def create_user(self, claims: dict) -> User:
-        username = self.get_username(claims)
-        user = self.UserModel.objects.create_user(username)  # , email=email)
+    @override
+    def create_user(self, claims: dict[str, Any]) -> User | None:
+        # accounts.User has no username; mozilla-django-oidc 5.x matches
+        # users by the email claim (iexact), so seed the identity with the
+        # email directly. The Zitadel sub was a username-era placeholder
+        # (transiently stored in the unique email column until update_user
+        # corrected it).
+        email = claims.get("email")
+        if not email:
+            return None
+        user = self.UserModel.objects.create_user(email)  # type: ignore[union-attr]
         return self.update_user(user, claims)
-        # return self.UserModel.objects.none()
 
-    def update_user(self, user: User, claims: dict) -> User:
-        user.email = claims.get("email")
-        user.first_name = claims.get("given_name")
-        user.last_name = claims.get("family_name")
+    @override
+    def update_user(self, user: User, claims: dict[str, Any]) -> User:
+        # `or`-guards: claims may omit these (spec-legal); email is a non-nullable
+        # unique column — never assign None (review finding: data-integrity bug).
+        user.email = claims.get("email") or user.email
+        user.first_name = claims.get("given_name") or user.first_name
+        user.last_name = claims.get("family_name") or user.last_name
         zitadel_groups = self.get_groups(claims)
         # default:
         user.is_superuser = False

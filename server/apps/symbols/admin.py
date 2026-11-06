@@ -1,29 +1,43 @@
 # Models
 import contextlib
-from typing import ClassVar
+from typing import Any, ClassVar, cast, override
 
 with contextlib.suppress(ModuleNotFoundError):
     from django_stubs_ext import QuerySetAny
 
 from django.contrib import admin
+from django.db.models import Count, Model
+from django.forms import Form
 from django.http import HttpRequest
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
-from unfold.contrib.filters.admin import ChoicesCheckboxFilter
+from unfold.admin import TabularInline
+from unfold.contrib.filters.admin import (
+    AutocompleteSelectMultipleFilter,
+    ChoicesCheckboxFilter,
+)
 from unfold.decorators import display
 
 from server.apps.manager.admin import ModelAdmin
 
 from .forms import SymbolAdminFieldsets
-from .models import Symbol, SymbolGroup
+from .models import (
+    Icon,
+    IconCuratedList,
+    IconCuratedListEntry,
+    IconKeyword,
+    Symbol,
+    SymbolCollection,
+    SymbolGroup,
+)
 
 
 @admin.register(Symbol)
 class SymbolAdmin(ModelAdmin):
     """Admin panel for Symbol model."""
 
-    fieldsets = SymbolAdminFieldsets
+    fieldsets = SymbolAdminFieldsets  # type: ignore  # admin fieldsets/list_filter typing drift (lazy gettext)
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
     list_display = (
         "svg_preview",
@@ -55,17 +69,22 @@ class SymbolAdmin(ModelAdmin):
         "uploaded_date",
     )
 
-    def save_model(self, request, obj, form, change):
-        if not obj.uploaded_by_user:
-            obj.uploaded_by_user = request.user
+    @override
+    def save_model(
+        self, request: HttpRequest, obj: Model, form: Form, change: Any
+    ) -> None:
+        symbol = cast(Symbol, obj)  # admin is registered for Symbol only
+        if not symbol.uploaded_by_user:
+            symbol.uploaded_by_user = request.user  # type: ignore  # FK descriptor read as the model class (plugin-less inference gap)
         super().save_model(request, obj, form, change)
 
+    @override
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         qs = super().get_queryset(request)
         return qs.select_related("license", "source_org", "uploaded_by_user")
 
-    @display(description=_("SVG"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-    def svg_preview(self, obj):
+    @display(description=_("SVG"))
+    def svg_preview(self, obj: Symbol):
         """Show SVG preview in list view."""
         try:
             if obj.svg_file:
@@ -76,8 +95,8 @@ class SymbolAdmin(ModelAdmin):
             pass
         return mark_safe('<span style="color:#999;">No file</span>')
 
-    @display(description=_("Preview"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-    def svg_preview_inline(self, obj):
+    @display(description=_("Preview"))
+    def svg_preview_inline(self, obj: Symbol):
         """Show SVG preview inline in the form."""
         try:
             if obj.svg_file:
@@ -90,8 +109,8 @@ class SymbolAdmin(ModelAdmin):
             pass
         return mark_safe('<span style="color:#999;">No file uploaded</span>')
 
-    @display(description=_("Search Text"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-    def search_text_display(self, obj):
+    @display(description=_("Search Text"))
+    def search_text_display(self, obj: Symbol):
         """Show search text in list view."""
         if obj.search_text:
             text = (
@@ -102,8 +121,8 @@ class SymbolAdmin(ModelAdmin):
             return mark_safe(f'<small style="color:#666;">{text}</small>')
         return mark_safe('<small style="color:#999;">-</small>')
 
-    @display(description=_("License"), header=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-    def license_display(self, obj):
+    @display(description=_("License"), header=True)
+    def license_display(self, obj: Symbol):
         """Show license with link."""
         if obj.license:
             link = mark_safe(
@@ -112,8 +131,8 @@ class SymbolAdmin(ModelAdmin):
             return link, link
         return mark_safe("-"), mark_safe("-")
 
-    @display(description=_("Source"), header=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-    def source_display(self, obj):
+    @display(description=_("Source"), header=True)
+    def source_display(self, obj: Symbol):
         """Show source information."""
         parts = []
         if obj.author:
@@ -130,8 +149,8 @@ class SymbolAdmin(ModelAdmin):
             return source_text, source_text
         return mark_safe("-"), mark_safe("-")
 
-    @display(description=_("Status"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-    def review_status_display(self, obj):
+    @display(description=_("Status"))
+    def review_status_display(self, obj: Symbol):
         """Show review status."""
         return obj.get_review_status_display()
 
@@ -146,3 +165,168 @@ class SymbolAdmin(ModelAdmin):
 @admin.register(SymbolGroup)
 class SymbolGroupAdmin(SymbolAdmin):
     """Admin for the SymbolGroup proxy model (symbols grouped by slug)."""
+
+
+# ---------------------------------------------------------------------------
+# Icon library (openspec: icon-library)
+# ---------------------------------------------------------------------------
+
+
+class IconKeywordInline(TabularInline):
+    """Localized keywords of an icon."""
+
+    model = IconKeyword
+    extra = 0
+    fields = ("locale", "keyword", "keyword_folded")
+    readonly_fields = ("keyword_folded",)
+    search_fields = ("keyword", "keyword_folded")
+
+
+@admin.register(Icon)
+class IconAdmin(ModelAdmin):
+    """Admin panel for Icon, scoped to one pack at a time.
+
+    Volume (~6k rows/pack) makes pack scoping the entry point: the
+    changelist defaults to the first pack via ``get_queryset`` unless a
+    pack filter is active; keyword inlines and symbol-slot previews live
+    on the change form.
+    """
+
+    list_display = (
+        "slug",
+        "name_i18n_display",
+        "pack",
+        "unicode_display",
+        "category_display",
+        "is_active",
+        "symbol_previews",
+        "order",
+    )
+    list_display_links = ("slug", "name_i18n_display")
+    search_fields = ("slug", "name", "keywords__keyword", "keywords__keyword_folded")
+    list_filter = (
+        "pack",
+        "is_active",
+        # Autocomplete filter: a plain category <select> would render all
+        # ~9k categories on every changelist load.
+        ("category", AutocompleteSelectMultipleFilter),
+    )
+    list_select_related = (
+        "pack",
+        "category__parent",
+        "symbol_color",
+        "symbol_primitive",
+        "symbol_mono",
+    )
+    readonly_fields = ("id", "created", "modified")
+    inlines = (IconKeywordInline,)
+
+    @override
+    def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
+        qs = super().get_queryset(request)
+        # Default to one pack when no pack filter/search is active (list
+        # volume). `term` is the autocomplete-widget query param — icon
+        # autocomplete (curated-list inline) must search across packs.
+        if not request.GET.get("pack__id__exact") and not (
+            request.GET.get("q") or request.GET.get("term")
+        ):
+            first_pack = SymbolCollection.objects.order_by("slug").first()
+            if first_pack is not None:
+                qs = qs.filter(pack=first_pack)
+        return qs
+
+    @display(description=_("Name"), header=True)
+    def name_i18n_display(self, obj: Icon):
+        name = obj.name_i18n or obj.name or "-"
+        return (name, "")  # header display requires a tuple
+
+    @display(description=_("Unicode"))
+    def unicode_display(self, obj: Icon):
+        return obj.unicode or "-"
+
+    @display(description=_("Category"), header=True)
+    def category_display(self, obj: Icon):
+        if obj.category is None:
+            return ("-", "")
+        parent = obj.category.parent
+        group = parent.slug if parent else ""
+        return (f"{group} → {obj.category.slug}", obj.category.slug)
+
+    @display(description=_("Symbols"))
+    def symbol_previews(self, obj: Icon):
+        """Preview thumbnails of the three symbol slots."""
+        cells = []
+        for style in ("color", "primitive", "mono"):
+            symbol = getattr(obj, f"symbol_{style}", None)
+            if symbol is not None and symbol.svg_file:
+                cells.append(
+                    f'<img src="{symbol.svg_file.url}" width="28" height="28" '
+                    f'style="object-fit:contain;vertical-align:middle;" '
+                    f'title="{style}" />'
+                )
+            else:
+                cells.append(f'<span style="color:#ccc;" title="{style}">·</span>')
+        return mark_safe("&nbsp;".join(cells))
+
+
+@admin.register(SymbolCollection)
+class SymbolCollectionAdmin(ModelAdmin):
+    """Admin panel for icon packs."""
+
+    list_display = ("slug", "source_org_display", "icon_count", "ref_display")
+    list_display_links = ("slug",)
+    search_fields = ("slug", "source_org__name")
+    readonly_fields = ("created", "modified")
+
+    @override
+    def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
+        return super().get_queryset(request).annotate(_icon_count=Count("icons"))
+
+    @display(description=_("Source Org"), header=True)
+    def source_org_display(self, obj: SymbolCollection):
+        name = obj.source_org.name_i18n if obj.source_org else "-"
+        return (name, "")
+
+    @display(description=_("Icons"), ordering="_icon_count")
+    def icon_count(self, obj: SymbolCollection):
+        return getattr(obj, "_icon_count", 0)
+
+    @display(description=_("Imported ref"))
+    def ref_display(self, obj: SymbolCollection):
+        return (obj.extra or {}).get("ref", "-")
+
+
+class IconCuratedListEntryInline(TabularInline):
+    """Curated icons of a list (manual curation in the admin)."""
+
+    model = IconCuratedListEntry
+    extra = 0
+    autocomplete_fields = ("icon",)
+
+
+@admin.register(IconCuratedList)
+class IconCuratedListAdmin(ModelAdmin):
+    """Admin panel for curated icon shortlists (e.g. activities).
+
+    Curation is manual: create a list, attach icons via the entry
+    inline (icon autocomplete). The import never touches these rows.
+    """
+
+    list_display = ("slug", "name_i18n_display", "entry_count")
+    list_display_links = ("slug",)
+    search_fields = ("slug", "name")
+    readonly_fields = ("created", "modified")
+    inlines = (IconCuratedListEntryInline,)
+
+    @override
+    def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
+        return super().get_queryset(request).annotate(_entry_count=Count("entries"))
+
+    @display(description=_("Name"), header=True)
+    def name_i18n_display(self, obj: IconCuratedList):
+        name = getattr(obj, "name_i18n", "") or obj.name or "-"
+        return (name, "")
+
+    @display(description=_("Icons"), ordering="_entry_count")
+    def entry_count(self, obj: IconCuratedList):
+        return getattr(obj, "_entry_count", 0)

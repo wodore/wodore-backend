@@ -41,11 +41,14 @@ distinguishable by `provider_synced_at != null`; `image` stays empty.
 
 ### D2 — Association `order` renamed to `score`, descending position
 
-Position = score. Initial pin writes `score = provider_score`; sync never
+Position = score. Initial pin writes `score = min(provider_score, 89)`; sync never
 overwrites existing scores (manual edits survive); new pins land at their
 natural position with no insertion logic. Original value kept in
-`image_meta.provider_score`. Uploads default above the provider score range
-(deliberate content outranks scraped). Alternative rejected: keep `order` plus
+`image_meta.provider_score`. Uploads default into the 90–99 band above the
+pin range (deliberate content outranks scraped) while every score stays
+inside the image endpoints' 0–100 response contract (uploads 1000+ 500'd the
+endpoints once licenses made them servable — fixed 2026-10, migration
+huts/0066 rebanded). Alternative rejected: keep `order` plus
 stable-insert algorithm (more machinery, two concepts for one thing).
 Data is dev-only → rename is a trivial migration.
 
@@ -104,8 +107,10 @@ in a later change.
 
 ## Open Questions
 
-- Default score ceiling for uploads (provider range tops out ~100 — uploads at
-  200? 1000?).
+- ~~Default score ceiling for uploads (provider range tops out ~100 — uploads at
+  200? 1000?).~~ Resolved 2026-10-12: uploads 90–99 (`UPLOAD_DEFAULT_SCORE =
+  90`, stacking capped at `SCORE_MAX = 99`), provider pins clamped to ≤ 89
+  (`PROVIDER_SCORE_MAX`) — everything inside the API's 0–100 contract.
 - Debounce window length for the enqueue lock (proposed 15 min).
 - Whether `images_for_place`/`nearby` also pin, or hut endpoints only (proposal:
   hut endpoints first).

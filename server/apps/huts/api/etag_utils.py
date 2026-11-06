@@ -6,6 +6,7 @@ Generates ETags based on the last modified timestamp across all relevant tables.
 
 import hashlib
 import json
+from http import HTTPStatus
 from typing import Any
 
 from django.conf import settings
@@ -13,6 +14,7 @@ from django.db.models import Max, QuerySet
 from django.http import HttpRequest, HttpResponse
 from django.utils.http import http_date, parse_http_date_safe
 
+from server.apps.api.controller import ApiController
 from server.apps.availability.models import AvailabilityStatus
 from server.apps.categories.models import Category
 from server.apps.huts.models import Hut
@@ -255,3 +257,37 @@ def set_cache_headers(
     response["Last-Modified"] = last_modified
     response["Cache-Control"] = f"public, max-age={max_age}"
     return response
+
+
+def cached_304(
+    controller: ApiController, etag: str, last_modified: str, *, max_age: int
+) -> HttpResponse:
+    """Empty 304 with the caching headers (shared hut-endpoint dance)."""
+    return controller.to_response(
+        None,
+        status_code=HTTPStatus.NOT_MODIFIED,
+        headers={
+            "ETag": etag,
+            "Last-Modified": last_modified,
+            "Cache-Control": f"public, max-age={max_age}",
+        },
+    )
+
+
+def cached_200(
+    controller: ApiController,
+    data: Any,
+    etag: str,
+    last_modified: str,
+    *,
+    max_age: int,
+) -> HttpResponse:
+    """Data response with ETag/Last-Modified/Cache-Control set."""
+    return controller.to_response(
+        data,
+        headers={
+            "ETag": etag,
+            "Last-Modified": last_modified,
+            "Cache-Control": f"public, max-age={max_age}",
+        },
+    )

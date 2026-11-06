@@ -1,0 +1,150 @@
+# Single-origin tile router: martin (DB vector tiles, sprites, fonts,
+# terrain) + the mapproxy raster facades behind ONE port — the same
+# /raster/* contract the prod edge serves (see burginfra's martin
+# nginx-cache tier). MARTIN_TILE_URL (default http://localhost:8075)
+# points here, so the style fixtures' absolutized /raster/tiles/... URLs
+# work out of the box with plain `docker compose up`.
+#
+# CORS: every response carries a literal `Access-Control-Allow-Origin: *`.
+# Martin itself ECHOES the request's Origin header (actix-cors
+# allow_any_origin — `cors.origin: ["*"]` in martin.yaml can only echo,
+# never emit a literal wildcard), and an origin-dependent ACAO cannot
+# survive a URL-keyed single-variant CDN cache: the first origin to
+# prime a tile URL gets baked into the cached object and every other
+# origin then fails CORS (seen live on tiles.cdn.stg.wodore.com). The
+# wildcard is safe — tiles are public, unauthenticated, never
+# credentialed (same policy as imagor and as the API's
+# ApiCdnCacheMiddleware, PR #426). The prod/staging edge (burginfra's
+# martin nginx-cache tier) must apply the identical hide+override.
+# NOTE: add_header/proxy_hide_header inheritance is all-or-nothing per
+# level — a location with ANY own directive of that family stops
+# inheriting server-level ones — so each location repeats the trio.
+#
+# CDN-Tag: Bunny purge taxonomy (bunny.net tags responses via the
+# CDN-Tag header; purge through the pull-zone PurgeCache API with
+# CacheTag — wildcard-wrap to hit one of several space-separated tags:
+# "* tiles:huts *"). Every known tile path carries the broad `tiles`
+# tag plus a specific one (martin source, raster facade, or tiles:meta
+# for sprites/fonts/catalog), so ONE source can be flushed without
+# evicting the expensive warm terrain cache (contours/hillshade, 30 d
+# TTL). The map below keys on $request_uri — the ORIGINAL URI — so the
+# /raster/ and .mlt rewrites cannot skew the lookup. Unknown paths and
+# source composites (a,b) are untagged (add_header skips empty values),
+# i.e. purge-immune. The prod/staging edge (burginfra) must emit the
+# same tags; the API side is stamped by ApiCdnCacheMiddleware
+# (``api api:<app>``). Taxonomy: _work/261026_cdn_tags.md.
+#
+# Rendered by the official nginx image's envsubst-on-templates feature
+# (/etc/nginx/templates/*.template -> /etc/nginx/conf.d/). Plain nginx
+# runtime vars ($http_host, no braces) are left untouched.
+
+# Bunny CDN-Tag map — the purge taxonomy documented in the header
+# comment above and _work/261026_cdn_tags.md. Tags are DERIVED from
+# the URL (regex captures referenced in the map values), not enumerated
+# per source: a new martin source or raster facade is purgeable the
+# moment it is served, no nginx edit needed. Order matters (first match
+# wins): metadata first, then the raster facades, then the generic
+# martin-source rule (otherwise /raster/… would tag as source "raster").
+# Delimiters after a name: /, ., ? or end-of-URI (bare /catalog matches;
+# query strings and extensions ride along, no end anchors). Source
+# composites (a,b) and unknown shapes default to "" — nginx add_header
+# skips empty values, i.e. untagged/purge-immune.
+map $request_uri $cdn_tile_tag {
+    default                     "";
+    # Martin metadata (sprites, fonts, catalog, health) groups under one tag.
+    ~^/(sprite|font|catalog|healthz)(/|\.|\?|$)          "tiles tiles:meta";
+    # Raster facades (mapproxy behind /raster/tiles/<facade>/…) — automatic.
+    ~^/raster/tiles/(?<cdn_facade>[a-zA-Z0-9_]+)(/|\.|\?|$)  "tiles tiles:raster:$cdn_facade";
+    # Martin sources (tables, views, functions) + their TileJSON —
+    # automatic from the first path segment.
+    ~^/(?<cdn_src>[a-zA-Z0-9_]+)(/|\.|\?|$)              "tiles tiles:$cdn_src";
+}
+
+server {
+    listen 80 default_server;
+
+    # Re-resolve upstreams every 10s via Docker's embedded DNS —
+    # plain proxy_pass caches the IP for nginx's lifetime, so a
+    # restarted backend would 502 until the router restarts.
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
+    # Stable raster facade: /raster/* -> the mapproxy backend (served
+    # under its internal /mapproxy/ prefix). Swap the upstream to
+    # replace the implementation without changing any client URL.
+    location /raster/ {
+        # set BEFORE the rewrite: `break` ends the rewrite phase, and
+        # set (a rewrite-module directive) after it would never run
+        set $mapproxy_upstream http://${MAPPROXY_UPSTREAM};
+        rewrite ^/raster/(.*)$ /mapproxy/$1 break;
+        proxy_pass $mapproxy_upstream;
+        # Browser cache: tiles are stable; the styles' ?v=N param busts
+        # (new query string = new cache key). mapproxy's own shorter
+        # header is hidden so one clean immutable header remains.
+        proxy_hide_header Cache-Control;
+        add_header Cache-Control "public, max-age=604800, immutable" always;
+        # Bunny purge tag (see the $cdn_tile_tag map) — facade-specific.
+        add_header CDN-Tag $cdn_tile_tag always;
+        # CORS trio (see header comment) — repeated per location because
+        # the Cache-Control lines above already cancel inheritance.
+        proxy_hide_header Access-Control-Allow-Origin;
+        proxy_hide_header Access-Control-Allow-Credentials;
+        add_header Access-Control-Allow-Origin "*" always;
+        proxy_http_version 1.1;
+        proxy_set_header Host $http_host;
+    }
+
+    # Explicit MLT (MapLibre Tile) URLs: any Martin source (table,
+    # view, function, composite "a,b") is additionally available as
+    # MLT v1 by appending .mlt to the canonical tile path. The
+    # extension is stripped and Martin is asked — via Accept header —
+    # to convert at serve time (`convert_to_mlt` per source in
+    # martin.yaml; a non-opted source gets Martin's explicit 406, never
+    # silently-wrong bytes). Only the literal .mlt suffix selects MLT:
+    # extension-less, .pbf and .mvt are format-neutral (Martin 301s
+    # any extension to the canonical path).
+    # Cache: Martin's per-source Cache-Control passes through; MVT and
+    # MLT are distinct URLs, so every URL-keyed cache (browser,
+    # proxy_cache, edge) isolates the variants with default keys — no
+    # Vary, no Accept-in-key machinery.
+    # Accept-Encoding is pinned to identity: MLT embeds lightweight
+    # compression (FastPFOR/FSST); gzip/brotli on top would negate the
+    # decode-speed win.
+    location ~ ^/(?<mlt_src>[A-Za-z0-9_,]+)/(?<mlt_z>\d+)/(?<mlt_x>\d+)/(?<mlt_y>\d+)\.mlt$ {
+        # set BEFORE the rewrite (see /raster/ above): `break` ends the
+        # rewrite phase and set would never run after it
+        set $martin_upstream http://${MARTIN_UPSTREAM};
+        # Strip the .mlt suffix; rewrite keeps the query string
+        # (?v= asset version, availability date/days params).
+        rewrite ^ /$mlt_src/$mlt_z/$mlt_x/$mlt_y break;
+        proxy_pass $martin_upstream;
+        proxy_set_header Accept application/vnd.maplibre-tile;
+        proxy_set_header Accept-Encoding identity;
+        # Bunny purge tag (see the $cdn_tile_tag map) — keyed on the
+        # ORIGINAL request URI, so the .mlt-stripped rewrite above
+        # cannot skew the lookup.
+        add_header CDN-Tag $cdn_tile_tag always;
+        # CORS trio (see header comment): hide Martin's origin echo,
+        # stamp the origin-independent wildcard instead.
+        proxy_hide_header Access-Control-Allow-Origin;
+        proxy_hide_header Access-Control-Allow-Credentials;
+        add_header Access-Control-Allow-Origin "*" always;
+        proxy_http_version 1.1;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Host $http_host;
+    }
+
+    location / {
+        set $martin_upstream http://${MARTIN_UPSTREAM};
+        proxy_pass $martin_upstream;
+        # Bunny purge tag (see the $cdn_tile_tag map): per-source for
+        # canonical tiles and TileJSON, tiles:meta for sprites/fonts/catalog.
+        add_header CDN-Tag $cdn_tile_tag always;
+        # CORS trio (see header comment): hide Martin's origin echo,
+        # stamp the origin-independent wildcard instead.
+        proxy_hide_header Access-Control-Allow-Origin;
+        proxy_hide_header Access-Control-Allow-Credentials;
+        add_header Access-Control-Allow-Origin "*" always;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Host $http_host;
+    }
+}

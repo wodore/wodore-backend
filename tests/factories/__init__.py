@@ -1,4 +1,16 @@
+from collections.abc import Callable
+
 import factory
+
+
+def _fmt_seq(prefix: str) -> Callable[[int], str]:
+    """Typed factory.Sequence helper (factory_boy's Sequence param is untyped)."""
+
+    def _seq(n: int) -> str:
+        return f"{prefix}{n}"
+
+    return _seq
+
 
 from django.contrib.gis.geos import Point
 
@@ -15,21 +27,21 @@ def random_swiss_point() -> Point:
     return Point(x=lon, y=lat, srid=4326)
 
 
-class CategoryFactory(factory.django.DjangoModelFactory):
+class CategoryFactory(factory.django.DjangoModelFactory[Category]):
     class Meta:
         model = Category
 
-    slug = factory.Sequence(lambda n: f"cat-{n}")
-    name = factory.Sequence(lambda n: f"Category {n}")
+    slug = factory.Sequence(_fmt_seq("cat-"))
+    name = factory.Sequence(_fmt_seq("Category "))
 
 
-class OrganizationFactory(factory.django.DjangoModelFactory):
+class OrganizationFactory(factory.django.DjangoModelFactory[Organization]):
     class Meta:
         model = Organization
         django_get_or_create = ("slug",)
 
-    slug = factory.Sequence(lambda n: f"org-{n}")
-    name = factory.Sequence(lambda n: f"Organization {n}")
+    slug = factory.Sequence(_fmt_seq("org-"))
+    name = factory.Sequence(_fmt_seq("Organization "))
 
 
 # Re-export all factories from app modules for convenience

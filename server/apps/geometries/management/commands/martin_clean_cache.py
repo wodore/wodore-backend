@@ -1,6 +1,8 @@
+from typing import Any, override
+
 from django_admin_runner import register_command
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandParser
 from django.db import connection
 
 
@@ -8,7 +10,8 @@ from django.db import connection
 class Command(BaseCommand):
     help = "Clean up Martin tile cache entries from the database"
 
-    def add_arguments(self, parser):
+    @override
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--days",
             type=int,
@@ -21,7 +24,8 @@ class Command(BaseCommand):
             help="Show what would be deleted without actually deleting",
         )
 
-    def handle(self, *args, **options):
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         days = options["days"]
         dry_run = options["dry_run"]
 

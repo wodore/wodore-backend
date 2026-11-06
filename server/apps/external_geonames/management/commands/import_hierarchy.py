@@ -14,6 +14,7 @@ Usage:
 import tempfile
 import urllib.request
 import zipfile
+from typing import Any, override
 
 from django_admin_runner import register_command
 
@@ -31,6 +32,7 @@ class Command(BaseCommand):
     # GeoNames hierarchy URL
     HIERARCHY_URL = "https://download.geonames.org/export/dump/hierarchy.zip"
 
+    @override
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "-c",
@@ -45,7 +47,8 @@ class Command(BaseCommand):
             help="Clear all hierarchy data before import",
         )
 
-    def handle(self, *args, **options) -> None:
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         countries = None
         if options["countries"]:
             countries = expand_countries(options["countries"])
@@ -216,7 +219,7 @@ class Command(BaseCommand):
                 self.stdout.write("Processing hierarchy relationships...")
 
                 # Collect all updates in memory first, then batch update
-                updates = []
+                updates: list[dict[str, Any]] = []
                 batch_size = 1000
 
                 with open(txt_file, "r", encoding="utf-8") as f:
@@ -282,7 +285,7 @@ class Command(BaseCommand):
 
         return imported_count, skipped_count
 
-    def _process_batch(self, updates: list[dict]) -> None:
+    def _process_batch(self, updates: list[dict[str, Any]]) -> None:
         """Process a batch of hierarchy updates."""
         # Collect all parent IDs to check if they exist
         parent_ids = [u["parent_id"] for u in updates]

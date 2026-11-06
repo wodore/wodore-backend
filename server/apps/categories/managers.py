@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 from modeltrans.manager import MultilingualQuerySet
 
@@ -19,11 +19,21 @@ class CategoryQuerySet(MultilingualQuerySet):
         """Filter to only root-level categories (no parent)."""
         return self.filter(parent__isnull=True)
 
-    def children_of(self, parent):
+    def contract_groups(self):
+        """Contract groups in the map tree (children of super-roots).
+
+        The map-tree shape is ``map → super-root → contract group →
+        kind`` — these groups (accommodation, shopping, …) are the
+        pre-tree "root" categories; use this instead of ``roots()``
+        when resolving them (geoplace-category-tree).
+        """
+        return self.filter(parent__parent__slug="map")
+
+    def children_of(self, parent: "Category | None"):
         """Filter to children of a specific parent."""
         return self.filter(parent=parent)
 
-    def by_slug(self, slug: str, parent=None):
+    def by_slug(self, slug: str, parent: "Category | None" = None):
         """Get category by slug and optional parent."""
         filters = {"slug": slug, "parent": parent}
         return self.filter(**filters).first()
@@ -36,14 +46,63 @@ class CategoryQuerySet(MultilingualQuerySet):
         """Select related parent for efficient hierarchy traversal."""
         return self.select_related("parent")
 
+    def _resolve_deep_slug(
+        self, slugs: list[str], is_active: bool = True
+    ) -> tuple["Category | None", list[str]]:
+        """Resolve slug paths deeper than two segments (map tree).
+
+        Matches categories whose ancestor path *ends with* the given
+        segments, so the path may start anywhere in the tree —
+        ``amenity.accommodation.selfhut`` need not repeat the ``map``
+        root (and ``map.amenity.accommodation.selfhut`` works too).
+        Tolerance for full tree paths, not a convention change: the
+        canonical identifiers (``Category.identifier``, and the tile /
+        availability ``type_standard_identifier`` built from it) stay
+        two-segment (``accommodation.selfhut``); sprite icon names
+        carry the extra domain segment
+        (``mono/amenity.accommodation.selfhut``) and callers that
+        only have the sprite name can still resolve a symbol.
+
+        Returns the category when unique, ``(None, paths)`` when the
+        path matches several categories, ``(None, [])`` when nothing
+        matches.
+        """
+        qs = self.active() if is_active else self
+
+        matches: list[Category] = []
+        for category in qs.filter(slug=slugs[-1]).select_related("parent"):
+            ancestor_slugs = [
+                ancestor.slug for ancestor in category.get_ancestors(include_self=True)
+            ]
+            if ancestor_slugs[-len(slugs) :] == slugs:
+                matches.append(category)
+
+        if len(matches) == 1:
+            return matches[0], []
+        if not matches:
+            return None, []
+        paths = sorted(
+            ".".join(
+                ancestor.slug for ancestor in match.get_ancestors(include_self=True)
+            )
+            for match in matches
+        )
+        return None, paths
+
     def resolve_slug(
         self, slug_path: str, is_active: bool = True
     ) -> tuple["Category | None", list[str]]:
         """
-        Resolve a dot or slash notation slug path to a category (max one parent).
+        Resolve a dot or slash notation slug path to a category.
+
+        Paths of one or two segments keep the legacy resolution
+        (root-parent lookup, then the stored two-level ``identifier``
+        column); deeper map-tree paths resolve through
+        :meth:`_resolve_deep_slug`.
 
         Args:
-            slug_path: Dot-separated slug path with max 2 parts (e.g., "parent.child")
+            slug_path: Dot-separated slug path (e.g., "parent.child",
+                "amenity.accommodation.selfhut")
             is_active: Only consider active categories
 
         Returns:
@@ -55,12 +114,16 @@ class CategoryQuerySet(MultilingualQuerySet):
             - "hut" with single match returns (category, [])
             - "hut" with multiple matches returns (None, ["accommodation.hut"])
             - "accommodation.hut" returns (category, []) if found
+            - "amenity.accommodation.selfhut" (map tree, any depth)
+              resolves via the ancestor-suffix walk
             - "invalid" returns (None, [])
         """
         slug_path = slug_path.replace("/", ".")
         slugs = [s.strip() for s in slug_path.split(".") if s.strip()]
-        if not slugs or len(slugs) > 2:
+        if not slugs:
             return None, []
+        if len(slugs) > 2:
+            return self._resolve_deep_slug(slugs, is_active=is_active)
 
         qs = self
         if is_active:
@@ -80,9 +143,14 @@ class CategoryQuerySet(MultilingualQuerySet):
                 parent = qs.get(slug=parent_slug, parent__isnull=True)
                 category = qs.get(slug=child_slug, parent=parent)
                 return category, []
-            except self.model.DoesNotExist:
-                return None, []
-            except self.model.MultipleObjectsReturned:
+            except (self.model.DoesNotExist, self.model.MultipleObjectsReturned):
+                pass
+            # Depth-agnostic fallback (map tree): match by the stored
+            # identifier column — contract groups have parents under
+            # super-roots, so the root-level parent lookup misses.
+            try:
+                return qs.get(identifier=f"{parent_slug}.{child_slug}"), []
+            except (self.model.DoesNotExist, self.model.MultipleObjectsReturned):
                 return None, []
 
     def find_by_slug(
@@ -131,35 +199,30 @@ class CategoryQuerySet(MultilingualQuerySet):
 class CategoryManager(BaseMutlilingualManager):
     """Custom manager for Category model."""
 
-    def get_queryset(self):
+    @override
+    def get_queryset(self) -> "CategoryQuerySet":
         """Return custom queryset with optimized parent and symbol relationships."""
         return CategoryQuerySet(self.model, using=self._db).select_related(
             "parent",
-            "symbol_detailed",
-            "symbol_simple",
+            "symbol_color",
+            "symbol_primitive",
             "symbol_mono",
         )
 
-    def active(self):
-        """Filter to only active categories."""
-        return self.get_queryset().active()
-
-    def roots(self):
-        """Filter to only root-level categories."""
-        return self.get_queryset().roots()
-
-    def children_of(self, parent):
-        """Get children of a specific parent."""
-        return self.get_queryset().children_of(parent)
-
-    def by_slug(self, slug: str, parent=None):
-        """Get category by slug and optional parent."""
-        return self.get_queryset().by_slug(slug, parent)
+    # active/roots/children_of/by_slug come from CategoryQuerySet via
+    # from_queryset below - typed, and queryset chains (.filter().active()) resolve.
 
     def resolve_slug(self, slug_path: str, is_active: bool = True):
         """Resolve a dot-notation slug path to a category."""
         return self.get_queryset().resolve_slug(slug_path, is_active)
 
+    def contract_groups(self):
+        """Map-tree contract groups (children of super-roots)."""
+        return self.get_queryset().contract_groups()
+
     def find_by_slug(self, slug: str, is_active: bool = True):
         """Find category by slug, handling ambiguity."""
         return self.get_queryset().find_by_slug(slug, is_active)
+
+
+CategoryManager = CategoryManager.from_queryset(CategoryQuerySet)

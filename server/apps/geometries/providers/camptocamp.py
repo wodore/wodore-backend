@@ -11,17 +11,24 @@ Fetches images from Camptocamp API using bbox queries.
 # Result api:
 #   http://localhost:8000/v1/geo/images/hut/hollandia?lang=de&radius=50&limit=20&update_cache=1
 
+from __future__ import annotations
+
+import json
 from datetime import datetime
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
-from .base import ImageProvider, ImageResult
+from .base import ImageProvider, ImageResult, provider_http_timeout
 from .schemas import GeoPlaceSchema
 from .scoring import (
     calculate_age_penalty,
     score_distance_relevance,
     score_metadata_completeness,
 )
+
+if TYPE_CHECKING:
+    import httpx
 
 logger = structlog.get_logger()
 
@@ -37,6 +44,16 @@ class CamptocampProvider(ImageProvider):
     source = "camptocamp"
     cache_ttl = 30 * 24 * 3600  # 31 days
     priority = 3  # Lower priority than wodore/wikidata
+
+    #: Only these waypoint types donate images. The /waypoints bbox search
+    #: cannot filter types server-side (``t=`` etc. are silently ignored) and
+    #: would otherwise drag in summits, passes, parking lots, climbing crags
+    #: and webcams near the queried place — hut-page galleries should show
+    #: the place, not its surroundings (user decision 2026-10-12: overnight
+    #: places only). Routes are never queried (they live under /routes).
+    image_waypoint_types: frozenset[str] = frozenset(
+        {"hut", "gite", "shelter", "camp_site", "bivouac"}
+    )
 
     def __init__(self, lang: str = "de"):
         """
@@ -101,7 +118,9 @@ class CamptocampProvider(ImageProvider):
                     settings, "BOT_AGENT", "WodoreBackend/1.0 (+https://wodore.ch)"
                 )
             }
-            async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+            async with httpx.AsyncClient(
+                timeout=provider_http_timeout(), headers=headers
+            ) as client:
                 # Step 1: Get all waypoints in bbox
                 waypoints = await self._fetch_waypoints(client, bbox)
 
@@ -116,16 +135,26 @@ class CamptocampProvider(ImageProvider):
                     "Found waypoints", provider="camptocamp", count=len(waypoints)
                 )
 
-                # Step 2: Get details for each waypoint and extract images
+                # Step 2: Get details for each waypoint and extract images.
+                # Filter donors FIRST, then cap: non-donor waypoints (summits,
+                # passes, parking — the majority in alpine bboxes) must not
+                # consume the waypoint budget.
+                donors = [
+                    waypoint
+                    for waypoint in waypoints
+                    if waypoint.get("waypoint_type") in self.image_waypoint_types
+                ]
                 results = []
                 max_waypoints = min(
-                    len(waypoints), max(1, limit // 5)
+                    len(donors), max(1, limit // 5)
                 )  # Assume ~5 images per waypoint
-                for waypoint in waypoints[
+                for waypoint in donors[
                     :max_waypoints
                 ]:  # Limit waypoints based on desired result count
                     try:
                         waypoint_id = waypoint.get("document_id")
+                        if not waypoint_id:
+                            continue
                         logger.debug(
                             "Fetching waypoint",
                             provider="camptocamp",
@@ -182,7 +211,7 @@ class CamptocampProvider(ImageProvider):
         import math
 
         # Convert to Web Mercator (EPSG:3857)
-        def to_web_mercator(lat, lon):
+        def to_web_mercator(lat: float, lon: float) -> tuple[float, float]:
             """Convert WGS84 to Web Mercator."""
             x = 6378137.0 * lon * math.pi / 180.0
             y = 6378137.0 * math.log(math.tan((90.0 + lat) * math.pi / 360.0))
@@ -203,7 +232,9 @@ class CamptocampProvider(ImageProvider):
 
         return f"{int(min_x)},{int(min_y)},{int(max_x)},{int(max_y)}"
 
-    async def _fetch_waypoints(self, client, bbox: str) -> list[dict]:
+    async def _fetch_waypoints(
+        self, client: httpx.AsyncClient, bbox: str
+    ) -> list[dict[str, Any]]:
         """
         Fetch all waypoints in bbox.
 
@@ -225,7 +256,7 @@ class CamptocampProvider(ImageProvider):
 
     async def _fetch_waypoint_images(
         self,
-        client,
+        client: httpx.AsyncClient,
         waypoint_id: int,
         query_lat: float,
         query_lon: float,
@@ -259,8 +290,6 @@ class CamptocampProvider(ImageProvider):
 
         if geom_json:
             try:
-                import json
-
                 geom_obj = json.loads(geom_json)
                 coordinates = geom_obj.get("coordinates", [])
                 if len(coordinates) >= 2:
@@ -313,7 +342,9 @@ class CamptocampProvider(ImageProvider):
         # Calculate distance
         from math import asin, cos, radians, sin, sqrt
 
-        def haversine_distance(lat1, lon1, lat2, lon2):
+        def haversine_distance(
+            lat1: float, lon1: float, lat2: float, lon2: float
+        ) -> float:
             """Calculate distance between two points in meters."""
             R = 6371000  # Earth radius in meters
 
@@ -370,7 +401,9 @@ class CamptocampProvider(ImageProvider):
 
         return results
 
-    async def _fetch_image_details(self, client, image_id: int) -> dict | None:
+    async def _fetch_image_details(
+        self, client: httpx.AsyncClient, image_id: int
+    ) -> dict[str, Any] | None:
         """
         Fetch detailed information for a single image.
 
@@ -391,7 +424,7 @@ class CamptocampProvider(ImageProvider):
 
     async def _parse_camptocamp_image(
         self,
-        image_details: dict,
+        image_details: dict[str, Any],
         waypoint_id: int,
         geom_lat: float,
         geom_lon: float,
@@ -544,7 +577,7 @@ class CamptocampProvider(ImageProvider):
 
     def _score_camptocamp_image(
         self,
-        image_details: dict,
+        image_details: dict[str, Any],
         quality: str,
         distance_m: float,
         radius: float,
@@ -634,7 +667,6 @@ if __name__ == "__main__":
 
     async def test_camptocamp():
         """Test the Camptocamp provider."""
-        from server.apps.geometries.providers.camptocamp import CamptocampProvider
 
         # Test coordinates
         lat = 46.55553
@@ -660,10 +692,10 @@ if __name__ == "__main__":
             for i, result in enumerate(results[:3], 1):
                 print(f"\n{i}. {result.source_id}")
                 print(f"   Distance: {result.distance_m:.0f}m")
-                print(f"   License: {result.license_name}")
+                print(f"   License: {result.license_slug}")
                 print(f"   Author: {result.author}")
                 print(f"   Attribution: {result.attribution}")
-                print(f"   URL: {result.urls['original']}")
+                print(f"   URL: {result.url_large}")
 
     # Run test
     asyncio.run(test_camptocamp())

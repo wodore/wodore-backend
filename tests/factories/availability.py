@@ -30,25 +30,34 @@ def _get_occupancy(free: int, total: int) -> tuple[float, int, str]:
     return percent, steps, status
 
 
-class AvailabilityFactory(factory.django.DjangoModelFactory):
+from typing import Any
+
+
+def _occ_percent(obj: Any) -> Any:
+    return _get_occupancy(obj.free, obj.total)[0]
+
+
+def _occ_steps(obj: Any) -> Any:
+    return _get_occupancy(obj.free, obj.total)[1]
+
+
+def _occ_status(obj: Any) -> Any:
+    return _get_occupancy(obj.free, obj.total)[2]
+
+
+class AvailabilityFactory(factory.django.DjangoModelFactory[HutAvailability]):
     class Meta:
         model = HutAvailability
 
     hut = factory.SubFactory(HutFactory)
     source_organization = factory.SubFactory(OrganizationFactory)
-    source_id = factory.Sequence(lambda n: str(n))
+    source_id = factory.Sequence(str)
     availability_date = factory.LazyFunction(datetime.date.today)
     free = 10
     total = 50
-    occupancy_percent = factory.LazyAttribute(
-        lambda o: _get_occupancy(o.free, o.total)[0]
-    )
-    occupancy_steps = factory.LazyAttribute(
-        lambda o: _get_occupancy(o.free, o.total)[1]
-    )
-    occupancy_status = factory.LazyAttribute(
-        lambda o: _get_occupancy(o.free, o.total)[2]
-    )
+    occupancy_percent = factory.LazyAttribute(_occ_percent)
+    occupancy_steps = factory.LazyAttribute(_occ_steps)
+    occupancy_status = factory.LazyAttribute(_occ_status)
     reservation_status = "possible"
     first_checked = factory.LazyFunction(timezone.now)
     last_checked = factory.LazyFunction(timezone.now)

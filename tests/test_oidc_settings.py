@@ -65,7 +65,7 @@ def _load_settings_env(env: str, extra: dict[str, str] | None = None) -> str:
 
 class TestFlagDefaults:
     @pytest.mark.parametrize("env", ["development", "test"])
-    def test_builtin_provider_by_default_in_dev(self, env):
+    def test_builtin_provider_by_default_in_dev(self, env: str):
         out = _load_settings_env(env)
         assert "AUTH_PROVIDER=builtin" in out
         assert "OIDC_ENABLED=True" in out

@@ -7,7 +7,6 @@ from .osm_base import CategoryMappings, OSMMapping
 
 FINANCE = CategoryMappings(
     category="finance",
-    detail_type="amenity",
     enabled=True,
     mappings=[
         OSMMapping(

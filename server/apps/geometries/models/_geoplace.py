@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import sys
-import threading
-from collections import OrderedDict
+import re
 from functools import lru_cache
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, NamedTuple, override
 
 from django_countries.fields import CountryField
 from modeltrans.fields import TranslationField
@@ -13,7 +11,9 @@ from django.conf import settings
 from django.contrib.gis.db import models
 from django.contrib.gis.geos import Point
 from django.contrib.postgres.indexes import GinIndex, GistIndex
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.db.models.functions import Lower
 from django.utils.translation import gettext_lazy as _
@@ -26,50 +26,30 @@ from server.apps.translations.detect import detect_main_language
 from server.core.models import TimeStampedModel
 from server.core.utils import UpdateCreateStatus
 
+from ..converters import RESERVED_URL_SEGMENTS, SLUG_GRAMMAR_RE
+from ..kinds import (
+    DOMAIN_ADMIN,
+    DOMAIN_AMENITY,
+    DOMAIN_NONE,
+    anchor_category,
+    contract_for_group,
+    kind_root_category,
+    place_domain,
+)
+
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
+
     from server.apps.geometries.schemas import (
         DedupOptions,
         GeoPlaceBaseInput,
+        PlaceTypeInput,
         SourceInput,
     )
 
     from ._associations import GeoPlaceSourceAssociation
+    from ._relation import GeoPlaceRelation
 
-
-class _LRUCacheBytes:
-    def __init__(self, max_bytes: int) -> None:
-        self._max_bytes = max_bytes
-        self._cache: OrderedDict[str, tuple[object, int]] = OrderedDict()
-        self._size_bytes = 0
-
-    def _estimate_size(self, key: str, value: object) -> int:
-        return sys.getsizeof(key) + sys.getsizeof(value)
-
-    def get(self, key: str) -> object | None:
-        item = self._cache.pop(key, None)
-        if item is None:
-            return None
-        value, size_bytes = item
-        self._cache[key] = (value, size_bytes)
-        return value
-
-    def set(self, key: str, value: object) -> None:
-        size_bytes = self._estimate_size(key, value)
-        if size_bytes > self._max_bytes:
-            return
-        existing = self._cache.pop(key, None)
-        if existing is not None:
-            self._size_bytes -= existing[1]
-        self._cache[key] = (value, size_bytes)
-        self._size_bytes += size_bytes
-        while self._size_bytes > self._max_bytes and self._cache:
-            _, evicted = self._cache.popitem(last=False)
-            self._size_bytes -= evicted[1]
-
-
-_BRAND_CATEGORY_CACHE = _LRUCacheBytes(max_bytes=50 * 1024 * 1024)
-_BRAND_CATEGORY_CACHE_LOCK = threading.Lock()
-_BRAND_CATEGORY_CACHE_MISS = object()
 
 # Substrings of database errors that are worth retrying (locks, deadlocks).
 RETRYABLE_DB_MESSAGES = (
@@ -80,21 +60,26 @@ RETRYABLE_DB_MESSAGES = (
 )
 
 
-class DetailType(models.TextChoices):
-    """Detail model types for GeoPlace."""
-
-    AMENITY = "amenity", _("Amenity")
-    TRANSPORT = "transport", _("Transport")
-    ADMIN = "admin", _("Admin")
-    NATURAL = "natural", _("Natural")
-    NONE = "none", _("None")
-
-
 class _ReviewStatusChoices(models.TextChoices):
     new = "new", _("New")
     review = "review", _("Review Needed")
     rework = "rework", _("needs rework")
     done = "done", _("Reviewed")
+
+
+class PlaceTypeSpec(NamedTuple):
+    """Resolved category plus its association attributes.
+
+    The schema write path (``GeoPlace.update_or_create``) resolves
+    ``place_type_identifiers`` — plain strings or ``PlaceTypeInput``
+    entries — into these specs before creating/updating the
+    ``GeoPlaceCategory`` rows (OpenSpec
+    ``geoplace-capacity-and-types-via-categories``).
+    """
+
+    category: Category
+    classifier: Category | None
+    extra: dict[str, Any]
 
 
 class GeoPlace(TimeStampedModel):
@@ -132,7 +117,6 @@ class GeoPlace(TimeStampedModel):
         db_index=True,
         verbose_name=_("Slug"),
         help_text=_("Unique URL identifier (max 15 chars)"),
-        null=True,  # Temporarily nullable for migration
         blank=True,
     )
 
@@ -160,14 +144,6 @@ class GeoPlace(TimeStampedModel):
     )
     elevation = models.IntegerField(null=True, blank=True)
     country_code = CountryField(db_index=True)
-
-    parent = models.ForeignKey(
-        "self",
-        on_delete=models.RESTRICT,
-        null=True,
-        blank=True,
-        related_name="children",
-    )
 
     importance = models.SmallIntegerField(
         default=25,
@@ -220,14 +196,39 @@ class GeoPlace(TimeStampedModel):
         help_text=_("Internal reviewer note"),
     )
 
-    # Detail model type
-    detail_type = models.CharField(
-        max_length=20,
-        choices=DetailType.choices,
-        default=DetailType.NONE,
-        db_index=True,
-        verbose_name=_("Detail Type"),
-        help_text=_("Which detail model is attached"),
+    # Kind slug (super-root identifier — map.amenity / map.admin /
+    # map.natural — derived on write from the category tree)
+    domain = models.CharField(
+        max_length=100,
+        default=DOMAIN_NONE,
+        # indexed via Meta (geoplace_domain_idx); db_index would
+        # create a duplicate auto index (the rename from detail_type
+        # carried the old auto pair along — dropped in 0069,
+        # geoplace-read-performance)
+        verbose_name=_("Domain"),
+        help_text=_(
+            "Super-root tier of the place (derived) — amenity / admin / natural / "
+            "transport / none"
+        ),
+    )
+
+    # Kind — the anchoring main category (first association by
+    # (order, slug), derived on write alongside `domain`). Stored as
+    # an indexed FK; the association table stays the source of truth
+    # for classifiers/extras (geoplace-kind-fk D1).
+    kind_id: int | None
+
+    kind = models.ForeignKey(
+        "categories.Category",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="places_anchored",
+        verbose_name=_("Kind"),
+        help_text=_(
+            "The anchoring main category (derived: first association "
+            "by order, slug) — categories inline edits re-anchor on save"
+        ),
     )
 
     # Protected fields (manual edits)
@@ -296,7 +297,7 @@ class GeoPlace(TimeStampedModel):
         verbose_name=_("Images"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]  # TimeStampedModel.Meta inheritance
+    class Meta:
         verbose_name = _("Geo Place")
         verbose_name_plural = _("Geo Places")
         ordering = ("-importance", Lower("name_i18n"))
@@ -316,7 +317,7 @@ class GeoPlace(TimeStampedModel):
                 name="geoplaces_act_pub_cnt_idx",
             ),
             models.Index(fields=["-importance"]),
-            models.Index(fields=["detail_type"]),
+            models.Index(fields=["domain"], name="geoplace_domain_idx"),
             # GIN index for trigram similarity search (critical for search performance)
             GinIndex(
                 fields=["name"],
@@ -338,10 +339,8 @@ class GeoPlace(TimeStampedModel):
                 condition=models.Q(main_language__in=settings.LANGUAGE_CODES),
             ),
             models.CheckConstraint(
-                name="%(app_label)s_%(class)s_detail_type_valid",
-                condition=models.Q(
-                    detail_type__in=["amenity", "transport", "admin", "natural", "none"]
-                ),
+                name="%(app_label)s_%(class)s_slug_grammar_valid",
+                condition=models.Q(slug__regex=f"^{SLUG_GRAMMAR_RE}$"),
             ),
             models.CheckConstraint(
                 name="%(app_label)s_%(class)s_review_status_valid",
@@ -361,18 +360,58 @@ class GeoPlace(TimeStampedModel):
         if not self.pk:
             return self.name_i18n
 
-        first_category = self.categories.order_by("order", "slug").first()
-        category_slug = first_category.slug if first_category else "uncategorized"
+        # Display follows the stored kind FK (anchor rule —
+        # classifier priority, then ``(order, slug)``); fall back to
+        # the historical first-category read when no kind is stored.
+        if self.kind_id is not None:
+            category_slug = self.kind.slug if self.kind else "uncategorized"
+        else:
+            first_category = self.categories.order_by("order", "slug").first()
+            category_slug = first_category.slug if first_category else "uncategorized"
         return f"{self.name_i18n} ({category_slug})"
 
+    def clean_slug(self) -> None:
+        """Enforce the URL slug grammar (openspec: place-detail-endpoint).
+
+        Slugs must match the path converter grammar — lowercase slug
+        characters with at least one ``-`` or ``_`` — so an item route
+        can never shadow (or be shadowed by) a fixed collection
+        segment (``search``, ``nearby``, ``overlays``). The database
+        check constraint mirrors this for write paths that skip
+        ``full_clean()`` (``save()`` does not run ``clean()``).
+        """
+        if not self.slug:
+            return  # save() mints one at creation
+        if self.slug in RESERVED_URL_SEGMENTS:
+            msg = (
+                f"'{self.slug}' is a reserved URL segment and cannot be "
+                f"used as a slug. Reserved: "
+                f"{', '.join(sorted(RESERVED_URL_SEGMENTS))}."
+            )
+            raise ValidationError({"slug": msg})
+        if re.fullmatch(SLUG_GRAMMAR_RE, self.slug) is None:
+            msg = (
+                "Slug must be lowercase letters, digits, hyphens or "
+                "underscores and contain at least one '-' or '_' (it is "
+                "used as a URL path segment that must stay distinct from "
+                "fixed routes like 'search')."
+            )
+            raise ValidationError({"slug": msg})
+
+    @override
+    def clean(self) -> None:
+        super().clean()
+        self.clean_slug()
+
+    @override
     def save(
         self,
-        *args,
-        track_modifications=True,
-        fallback_slug=None,
-        max_retries=3,
-        **kwargs,
-    ):
+        *args: Any,
+        track_modifications: bool = True,
+        fallback_slug: str | None = None,
+        max_retries: int = 3,
+        **kwargs: Any,
+    ) -> None:
         """Auto-generate slug from name if not provided and track manual modifications.
 
         Args:
@@ -387,6 +426,9 @@ class GeoPlace(TimeStampedModel):
         """
         # Auto-generate slug from name if not provided
         # Always use English for slug generation (for international consistency)
+        minted_slug = False
+        name_for_slug = ""
+        category_slug = fallback_slug
         if not self.slug:
             # Temporarily activate English to get English name for slug
             activate("en")
@@ -417,19 +459,32 @@ class GeoPlace(TimeStampedModel):
             self.slug = self.generate_unique_slug(
                 name_for_slug, category_slug=category_slug
             )
+            minted_slug = True
 
         # Track modifications if this is a manual edit (not an import)
         if track_modifications and self.pk:
             self._track_field_modifications()
 
-        # Retry logic for database locks
+        # Retry logic for database locks — and for the rare unique
+        # collision on a freshly minted slug (re-mint a new random
+        # suffix and retry; the savepoint keeps the surrounding
+        # transaction usable).
         import time
 
         last_exception = None
         for attempt in range(max_retries):
             try:
-                super().save(*args, **kwargs)
+                with transaction.atomic():
+                    super().save(*args, **kwargs)
                 return  # Success, exit retry loop
+            except IntegrityError as e:
+                last_exception = e
+                if minted_slug and attempt < max_retries - 1:
+                    self.slug = self.generate_unique_slug(
+                        name_for_slug, category_slug=category_slug
+                    )
+                    continue
+                raise
             except Exception as e:
                 last_exception = e
                 error_str = str(e).lower()
@@ -476,7 +531,6 @@ class GeoPlace(TimeStampedModel):
             "elevation",
             "country_code",
             "importance",
-            "parent",
             "location",
             "shape",
             "osm_tags",
@@ -487,7 +541,7 @@ class GeoPlace(TimeStampedModel):
         translation_fields = ["name", "description"]
 
         # Helper function to normalize values for comparison
-        def normalize_value(value):
+        def normalize_value(value: Any) -> Any:
             """Treat None and empty string as equivalent."""
             if value is None or value == "":
                 return ""
@@ -527,15 +581,50 @@ class GeoPlace(TimeStampedModel):
         # If any fields were modified, mark as modified and update protected_fields
         if modified_fields:
             self.is_modified = True
-            # Add to protected_fields (avoid duplicates)
-            current_protected = set(self.protected_fields)
-            current_protected.update(modified_fields)
-            self.protected_fields = list(current_protected)
+            # Add to protected_fields (avoid duplicates). Structured
+            # entries (role-scoped party protection dicts) are
+            # unhashable — carry them through untouched instead of
+            # feeding them to set() (advisor review finding 2).
+            entries = list(self.protected_fields or [])
+            protected_strings = {e for e in entries if isinstance(e, str)}
+            protected_strings.update(modified_fields)
+            structured = [e for e in entries if not isinstance(e, str)]
+            self.protected_fields = structured + sorted(protected_strings)
 
             # Auto-transition review_status from "new" to "done"
             # If it was new and we're making manual changes, we're happy with it
             if self.review_status == "new":
                 self.review_status = "done"
+
+    def protected_party_roles(self) -> set[str]:
+        """Role identifiers with role-scoped party protection.
+
+        Reads ``{"parties": ["role.brand", ...]}`` entries from
+        ``protected_fields`` (manual admin edits record the roles they
+        touched, OpenSpec ``party-slug-minting``). The legacy flat
+        ``"parties"`` string means *all* roles protected and is
+        handled by the update-path gates before this resolver runs.
+        """
+        roles: set[str] = set()
+        for entry in self.protected_fields or []:
+            if isinstance(entry, dict) and isinstance(entry.get("parties"), list):
+                roles.update(str(role) for role in entry["parties"])
+        return roles
+
+    #: Amenity-type words that carry no identity in a place name -
+    #: filtered from the minted base slug (geoplace-specific vocabulary
+    #: for the generic ``mint_short_slug`` helper).
+    SLUG_IGNORE_WORDS = [
+        "hotel",
+        "restaurant",
+        "gasthaus",
+        "gasthof",
+        "berghaus",
+        "berggasthaus",
+        "hostel",
+        "cafeteria",
+        "campground",
+    ]
 
     @classmethod
     def generate_unique_slug(
@@ -568,83 +657,21 @@ class GeoPlace(TimeStampedModel):
             "" (category: "drinkwater") → "drinkwater-ito4"
             "" (no category) → "place-vn191wad"
         """
-        import secrets
-        import string
+        from server.core.utils import mint_short_slug
 
-        from slugify import slugify as pyslugify
-
-        # 1. Fallback to category if name is empty
-        if not name or len(name.strip()) < 2:
-            base_slug = category_slug or "place"
-        else:
-            # 2. Create base slug
-            slug = pyslugify(name, word_boundary=True)
-            slug = slug.strip("-")
-
-            # 3. Filter common words (amenity types only)
-            SLUG_IGNORE = [
-                "hotel",
-                "restaurant",
-                "gasthaus",
-                "gasthof",
-                "berghaus",
-                "berggasthaus",
-                "hostel",
-                "cafeteria",
-                "campground",
-            ]
-            words = [w for w in slug.split("-") if w not in SLUG_IGNORE and len(w) >= 3]
-
-            if not words:
-                base_slug = category_slug or "place"
-            else:
-                # 4. Smart word splitting: take up to 3 words, distribute space equally
-                # Target: 9 chars for base slug (leaves room for 5-char UUID)
-                target_base_length = 9
-                selected_words = words[:3]
-                num_words = len(selected_words)
-
-                # Calculate chars per word (minimum 3 chars per word)
-                chars_per_word = max(3, target_base_length // num_words)
-
-                # Build base slug by taking chars_per_word from each word
-                word_parts = []
-                for word in selected_words:
-                    word_parts.append(word[:chars_per_word])
-
-                base_slug = "".join(word_parts)
-
-                # If we have space left, extend the first word
-                remaining = target_base_length - len(base_slug)
-                if remaining > 0 and len(selected_words[0]) > chars_per_word:
-                    # Take more chars from first word
-                    extended_first = selected_words[0][: chars_per_word + remaining]
-                    # Rebuild base_slug with extended first word
-                    base_slug = extended_first + "".join(word_parts[1:])
-
-                base_slug = base_slug[
-                    :target_base_length
-                ]  # Ensure we don't exceed target
-
-        # 5. Smart UUID sizing (min 5, max 8)
-        # Calculate available space for UUID: max_length - base_length - 1 (for hyphen)
-        available_space = max_length - len(base_slug) - 1
-        uuid_len = max(5, min(8, available_space))
-
-        # 6. Generate UUID suffix
-        charset = string.ascii_lowercase + string.digits
-        suffix = "".join(secrets.choice(charset) for _ in range(uuid_len))
-
-        # 7. Combine and enforce max length
-        slug = f"{base_slug}-{suffix}"
-        return slug[:max_length]
+        return mint_short_slug(
+            name,
+            fallback=category_slug or "place",
+            ignore_words=cls.SLUG_IGNORE_WORDS,
+            max_length=max_length,
+        )
 
     @classmethod
     def create_with_source(
         cls,
         source: Organization | int | str,
         source_id: str | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> GeoPlace:
         """
         Create a new GeoPlace and associate it with a source.
@@ -749,7 +776,7 @@ class GeoPlace(TimeStampedModel):
                 country_code="CH",
                 place_type_identifiers=["shop.bakery"],
                 operating_status=OperatingStatus.OPEN,
-                brand=BrandInput(slug="volg"),
+                parties=[PartyInput(slug="volg", role="role.brand")],
             )
 
             place, status = GeoPlace.update_or_create(
@@ -772,10 +799,12 @@ class GeoPlace(TimeStampedModel):
         # Convert location to Point
         location = Point(schema.location.lon, schema.location.lat, srid=4326)
 
-        # Resolve categories (validate identifiers once)
-        categories = cls._resolve_categories_from_identifiers(
-            schema.place_type_identifiers
-        )
+        # Resolve categories (validate identifiers once) — plain
+        # strings and PlaceTypeInput entries alike; the latter carry
+        # association classifier/extra (validated by the same helper
+        # GeoPlaceCategory.clean() uses).
+        place_types = cls._resolve_place_types(schema.place_type_identifiers)
+        categories = [spec.category for spec in place_types]
 
         # Resolve source organization
         source_obj = None
@@ -794,7 +823,7 @@ class GeoPlace(TimeStampedModel):
             return cls._update_from_schema(
                 existing_place,
                 schema,
-                categories,
+                place_types,
                 source_obj,
                 from_source,
             )
@@ -802,7 +831,7 @@ class GeoPlace(TimeStampedModel):
             # CREATE PATH
             return cls._create_from_schema(
                 schema,
-                categories,
+                place_types,
                 location,
                 source_obj,
                 from_source,
@@ -904,14 +933,45 @@ class GeoPlace(TimeStampedModel):
 
             nearby = nearby.annotate(distance=Distance("location", location)).distinct()
 
-            # Filter by brand if enabled and provided
-            if dedup_options.check_brand and schema.brand:
-                brand_cat = cls._get_brand_category_by_slug(schema.brand.slug)
-                if brand_cat:
-                    nearby = nearby.filter(amenity_detail__brand=brand_cat)
+            # Filter by brand party if enabled and provided
+            if dedup_options.check_brand and schema.parties:
+                brand_entries = [p for p in schema.parties if p.role == "role.brand"]
+                if brand_entries:
+                    # Slug entries reference the party by its slug;
+                    # name-only entries (OSM import) by the
+                    # ``extra.osm_name`` import identity — containment,
+                    # served by the party GIN index. A plain
+                    # ``slug__in`` over name-only entries used to filter
+                    # on ``[None]`` and never match (advisor-adjacent
+                    # regression of party-slug-minting).
+                    from server.apps.parties.models import Party
+
+                    brand_q = Q()
+                    for entry in brand_entries:
+                        if entry.slug:
+                            brand_q |= Q(
+                                party_associations__party__slug=entry.slug,
+                                party_associations__role__identifier="role.brand",
+                            )
+                        else:
+                            brand_q |= Q(
+                                party_associations__party__extra__contains={
+                                    "osm_name": Party.normalize_key(entry.name or "")
+                                },
+                                party_associations__role__identifier="role.brand",
+                            )
+                    nearby = nearby.filter(brand_q)
+                else:
+                    # Brand check on but no brand entry - only match places
+                    # without a brand party association
+                    nearby = nearby.exclude(
+                        party_associations__role__identifier="role.brand"
+                    )
             elif dedup_options.check_brand:
-                # No brand specified - only match places without brand
-                nearby = nearby.filter(amenity_detail__brand__isnull=True)
+                # No brand specified - only match places without a brand party
+                nearby = nearby.exclude(
+                    party_associations__role__identifier="role.brand"
+                )
 
             # CRITICAL FIX: Use first() instead of list() to avoid memory leak
             # list() creates temporary list objects that aren't garbage collected
@@ -926,28 +986,8 @@ class GeoPlace(TimeStampedModel):
     def _get_organization_by_slug(slug: str) -> Organization:
         return Organization.objects.get(slug=slug)
 
-    @classmethod
-    def _get_brand_category_by_slug(cls, slug: str) -> Category | None:
-        with _BRAND_CATEGORY_CACHE_LOCK:
-            cached = _BRAND_CATEGORY_CACHE.get(slug)
-        if cached is _BRAND_CATEGORY_CACHE_MISS:
-            return None
-        if cached is not None:
-            return cached  # type: ignore[return-value]
-
-        try:
-            category = Category.objects.get(slug=slug)
-        except Category.DoesNotExist:
-            with _BRAND_CATEGORY_CACHE_LOCK:
-                _BRAND_CATEGORY_CACHE.set(slug, _BRAND_CATEGORY_CACHE_MISS)
-            return None
-
-        with _BRAND_CATEGORY_CACHE_LOCK:
-            _BRAND_CATEGORY_CACHE.set(slug, category)
-        return category
-
     @staticmethod
-    @lru_cache(maxsize=512)
+    @lru_cache(maxsize=4096)  # global identifier space (group.child pairs)
     def _resolve_category_from_identifier(identifier: str) -> Category:
         """Resolve Category from identifier with fallbacks for legacy trees."""
         parts = identifier.split(".")
@@ -965,6 +1005,13 @@ class GeoPlace(TimeStampedModel):
                 return Category.objects.get(identifier=identifier)
 
         parent_slug, child_slug = parts[0], parts[1]
+        # Stored-identifier column first — depth-agnostic and indexed
+        # (contract groups gained parents under super-roots in the
+        # map tree, so root-level parent lookups miss).
+        try:
+            return Category.objects.get(identifier=f"{parent_slug}.{child_slug}")
+        except (Category.DoesNotExist, Category.MultipleObjectsReturned):
+            pass
         try:
             parent = Category.objects.get(slug=parent_slug, parent=None)
             return Category.objects.get(slug=child_slug, parent=parent)
@@ -974,30 +1021,170 @@ class GeoPlace(TimeStampedModel):
             ).first()
             if category:
                 return category
-            return Category.objects.get(identifier=identifier)
+            raise Category.DoesNotExist(
+                f"Unknown category identifier: {identifier}"
+            ) from None
+
+    @classmethod
+    def _resolve_place_types(
+        cls, identifiers: list[str | PlaceTypeInput]
+    ) -> list[PlaceTypeSpec]:
+        """Resolve place-type entries into category + association attrs.
+
+        Plain identifiers resolve to bare specs (no classifier, empty
+        extra); ``PlaceTypeInput`` entries resolve their ``classifier``
+        and normalized ``extra`` through the shared
+        ``GeoPlaceCategory.validate_attributes`` — the same checks
+        ``clean()`` enforces (Django never calls ``clean()`` here).
+        """
+        from ._associations import GeoPlaceCategory
+
+        specs: list[PlaceTypeSpec] = []
+        seen: set[tuple[int, int | None]] = set()
+        for entry in identifiers:
+            if isinstance(entry, str):
+                category = cls._resolve_category_from_identifier(entry)
+                spec = PlaceTypeSpec(category, None, {})
+            else:
+                category = cls._resolve_category_from_identifier(entry.identifier)
+                classifier = (
+                    cls._resolve_category_from_identifier(entry.classifier)
+                    if entry.classifier
+                    else None
+                )
+                extra = GeoPlaceCategory.normalize_extra(entry.extra)
+                GeoPlaceCategory.validate_attributes(category, classifier, extra)
+                spec = PlaceTypeSpec(category, classifier, extra)
+            # Dedupe per (category, mode) — the two-association
+            # operating-mode model legitimately pairs one category
+            # with mode.standard AND mode.reduced (e.g. open and
+            # closed type both unknown).
+            key = (category.pk, spec.classifier.pk if spec.classifier else None)
+            if key in seen:
+                continue
+            specs.append(spec)
+            seen.add(key)
+        return specs
 
     @classmethod
     def _resolve_categories_from_identifiers(
-        cls, identifiers: list[str]
+        cls, identifiers: list[str | PlaceTypeInput]
     ) -> list[Category]:
-        if not identifiers:
+        # Accepts plain identifiers and PlaceTypeInput entries (the
+        # latter contribute only their category — association
+        # attributes go through _resolve_place_types).
+        plain = [
+            entry if isinstance(entry, str) else entry.identifier
+            for entry in identifiers
+        ]
+        if not plain:
             raise Category.DoesNotExist("No category identifiers provided")
 
         categories: list[Category] = []
         seen_ids: set[int] = set()
-        for identifier in identifiers:
+        for identifier in plain:
             category = cls._resolve_category_from_identifier(identifier)
-            if category.id in seen_ids:  # pyright: ignore[reportAttributeAccessIssue]
+            if category.id in seen_ids:
                 continue
             categories.append(category)
-            seen_ids.add(category.id)  # pyright: ignore[reportAttributeAccessIssue]  # auto PK, plugin-less
+            seen_ids.add(category.id)
         return categories
+
+    @classmethod
+    def _write_operations(
+        cls, place: GeoPlace, operations: Any, place_types: list[PlaceTypeSpec]
+    ) -> bool:
+        """Upsert GeoPlaceOperation rows per (place, mode) (task 2.3).
+
+        Gated by the kind contract (task 2.2): the place's contract
+        group must enable operations — a group without a contract (or
+        with ``has_operations`` off) rejects the write.
+
+        The mode identifier must resolve to a ``mode.*`` child;
+        same-mode re-writes refresh capacity/hours (the per-mode
+        capacity invariant holds by construction — one row per mode).
+        """
+        from ._operation import GeoPlaceOperation
+
+        contract = contract_for_group(
+            # specs (not bare categories): the duck-typed helpers keep
+            # the classifier priority tier — anchor semantics, not just
+            # display order, ride this resolution
+            kind_root_category(place_types)
+        )
+        if contract is None or not contract.has_operations:
+            raise ValidationError(
+                {
+                    "operations": _(
+                        "Places under this kind's group carry no operations contract."
+                    )
+                }
+            )
+
+        changed_any = False
+        for entry in operations:
+            mode = cls._resolve_category_from_identifier(entry.mode)
+            if mode.parent is None or mode.parent.slug != "mode":
+                msg = f"Invalid operation mode identifier: {entry.mode}"
+                raise ValueError(msg)
+            defaults = {
+                "capacity": entry.capacity,
+                "opening_hours": entry.opening_hours or {},
+            }
+            existing = GeoPlaceOperation.objects.filter(
+                geo_place=place, mode=mode
+            ).first()
+            if existing is None:
+                GeoPlaceOperation.objects.create(geo_place=place, mode=mode, **defaults)
+                changed_any = True
+            elif (
+                existing.capacity != defaults["capacity"]
+                or existing.opening_hours != defaults["opening_hours"]
+            ):
+                GeoPlaceOperation.objects.filter(pk=existing.pk).update(**defaults)
+                changed_any = True
+        return changed_any
+
+    @classmethod
+    def _write_seasonality(
+        cls, place: GeoPlace, seasonality: Any, place_types: list[PlaceTypeSpec]
+    ) -> bool:
+        """Upsert the place's GeoPlaceSeasonality row (task 2.3).
+
+        Gated by the kind contract (task 2.2): the place's contract
+        group must enable seasonality.
+
+        Absent months stay untouched (unknown = NULL preserved);
+        shares are range-checked by the accessor and the DB.
+        """
+        from ._seasonality import GeoPlaceSeasonality, Month
+
+        contract = contract_for_group(
+            # specs carry classifiers — same anchor rule as everywhere
+            kind_root_category(place_types)
+        )
+        if contract is None or not contract.has_seasonality:
+            raise ValidationError(
+                {
+                    "seasonality": _(
+                        "Places under this kind's group carry no seasonality contract."
+                    )
+                }
+            )
+        if seasonality is None:
+            return False
+        row, _created = GeoPlaceSeasonality.objects.get_or_create(geo_place=place)
+        for key, share in dict(seasonality.months).items():
+            month = key if isinstance(key, Month) else Month(int(key))
+            row.months[month] = share
+        row.save()
+        return True
 
     @classmethod
     def _create_from_schema(
         cls,
         schema: GeoPlaceBaseInput,
-        categories: list[Category],
+        place_types: list[PlaceTypeSpec],
         location: Point,
         source_obj: Organization | None,
         from_source: SourceInput | None,
@@ -1015,13 +1202,24 @@ class GeoPlace(TimeStampedModel):
         name_dict = schema.get_name_dict()
         description_dict = schema.get_description_dict()
 
+        # domain + kind derived on write from the category tree
+        # (geoplace-kind-fk D4 — one derivation step, two stored
+        # facts). The input schema declares neither. Specs (not bare
+        # categories): the anchor rule is classifier-aware —
+        # mode.standard outranks (order, slug); stripping the
+        # classifier regressed mixed mode writes to the order-only
+        # rule (accommodation.unknown at order 0 anchored).
+        anchor = anchor_category(place_types)
+        derived_domain = place_domain(place_types)
+
         # Build place data
         place_data = {
             "name": name_dict.get(settings.LANGUAGE_CODE, ""),
             "main_language": detect_main_language(name_dict) or settings.LANGUAGE_CODE,
             "location": location,
             "country_code": schema.country_code,
-            "detail_type": schema.detail_type,
+            "domain": derived_domain,
+            "kind": anchor,
             "elevation": schema.elevation,
             "importance": schema.importance,
             "review_status": schema.review_status.value,
@@ -1035,10 +1233,6 @@ class GeoPlace(TimeStampedModel):
         # Add slug if provided
         if schema.slug:
             place_data["slug"] = schema.slug
-
-        # Add parent if provided
-        if schema.parent_id:
-            place_data["parent_id"] = schema.parent_id
 
         # Add shape if provided
         if schema.shape:
@@ -1064,44 +1258,48 @@ class GeoPlace(TimeStampedModel):
         # Create the place (track_modifications=False for imports)
         # Slug is auto-generated in save() with UUID-based uniqueness (no DB check needed)
         # Pass first category slug as fallback for empty names
-        fallback_slug = categories[0].slug if categories else None
+        fallback_slug = place_types[0].category.slug if place_types else None
         place = cls(**place_data)
         place.save(track_modifications=False, fallback_slug=fallback_slug)
 
-        if categories:
+        if place_types:
             GeoPlaceCategory.objects.bulk_create(
                 [
-                    GeoPlaceCategory(geo_place=place, category=category)
-                    for category in categories
+                    GeoPlaceCategory(
+                        geo_place=place,
+                        category=spec.category,
+                        classifier=spec.classifier,
+                        extra=spec.extra,
+                    )
+                    for spec in place_types
                 ],
                 ignore_conflicts=True,
             )
 
-        # Create detail model based on type (flattened structure)
-        from ..schemas import DetailType
+        # Typed operating facts + seasonality (task 2.3)
+        if schema.operations:
+            cls._write_operations(place, schema.operations, place_types)
+        if schema.seasonality is not None:
+            cls._write_seasonality(place, schema.seasonality, place_types)
 
-        if schema.detail_type == DetailType.AMENITY and schema.operating_status:
+        # Create detail model based on type (flattened structure)
+        if derived_domain == DOMAIN_AMENITY and schema.operating_status:
             amenity_kwargs = {
                 "geo_place": place,
                 "operating_status": schema.operating_status.value,
                 "opening_months": schema.opening_months,
                 "opening_hours": schema.opening_hours,
-                "phones": [
-                    p.model_dump() if hasattr(p, "model_dump") else p
-                    for p in schema.phones
-                ],
+                # phones retired (external-link-uris): numbers live as
+                # uri.phone external links on the place
             }
-            # Add brand if provided
-            if schema.brand:
-                try:
-                    brand = Category.objects.get(slug=schema.brand.slug)
-                    amenity_kwargs["brand"] = brand
-                except Category.DoesNotExist:
-                    pass
+            # Party associations are place-level (replaces the former
+            # brand FK on the detail row)
+            if schema.parties:
+                AmenityDetail._write_party_associations(place, schema.parties)
 
             AmenityDetail.objects.create(**amenity_kwargs)
 
-        elif schema.detail_type == DetailType.ADMIN and schema.admin_level:
+        elif derived_domain == DOMAIN_ADMIN and schema.admin_level:
             AdminDetail.objects.create(
                 geo_place=place,
                 admin_level=schema.admin_level,
@@ -1131,7 +1329,7 @@ class GeoPlace(TimeStampedModel):
         cls,
         place: GeoPlace,
         schema: GeoPlaceBaseInput,
-        categories: list[Category],
+        place_types: list[PlaceTypeSpec],
         source_obj: Organization | None,
         from_source: SourceInput | None,
     ) -> tuple[GeoPlace, UpdateCreateStatus]:
@@ -1178,8 +1376,13 @@ class GeoPlace(TimeStampedModel):
             # Don't update protected records
             return place, UpdateCreateStatus.no_change
 
-        # Determine which fields can be updated
-        protected = set(place.protected_fields)
+        # Determine which fields can be updated. String entries only —
+        # structured role-scoped party protection ({"parties": [...]} —
+        # dicts, unhashable) is resolved per role inside
+        # _write_party_associations instead (advisor review finding 1).
+        protected = {
+            entry for entry in (place.protected_fields or []) if isinstance(entry, str)
+        }
 
         # Check if we should respect protected fields
         respect_protected = False
@@ -1192,7 +1395,11 @@ class GeoPlace(TimeStampedModel):
                     respect_protected = True
 
         if respect_protected:
-            pass  # TODO do something with it
+            # Policy-level enforcement deferred (pre-existing TODO): the
+            # per-field ``protected`` checks below already honor protected
+            # fields uniformly; MERGE vs AUTO_PROTECT currently behave the
+            # same here.
+            pass
 
         # Track if anything was updated
         place_updated = False
@@ -1200,23 +1407,87 @@ class GeoPlace(TimeStampedModel):
         update_fields = []
         i18n_dirty = False
 
-        # Update categories (additive only for now)
-        if "categories" not in protected and categories:
-            existing_ids = set(place.categories.values_list("id", flat=True))
-            new_categories = [
-                category
-                for category in categories
-                if category.id not in existing_ids  # pyright: ignore[reportAttributeAccessIssue]  # auto PK, plugin-less
-            ]
-            if new_categories:
-                GeoPlaceCategory.objects.bulk_create(
-                    [
-                        GeoPlaceCategory(geo_place=place, category=category)
-                        for category in new_categories
-                    ],
-                    ignore_conflicts=True,
+        # Update categories: create missing associations AND refresh
+        # classifier/extra on existing rows — the wodore backfill's
+        # core guarantee (additive-only used to leave existing
+        # associations untouched, silently dropping closed types and
+        # capacities). Stale associations (category no longer claimed
+        # by this source) are not removed — reconciliation is a
+        # documented follow-up.
+        if "categories" not in protected and place_types:
+            from ._category_extra_schema import resolve_extra_schema
+
+            # Keyed per (category, mode) — the two-association model
+            # legitimately holds one category under both modes.
+            existing = {
+                (assoc.category_id, assoc.classifier_id): assoc
+                for assoc in GeoPlaceCategory.objects.filter(geo_place=place)
+            }
+            for spec in place_types:
+                key = (
+                    spec.category.pk,
+                    spec.classifier.pk if spec.classifier is not None else None,
                 )
-                categories_updated = True
+                assoc = existing.get(key)
+                if assoc is None:
+                    GeoPlaceCategory.objects.create(
+                        geo_place=place,
+                        category=spec.category,
+                        classifier=spec.classifier,
+                        extra=spec.extra,
+                    )
+                    categories_updated = True
+                    continue
+                # Schema-defined keys are source truth (replaced or
+                # dropped); keys outside the schema are preserved —
+                # imports never write those. Without a schema the
+                # merge is additive only.
+                schema_row = resolve_extra_schema(spec.category)
+                schema_keys = (
+                    set((schema_row.schema or {}).get("properties") or {})
+                    if schema_row is not None
+                    else set()
+                )
+                if schema_keys:
+                    merged_extra = {
+                        key_: value
+                        for key_, value in assoc.extra.items()
+                        if key_ not in schema_keys
+                    }
+                    merged_extra.update(spec.extra)
+                else:
+                    merged_extra = {**assoc.extra, **spec.extra}
+                if assoc.extra != merged_extra:
+                    assoc.extra = merged_extra
+                    assoc.save(update_fields=["extra", "modified"])
+                    categories_updated = True
+
+        # domain + kind derived on write from the category tree
+        # (geoplace-kind-fk D4). Specs carry the association
+        # classifiers — the anchor rule needs them (mode.standard
+        # outranks the order-only fallback category).
+        anchor = anchor_category(place_types)
+        derived_domain = place_domain(place_types)
+        if "domain" not in protected and place.domain != derived_domain:
+            place.domain = derived_domain
+            update_fields.append("domain")
+            place_updated = True
+        if "kind" not in protected and place.kind_id != (anchor.pk if anchor else None):
+            place.kind = anchor
+            update_fields.append("kind")
+            place_updated = True
+
+        # Typed operating facts + seasonality (task 2.3) — own
+        # protection keys (admin edits mark them like categories).
+        ops_changed = False
+        seasonality_changed = False
+        if "operations" not in protected and schema.operations:
+            ops_changed = cls._write_operations(place, schema.operations, place_types)
+        if "seasonality" not in protected and schema.seasonality is not None:
+            seasonality_changed = cls._write_seasonality(
+                place, schema.seasonality, place_types
+            )
+        operations_updated = ops_changed or seasonality_changed
 
         # Update name translations
         if "name" not in protected:
@@ -1289,8 +1560,12 @@ class GeoPlace(TimeStampedModel):
                 update_fields.append("osm_tags")
                 place_updated = True
 
-        # Update extra data (merge strategy)
+        # Update extra data (merge strategy) — validated against the
+        # kind-root schema first (task 2.6, same fail-open guardrails)
         if "extra" not in protected and schema.extra:
+            from ._category_extra_schema import validate_place_extra
+
+            validate_place_extra(place_types, schema.extra)
             if place.extra != schema.extra:
                 place.extra = {**place.extra, **schema.extra}
                 update_fields.append("extra")
@@ -1303,13 +1578,11 @@ class GeoPlace(TimeStampedModel):
             place.save(update_fields=update_fields, track_modifications=False)
 
         # Update or create detail model (flattened structure)
-        from ..schemas import DetailType
-
         detail_updated = False
-        if schema.detail_type == DetailType.AMENITY and schema.operating_status:
+        if derived_domain == DOMAIN_AMENITY and schema.operating_status:
             # Build amenity detail data from flattened schema
             try:
-                amenity_detail = place.amenity_detail  # pyright: ignore[reportAttributeAccessIssue]  # reverse relation, plugin-less
+                amenity_detail = place.amenity_detail  # type: ignore  # dynamic attr: plugin-less inference gap
                 is_new = False
             except AmenityDetail.DoesNotExist:
                 amenity_detail = AmenityDetail(geo_place=place)
@@ -1330,24 +1603,13 @@ class GeoPlace(TimeStampedModel):
                     update_fields.append("opening_hours")
                     detail_updated = True
 
-            if "phones" not in protected and schema.phones:
-                new_phones = [
-                    p.model_dump() if hasattr(p, "model_dump") else p
-                    for p in schema.phones
-                ]
-                if amenity_detail.phones != new_phones:
-                    amenity_detail.phones = new_phones
-                    update_fields.append("phones")
-                    detail_updated = True
+            # phones retired (external-link-uris): uri.phone links at the
+            # place level — no detail-row write path
 
-            if "brand" not in protected and schema.brand:
-                try:
-                    brand = Category.objects.get(slug=schema.brand.slug)
-                except Category.DoesNotExist:
-                    brand = None
-                if brand and amenity_detail.brand != brand:
-                    amenity_detail.brand = brand
-                    update_fields.append("brand")
+            if "parties" not in protected and schema.parties:
+                if AmenityDetail._write_party_associations(
+                    place, schema.parties, respect_protection=True
+                ):
                     detail_updated = True
 
             if is_new:
@@ -1355,7 +1617,7 @@ class GeoPlace(TimeStampedModel):
             elif update_fields:
                 amenity_detail.save(update_fields=update_fields)
 
-        elif schema.detail_type == DetailType.ADMIN and schema.admin_level:
+        elif derived_domain == DOMAIN_ADMIN and schema.admin_level:
             admin_detail, created = AdminDetail.objects.update_or_create(
                 geo_place=place,
                 defaults={
@@ -1368,15 +1630,66 @@ class GeoPlace(TimeStampedModel):
                 detail_updated = True
 
         # Return appropriate status
-        if place_updated or categories_updated or detail_updated:
+        if place_updated or categories_updated or detail_updated or operations_updated:
             return place, UpdateCreateStatus.updated
         return place, UpdateCreateStatus.no_change
+
+    def add_relation(
+        self,
+        to_place: GeoPlace,
+        relation_slug: str = "part_of",
+        **kwargs: Any,
+    ) -> GeoPlaceRelation:
+        """Idempotently add a semantic edge to another place (task 3.3).
+
+        Curated by default (confidence 1.0); pass ``confidence < 1.0``
+        for generated edges — re-runs replace them, curated edges win
+        (same triple, higher confidence preserved).
+        """
+        from ._relation import GeoPlaceRelation
+
+        relation_category = Category.objects.get(
+            slug=relation_slug, parent__slug="relations"
+        )
+        # Curated edges win: only update confidence if the new value
+        # is HIGHER (generated 0.8 never overwrites curated 1.0).
+        new_confidence = kwargs.pop("confidence", 1.0)
+        edge, created = GeoPlaceRelation.objects.get_or_create(
+            from_place=self,
+            to_place=to_place,
+            relation=relation_category,
+            defaults={"confidence": new_confidence, **(kwargs or {})},
+        )
+        if not created and new_confidence > edge.confidence:
+            edge.confidence = new_confidence
+            edge.save(update_fields=["confidence"])
+        return edge
+
+    def get_related_places(
+        self,
+        relation_slug: str | None = None,
+        direction: str = "outgoing",
+    ) -> QuerySet[GeoPlace]:
+        """Places related by a given edge type (direction-aware)."""
+
+        qs = GeoPlace.objects.all()  # type: ignore[no-any-return]  # QuerySet typing drift
+        if direction == "outgoing":
+            filter_kwargs: dict[str, Any] = {
+                "outgoing_relations__from_place": self,
+            }
+            if relation_slug:
+                filter_kwargs["outgoing_relations__relation__slug"] = relation_slug
+            return qs.filter(**filter_kwargs).distinct()
+        filter_kwargs = {"incoming_relations__to_place": self}
+        if relation_slug:
+            filter_kwargs["incoming_relations__relation__slug"] = relation_slug
+        return qs.filter(**filter_kwargs).distinct()
 
     def add_source(
         self,
         source: Organization | int | str,
         source_id: str | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> GeoPlaceSourceAssociation:
         """
         Add or update a source association for this GeoPlace.

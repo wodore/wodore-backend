@@ -51,7 +51,7 @@ class Contact(TimeStampedModel):
         help_text=_("Only shown to editors if not public"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Contact")
         indexes = (GinIndex(fields=["i18n"]),)
         ordering = (Lower("name"),)

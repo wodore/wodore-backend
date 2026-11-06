@@ -1,5 +1,6 @@
 """Bearer token authentication for the Django Ninja API (spec: api-token-validation).
 
+
 Validators share the scope/role/group matching logic from
 ``BaseTokenValidator``:
 
@@ -21,15 +22,26 @@ import json
 import logging
 import time
 from math import floor
-from typing import Any
+from typing import TYPE_CHECKING, Any, override
 
 import requests
 from authlib.jose import jwt
-from ninja.errors import HttpError
-from ninja.security import HttpBearer
+from dmr import APIError
+from dmr.endpoint import Endpoint
+from dmr.security.base import SyncAuth
+from dmr.security.http import _HttpBasicAuth  # scheme-parsing mixin
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
+from django.http import HttpRequest
+
+from server.apps.api.error_codes import ErrorCode
+
+if TYPE_CHECKING:
+    # Type-only dmr imports: annotating the auth hooks without the runtime
+    # import cycle (dmr pulls in the controller stack, auth is global).
+    from dmr.controller import Controller
+    from dmr.serializer import BaseSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -123,23 +135,32 @@ class BaseTokenValidator:
         now = floor(time.time())
         if not token:
             raise ValidatorError(
-                {"code": "invalid_token_revoked", "description": "Token was revoked."},
+                {
+                    "code": ErrorCode.not_authenticated,
+                    "description": "Token was revoked.",
+                },
                 401,
             )
         if not token.get("active"):
             raise ValidatorError(
-                {"code": "invalid_token_inactive", "description": "Token is inactive."},
+                {
+                    "code": ErrorCode.not_authenticated,
+                    "description": "Token is inactive.",
+                },
                 401,
             )
         if token["exp"] < now:
             raise ValidatorError(
-                {"code": "invalid_token_expired", "description": "Token has expired."},
+                {
+                    "code": ErrorCode.not_authenticated,
+                    "description": "Token has expired.",
+                },
                 401,
             )
         if not self.match_token_scopes(token, scopes):
             raise ValidatorError(
                 {
-                    "code": "insufficient_scope",
+                    "code": ErrorCode.insufficient_permission,
                     "description": f"Token has insufficient scope. Scopes required: {scopes}",
                 },
                 401,
@@ -149,7 +170,7 @@ class BaseTokenValidator:
         ):
             raise ValidatorError(
                 {
-                    "code": "insufficient_permission",
+                    "code": ErrorCode.insufficient_permission,
                     "description": f"Token has insufficient permission. Roles required: {roles} or group required: {groups}",
                 },
                 401,
@@ -360,7 +381,68 @@ def _select_validators() -> list[BaseTokenValidator]:
     return validators
 
 
-class AuthBearer(HttpBearer):
+class BearerSyncAuth(_HttpBasicAuth, SyncAuth):
+    """``Authorization: Bearer <token>`` auth base for dmr.
+
+    dmr 0.16 ships Basic/API-key auth but no bearer variant, so this base
+    reuses the scheme-parsing mixin (``auth_scheme='Bearer'``) and adds
+    the OpenAPI ``http/bearer`` security scheme. Subclasses implement
+    :meth:`authenticate`.
+    """
+
+    def __init__(  # noqa: WPS613  # unused controller_cls is part of the mixin API
+        self,
+        *,
+        security_scheme_name: str = "bearerAuth",
+    ) -> None:
+        super().__init__(
+            security_scheme_name=security_scheme_name,
+            auth_scheme="Bearer",
+            www_authenticate=True,
+        )
+
+    @property
+    @override
+    def www_authenticate_challenge(self) -> str | None:
+        """RFC 9110 challenge for 401 responses."""
+        return "Bearer"
+
+    def security_schemes(self, metadata, controller_cls):  # type: ignore  # dmr SyncAuth hook signature drift
+        from dmr.openapi.objects import SecurityScheme
+
+        return {
+            self.security_scheme_name: SecurityScheme(
+                type="http",
+                scheme="bearer",
+                description="Bearer token (Wodore/Zitadel access token)",
+            ),
+        }
+
+    def __call__(  # type: ignore[override]  # sync auth contract
+        self,
+        endpoint: "Endpoint",
+        controller: "Controller[BaseSerializer]",
+    ) -> "SyncAuth | None":
+        """Extract the bearer token and delegate to ``authenticate``."""
+        header = controller.request.headers.get(self.header)
+        if not header:
+            return None
+        encoded = self._split_encoded_credentials(header)
+        if encoded is None:
+            return None
+        return self.authenticate(endpoint, controller, encoded)
+
+    def authenticate(
+        self,
+        endpoint: "Endpoint",
+        controller: "Controller[BaseSerializer]",
+        token: str,
+    ) -> "SyncAuth | None":
+        """Validate the token; return ``self`` on success."""
+        raise NotImplementedError
+
+
+class AuthBearer(BearerSyncAuth):
     def __init__(
         self,
         scopes: list[str] | None = None,
@@ -374,12 +456,29 @@ class AuthBearer(HttpBearer):
         self.groups = groups
         self.validators = _select_validators()
 
-    def authenticate(self, request: Any, token: str) -> dict[str, Any] | None:
+    @override
+    def authenticate(
+        self,
+        endpoint: "Endpoint",
+        controller: "Controller[BaseSerializer]",
+        token: str,
+    ) -> "SyncAuth | None":
+        """Try every configured validator in order.
+
+        Kept compatible with the former ninja ``HttpBearer`` flow:
+        validators return the token payload on success, ``None`` on
+        failure; a fully unconfigured server answers a clean 401.
+        """
         if not self.validators:
-            raise HttpError(
-                401,
-                "Authentication is not configured on this server (OIDC is disabled).",
+            raise APIError(
+                {
+                    "code": ErrorCode.not_authenticated,
+                    "detail": "Authentication is not configured on this "
+                    "server (OIDC is disabled).",
+                },
+                status_code=401,  # type: ignore  # argument typing drift vs stubs
             )
+        request: HttpRequest = controller.request
         for validator in self.validators:
             result = validator(
                 token_string=token,
@@ -389,5 +488,8 @@ class AuthBearer(HttpBearer):
                 request=request,
             )
             if result is not None:
-                return result
+                # Auth succeeded — remember the payload for the handler
+                # (ninja stored it on request.auth).
+                request.auth = result  # type: ignore[attr-defined]
+                return self
         return None

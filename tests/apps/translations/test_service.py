@@ -1,5 +1,7 @@
 """Tests for server.apps.translations.service (translate_instance)."""
 
+from typing import Any
+
 import pytest
 
 from tests.apps.translations.conftest import FakeTranslationClient
@@ -18,7 +20,7 @@ from server.apps.translations.service import (
 pytestmark = pytest.mark.django_db
 
 
-def _update_hut(hut: Hut, **fields) -> Hut:
+def _update_hut(hut: Hut, **fields: Any) -> Hut:
     """Update columns and return a DB-loaded instance (from_db sets _orig_*
     attributes that Hut.save() relies on; refresh_from_db does not)."""
     Hut.objects.filter(pk=hut.pk).update(**fields)

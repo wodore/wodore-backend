@@ -1,4 +1,8 @@
+from typing import override
+
 from django.contrib import admin
+from django.db.models import QuerySet
+from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _
 
 from unfold.decorators import display
@@ -37,7 +41,8 @@ class FeatureAdmin(ModelAdmin):
     # Enable inline editing
     list_editable = ("is_enabled", "importance", "category")
 
-    def get_queryset(self, request):
+    @override
+    def get_queryset(self, request: HttpRequest) -> QuerySet[Feature]:
         """Optimize queryset by prefetching category relationships."""
         qs = super().get_queryset(request)
         return qs.select_related("category", "category__parent")
@@ -72,10 +77,10 @@ class FeatureAdmin(ModelAdmin):
         ),
     )
 
-    @display(description=_("Feature Code"), ordering="feature_code", label=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Feature Code"), ordering="feature_code", label=True)
     def feature_code_display(self, obj: Feature) -> str:
         return f"{obj.feature_class}.{obj.feature_code}"
 
-    @display(header=True, description=_("Name"), ordering="name")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-    def name_description_display(self, obj: Feature) -> tuple:
+    @display(header=True, description=_("Name"), ordering="name")
+    def name_description_display(self, obj: Feature) -> tuple[str, str]:
         return (obj.name, obj.description if obj.description else "")

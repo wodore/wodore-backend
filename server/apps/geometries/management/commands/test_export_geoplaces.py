@@ -1,6 +1,8 @@
+from typing import Any, override
+
 import yaml
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandParser
 
 from server.apps.geometries.models import GeoPlace
 
@@ -8,7 +10,8 @@ from server.apps.geometries.models import GeoPlace
 class Command(BaseCommand):
     help = "Export geoplace records as YAML seed files for test data"
 
-    def add_arguments(self, parser):
+    @override
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--limit",
             type=int,
@@ -29,7 +32,8 @@ class Command(BaseCommand):
             help="Output file path (defaults to stdout)",
         )
 
-    def handle(self, *args, **options):
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         qs = GeoPlace.objects.filter(is_active=True, is_public=True).prefetch_related(
             "categories"
         )
@@ -52,9 +56,9 @@ class Command(BaseCommand):
                 "name": place.name,
                 "location": f"SRID=4326;POINT ({location.x} {location.y})",
                 "elevation": place.elevation,
-                "country": place.country_code.code,
+                "country": place.country_code.code,  # type: ignore  # dynamic attr: plugin-less inference gap
                 "importance": place.importance,
-                "detail_type": place.detail_type,
+                "domain": place.domain,
             }
 
             category_slugs = [cat.slug for cat in place.categories.all()]

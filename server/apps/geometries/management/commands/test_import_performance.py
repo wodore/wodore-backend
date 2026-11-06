@@ -11,6 +11,7 @@ Usage:
 
 import time
 from dataclasses import dataclass
+from typing import Any, override
 
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point, Polygon
@@ -35,6 +36,7 @@ class TestResult:
 class Command(BaseCommand):
     help = "Test OSM import performance optimizations"
 
+    @override
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--test",
@@ -73,7 +75,8 @@ class Command(BaseCommand):
             help="Comma-separated batch sizes to test (for batch-sizes test)",
         )
 
-    def handle(self, *args, **options):
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         test_type = options["test"]
         iterations = options["iterations"]
         cleanup = options["cleanup"]
@@ -631,7 +634,6 @@ class Command(BaseCommand):
                     "name": f"Bulk {i}",
                     "location": Point(8.5417, 47.3769),
                     "country_code": "CH",
-                    "detail_type": "amenity",
                     "is_active": True,
                 }
                 places_to_create.append(GeoPlace(**place_data))
@@ -798,12 +800,11 @@ class Command(BaseCommand):
                 for schema, source in non_duplicates:
                     # Create GeoPlace instance (not saved yet)
                     place = GeoPlace(
-                        name=schema.name.de,
+                        name=schema.name.de,  # type: ignore  # dynamic attr: plugin-less inference gap
                         location=Point(
                             schema.location.lon, schema.location.lat, srid=4326
                         ),
                         country_code=schema.country_code,
-                        detail_type=schema.detail_type.value,
                         is_active=schema.is_active,
                         is_public=schema.is_public,
                     )
@@ -819,11 +820,8 @@ class Command(BaseCommand):
 
                     detail = AmenityDetail(
                         geo_place=place,  # Will be set after bulk create
-                        operating_status=schema.operating_status.value,
+                        operating_status=schema.operating_status.value,  # type: ignore  # dynamic attr: plugin-less inference gap
                         opening_hours=schema.opening_hours,
-                        phones=[p.model_dump() for p in schema.phones]
-                        if schema.phones
-                        else [],
                     )
                     amenity_details_to_create.append(detail)
 
@@ -1015,12 +1013,11 @@ class Command(BaseCommand):
 
                     for schema, source in non_duplicates:
                         place = GeoPlace(
-                            name=schema.name.de,
+                            name=schema.name.de,  # type: ignore  # dynamic attr: plugin-less inference gap
                             location=Point(
                                 schema.location.lon, schema.location.lat, srid=4326
                             ),
                             country_code=schema.country_code,
-                            detail_type=schema.detail_type.value,
                             is_active=schema.is_active,
                             is_public=schema.is_public,
                         )
@@ -1034,11 +1031,8 @@ class Command(BaseCommand):
 
                         detail = AmenityDetail(
                             geo_place=place,
-                            operating_status=schema.operating_status.value,
+                            operating_status=schema.operating_status.value,  # type: ignore  # dynamic attr: plugin-less inference gap
                             opening_hours=schema.opening_hours,
-                            phones=[p.model_dump() for p in schema.phones]
-                            if schema.phones
-                            else [],
                         )
                         amenity_details_to_create.append(detail)
 

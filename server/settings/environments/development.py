@@ -4,11 +4,11 @@ This file contains all the settings that defines the development server.
 SECURITY WARNING: don't run with debug turned on in production!
 """
 
-import logging
 import re
 import socket
 import subprocess
 from importlib.util import find_spec
+from typing import TYPE_CHECKING
 
 from server.settings.components.common import (
     DATABASES,
@@ -20,6 +20,9 @@ from server.settings.components.csp import CONTENT_SECURITY_POLICY
 from server.settings.components.oidc import (
     ZITADEL_RP_ENABLED,
 )
+
+if TYPE_CHECKING:
+    from django.http import HttpRequest
 
 # Setting the development status:
 
@@ -72,6 +75,7 @@ ALLOWED_HOSTS = [
     "0.0.0.0",
     "127.0.0.1",
     "[::1]",
+    "home",  # tailscale hostname
 ]
 
 # Add local IP dynamically if available
@@ -108,7 +112,8 @@ if WITH_DEV:
     INSTALLED_APPS += (
         # Better debug:
         "debug_toolbar",
-        "nplusone.ext.django",
+        # Dev demo pages (mapcompare etc.), open when DEBUG:
+        "server.apps.demos",
         # Linting migrations:
         "django_migration_linter",
         # django-test-migrations:
@@ -122,6 +127,7 @@ if WITH_DEV:
         # django-extra-checks:
         "extra_checks",
     )
+    DEMOS_ENABLED = True
 
 
 # Django debug toolbar:
@@ -143,13 +149,13 @@ try:  # This might fail on some OS
         for ip in socket.gethostbyname_ex(socket.gethostname())[2]
     ]
 except OSError:  # pragma: no cover
-    INTERNAL_IPS = []
+    INTERNAL_IPS: list[str] = []
 INTERNAL_IPS += ["127.0.0.1", "0.0.0.0"]
 
 
-def _custom_show_toolbar(request) -> bool:
+def _custom_show_toolbar(request: "HttpRequest") -> bool:
     """Only show the debug toolbar to users with the superuser flag."""
-    return DEBUG and request.user.is_superuser
+    return DEBUG and request.user.is_superuser  # type: ignore  # dynamic attr: plugin-less inference gap
 
 
 DEBUG_TOOLBAR_CONFIG = {
@@ -158,25 +164,19 @@ DEBUG_TOOLBAR_CONFIG = {
 
 # This will make debug toolbar to work with django-csp,
 # since `ddt` loads some scripts from `ajax.googleapis.com`:
-CONTENT_SECURITY_POLICY["DIRECTIVES"]["script-src"] += ("ajax.googleapis.com",)
-CONTENT_SECURITY_POLICY["DIRECTIVES"]["connect-src"] += ("'self'",)
-CONTENT_SECURITY_POLICY["DIRECTIVES"]["img-src"] += ("http:",)
+CONTENT_SECURITY_POLICY["DIRECTIVES"]["script-src"] += ("ajax.googleapis.com",)  # type: ignore
+CONTENT_SECURITY_POLICY["DIRECTIVES"]["connect-src"] += ("'self'",)  # type: ignore
+CONTENT_SECURITY_POLICY["DIRECTIVES"]["img-src"] += ("http:",)  # type: ignore
 
-
-# nplusone
-# https://github.com/jmcarp/nplusone
-
-# Should be the first in line:
-if WITH_DEV:
-    MIDDLEWARE = ("nplusone.ext.django.NPlusOneMiddleware", *MIDDLEWARE)
-
-# Logging N+1 requests:
-# NPLUSONE_RAISE = True  # comment out if you want to allow N+1 requests
-NPLUSONE_LOGGER = logging.getLogger("django")
-NPLUSONE_LOG_LEVEL = logging.WARNING
-NPLUSONE_WHITELIST = [
-    {"model": "admin.*"},
-]
+# Demo page (demos/mapcompare) + basemap styles fetch external tiles:
+CONTENT_SECURITY_POLICY["DIRECTIVES"]["connect-src"] += (  # type: ignore
+    "http://localhost:3739",  # lane Martin (demos page tile server)
+    "https://wmts.geo.admin.ch",  # swisstopo relief + pixelkarte WMTS
+    "https://tiles.maptoolkit.org",  # MTK vector/raster tiles
+    "https://icons.maptoolkit.org",  # MTK sprites
+    "https://tiles.mapterhorn.com",  # Mapterhorn DEM (client relief variants)
+    "https://elevation-tiles-prod.s3.amazonaws.com",  # AWS Terrain Tiles (hillshade)
+)
 
 
 # django-test-migrations
@@ -229,4 +229,4 @@ AXES_ENABLED = False
 # Zitadel RP mode only (AUTH_PROVIDER=zitadel): refresh OIDC sessions.
 
 if ZITADEL_RP_ENABLED:
-    MIDDLEWARE += ("mozilla_django_oidc.middleware.SessionRefresh",)  # pyright: ignore[reportUndefinedVariable]
+    MIDDLEWARE += ("server.middleware.oidc.AsyncSafeSessionRefresh",)

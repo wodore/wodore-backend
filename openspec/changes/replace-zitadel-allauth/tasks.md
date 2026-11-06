@@ -13,6 +13,7 @@
 - [x] 1.10 Add the custom user model (email as USERNAME_FIELD, unique email, no username) with a data migration preserving pks from auth.User, an FK-retarget migration for pre-switch databases, and a `bootstrap_user_model` surgery command for existing DBs (dev main, template, lanes)
 - [x] 1.11 Enable allauth session management (`allauth.usersessions` + middleware; nav link at /accounts/sessions/)
 - [x] 1.9 Port provider tests to DOT (authorize + PKCE, token, userinfo, JWKS, roles, refresh rotation); delete the `local_auth` views/tokens/urls behind the same paths; system checks report no `oauth2_provider` error findings in production settings
+- [x] 1.12 Switch the user PK to UUID v4 (`accounts.0003_uuid_pk` converts every user FK in place — model-derived ON DELETE actions, original constraint names, deferrable state preserved); dev/test fixture users are re-created with `local_auth_users` after migrating, and the tuned Argon2id hasher (64 MiB / t=3 / p=4) replaces Django's weak stock defaults
 
 ## 2. Promote: flip the production default to the built-in provider (Zitadel stays rollback)
 
@@ -21,12 +22,14 @@
 - [ ] 2.3 Bootstrap initial production accounts directly (admin/editor via the fixture command) — no user migration needed (no production user base yet)
 - [ ] 2.4 Audit logging on auth signals (login, logout, MFA changes, token failures); add `cleartokens` cron
 - [ ] 2.5 Staging rehearsal with `AUTH_PROVIDER=builtin`, then flip production the same way and point the frontend default issuer (`WODORE_OICD_ISSUER_URL`) at the backend `/oauth/local` path — configuration only; verify popup + redirect login, refresh rotation, roles on protected endpoints; rollback = `AUTH_PROVIDER=zitadel` again
+- [x] 2.6 Document the backup/staging data contract: what every backup excludes (ephemeral auth tables), encryption at rest, and the no-user-data-on-staging policy with UUID placeholder users (`docs/backups.md`)
 
 ## 3. Decommission: remove Zitadel
 
 - [ ] 3.1 Monitor until token metrics show zero Zitadel usage, then remove the introspection validator and the Zitadel RP surface: `mozilla_django_oidc`, `SessionRefresh`, `/oidc/` routes, `ZITADEL_*` settings (incl. private-key loading and `oidc_permission.py` remnants)
 - [ ] 3.2 Decommission the Zitadel instance and remove its Infisical secrets; document rollback (re-provision Zitadel, bootstrap accounts) in ops notes
 - [ ] 3.3 Update `AGENTS.md` auth-mode section and `_work` notes; archive the change via openspec when verified
+- [ ] 3.4 Add a regression test for `PermissionBackend.create_user` (Zitadel rollback path: seeds the email identity, handles a missing email claim) before deleting the RP surface
 
 ## 4. Verification gates (run throughout)
 

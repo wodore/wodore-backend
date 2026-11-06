@@ -12,7 +12,7 @@ active provider's login surface while preserving the original target
 from urllib.parse import quote
 
 from django.contrib.auth.decorators import login_required
-from django.http import HttpResponseRedirect
+from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import render
 
 
@@ -23,7 +23,9 @@ def _safe_next(value: str | None) -> str | None:
     return None
 
 
-def admin_login_redirect(request, login_path: str = "/accounts/login/"):
+def admin_login_redirect(
+    request: HttpRequest, login_path: str = "/accounts/login/"
+) -> HttpResponseRedirect:
     """Forward the admin's login redirect, preserving the deep-link target.
 
     The Django admin redirects unauthenticated deep links to
@@ -37,7 +39,7 @@ def admin_login_redirect(request, login_path: str = "/accounts/login/"):
 
 
 @login_required
-def account_overview(request):
+def account_overview(request: HttpRequest) -> HttpResponse:
     from allauth.mfa.models import Authenticator
 
     mfa_types = list(

@@ -3,7 +3,9 @@ Provider for Wodore internal database images.
 Works with both GeoPlaces and Huts.
 """
 
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from asgiref.sync import sync_to_async
@@ -16,7 +18,51 @@ from django.db.models import F
 from .base import ImageArea, ImageProvider, ImageResult
 from .schemas import GeoPlaceSchema
 
+if TYPE_CHECKING:
+    # Lazy import: images→geometries import cycle; annotation-only use.
+    from server.apps.images.models import Image
+
 logger = structlog.get_logger()
+
+
+def _assessment_extra(img: Image) -> dict[str, Any] | None:
+    """Result ``extra`` for internal (DB-backed) images.
+
+    Thumbhashes for the serving pipeline (quality stays backend-only), the
+    ``internal_pin`` marker (``pin_place_images`` must never re-pin these
+    passthrough results — the provider reports existing pins/uploads with
+    provider = source_org slug and source_id = source_ident, so a re-pin
+    would mint a prefix-stacked duplicate row "org:org:..."), and the
+    ``duplicate_of`` marker consumed by :func:`_drop_duplicate_pins`.
+    """
+    meta = img.image_meta or {}
+    extra: dict[str, Any] = {"internal_pin": True}
+    if meta.get("thumbhashes"):
+        extra["thumbhashes"] = meta["thumbhashes"]
+    if meta.get("duplicate_of"):
+        extra["duplicate_of"] = meta["duplicate_of"]
+    return extra
+
+
+def _drop_duplicate_pins(results: list[ImageResult]) -> list[ImageResult]:
+    """Serve-time phash dedup: drop marked near-duplicate pins.
+
+    ``assess_place_pins`` marks the weaker twin of a near-duplicate
+    cluster with ``image_meta.duplicate_of`` (its primary's
+    source_ident). A marked pin is dropped only while its primary is part
+    of the served set — a marker whose primary is gone (unpinned, hidden)
+    must not lose the place its only copy of that motif. Live provider
+    results never carry the marker; it only exists on our own pins.
+    """
+    served = {result.source_id for result in results}
+    kept = [
+        result
+        for result in results
+        if (result.extra or {}).get("duplicate_of") not in served
+    ]
+    if len(kept) != len(results):
+        logger.info("duplicate_pins_dropped", dropped=len(results) - len(kept))
+    return kept
 
 
 class WodoreProvider(ImageProvider):
@@ -97,7 +143,7 @@ class WodoreProvider(ImageProvider):
             from server.apps.geometries.models import GeoPlace
 
             # Get GeoPlaces within 10m radius
-            places = (  # pyright: ignore[reportAssignmentType]  # QuerySet annotated later
+            nearby_qs = (
                 GeoPlace.objects.filter(
                     is_active=True,
                     is_public=True,
@@ -108,10 +154,10 @@ class WodoreProvider(ImageProvider):
             )
 
             results = []
-            for place in places:
+            for place in nearby_qs:
                 place_qid = None
-                if hasattr(place, "osm_tags") and place.osm_tags:  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
-                    place_qid = place.osm_tags.get("wikidata")  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                if hasattr(place, "osm_tags") and place.osm_tags:
+                    place_qid = place.osm_tags.get("wikidata")
 
                 logger.debug(
                     "Processing place",
@@ -121,10 +167,11 @@ class WodoreProvider(ImageProvider):
                 )
 
                 # Get images through association model
-                for assoc in place.image_associations.all():  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                for assoc in place.image_associations.all():  # type: ignore  # dynamic attr: plugin-less inference gap
                     img = assoc.image
                     # Association score = display order (openspec pin-external-images)
                     result_score = assoc.score if assoc.score is not None else 50
+                    extra = _assessment_extra(img)
                     # Filter: must be active, approved, and not marked for no publication
                     if not img.is_active:
                         continue
@@ -134,9 +181,9 @@ class WodoreProvider(ImageProvider):
                         continue
 
                     distance_m = (
-                        place.distance.m  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
-                        if hasattr(place.distance, "m")  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
-                        else place.distance  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                        place.distance.m  # type: ignore  # dynamic attr: plugin-less inference gap
+                        if hasattr(place.distance, "m")  # type: ignore  # dynamic attr: plugin-less inference gap
+                        else place.distance
                     )
 
                     # Generate attribution using base helper
@@ -155,7 +202,7 @@ class WodoreProvider(ImageProvider):
                             img.source_org.slug
                         )  # Use slug for provider field
                         provider_name = (
-                            img.source_org.name_i18n or img.source_org.slug  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                            img.source_org.name_i18n or img.source_org.slug
                         )  # Use name for attribution
                         provider_url = img.source_org.url
                         # Generate provider icon URL if logo exists
@@ -171,13 +218,13 @@ class WodoreProvider(ImageProvider):
                         author=img.author,
                         author_url=img.author_url,
                         license_slug=img.license.slug,
-                        license_name=license_info["name"],  # pyright: ignore[reportArgumentType]  # dynamic license_info
+                        license_name=license_info["name"],
                         license_url=license_info["url"],
                         provider_name=provider_name,
                         provider_url=provider_url,
                         source_url=img.source_url,
                         provider_icon=provider_icon,
-                        license_icons=license_info.get("icons"),  # pyright: ignore[reportArgumentType]  # dynamic license_info
+                        license_icons=license_info.get("icons"),
                     )
                     attribution = attribution_data["short"]
 
@@ -198,28 +245,31 @@ class WodoreProvider(ImageProvider):
                         source_url=img.source_url,
                         image_type="flat",  # Default for wodore images
                         captured_at=img.capture_date,
-                        location=place.location,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
-                        distance_m=distance_m,
+                        location=place.location,  # type: ignore  # dynamic attr: plugin-less inference gap
+                        distance_m=distance_m,  # type: ignore  # argument typing drift vs stubs
                         license_slug=img.license.slug,
                         attribution=attribution,
                         author=img.author,
                         author_url=None,
                         url_large=img.source_url_raw or str(img.image),
                         url_medium=None,
-                        place={
-                            "id": place.id,
-                            "slug": place.slug,
-                            "name": place.name_i18n,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
-                            "location": {
-                                "lat": place.location.y,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
-                                "lon": place.location.x,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
-                            },
-                        }
-                        if place
-                        else None,
+                        place=(
+                            {
+                                "id": place.id,
+                                "slug": place.slug,
+                                "name": place.name_i18n,
+                                "location": {
+                                    "lat": place.location.y,  # type: ignore  # dynamic attr: plugin-less inference gap
+                                    "lon": place.location.x,  # type: ignore  # dynamic attr: plugin-less inference gap
+                                },
+                            }
+                            if place
+                            else None
+                        ),
                         score=result_score,  # association score; 50 fallback for uncurated
                         width=width,
                         height=height,
+                        extra=extra,
                         focal=focal_area,
                         crop=crop_area,
                     )
@@ -232,7 +282,7 @@ class WodoreProvider(ImageProvider):
                 num_places=len(places),
                 provider="WodoreProvider",
             )
-            return results
+            return _drop_duplicate_pins(results)
 
         elif self.place_type == "hut":
             from server.apps.huts.models import Hut, HutImageAssociation
@@ -328,8 +378,9 @@ class WodoreProvider(ImageProvider):
                 for assoc in assocs:
                     img = assoc.image
                     result_score = assoc.score if assoc.score is not None else 50
+                    extra = _assessment_extra(img)
                     distance_m = (
-                        hut.distance.m if hasattr(hut.distance, "m") else hut.distance  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                        hut.distance.m if hasattr(hut.distance, "m") else hut.distance
                     )
 
                     # Generate attribution using base helper
@@ -348,7 +399,7 @@ class WodoreProvider(ImageProvider):
                             img.source_org.slug
                         )  # Use slug for provider field
                         provider_name = (
-                            img.source_org.name_i18n or img.source_org.slug  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                            img.source_org.name_i18n or img.source_org.slug
                         )  # Use name for attribution
                         provider_url = img.source_org.url
                         # Generate provider icon URL if logo exists
@@ -364,13 +415,13 @@ class WodoreProvider(ImageProvider):
                         author=img.author,
                         author_url=img.author_url,
                         license_slug=img.license.slug,
-                        license_name=license_info["name"],  # pyright: ignore[reportArgumentType]  # dynamic license_info
+                        license_name=license_info["name"],
                         license_url=license_info["url"],
                         provider_name=provider_name,
                         provider_url=provider_url,
                         source_url=img.source_url,
                         provider_icon=provider_icon,
-                        license_icons=license_info.get("icons"),  # pyright: ignore[reportArgumentType]  # dynamic license_info
+                        license_icons=license_info.get("icons"),
                     )
                     attribution = attribution_data["short"]
 
@@ -391,7 +442,7 @@ class WodoreProvider(ImageProvider):
                         source_url=img.source_url,
                         image_type="flat",  # Default for wodore images
                         captured_at=img.capture_date,
-                        location=hut.location,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
+                        location=hut.location,
                         distance_m=distance_m,
                         license_slug=img.license.slug,
                         attribution=attribution,
@@ -399,20 +450,23 @@ class WodoreProvider(ImageProvider):
                         author_url=None,
                         url_large=img.source_url_raw or str(img.image),
                         url_medium=None,
-                        place={
-                            "id": hut.id,
-                            "slug": hut.slug,
-                            "name": hut.name_i18n,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
-                            "location": {
-                                "lat": hut.location.y,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
-                                "lon": hut.location.x,  # pyright: ignore[reportAttributeAccessIssue]  # dynamic schema attrs
-                            },
-                        }
-                        if hut
-                        else None,
+                        place=(
+                            {
+                                "id": hut.id,
+                                "slug": hut.slug,
+                                "name": hut.name_i18n,
+                                "location": {
+                                    "lat": hut.location.y,
+                                    "lon": hut.location.x,
+                                },
+                            }
+                            if hut
+                            else None
+                        ),
                         score=result_score,  # association score; 50 fallback for uncurated
                         width=width,
                         height=height,
+                        extra=extra,
                         focal=focal_area,
                         crop=crop_area,
                     )
@@ -425,7 +479,7 @@ class WodoreProvider(ImageProvider):
                 num_huts=len(huts),
                 provider="WodoreProvider",
             )
-            return results
+            return _drop_duplicate_pins(results)
 
         # Unknown place type: no results rather than implicit None
         return []

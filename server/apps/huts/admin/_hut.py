@@ -1,7 +1,7 @@
-# NOTE: description=_(...) is the project-wide lazy-gettext idiom (i18n-safe);  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+# NOTE: description=_(...) is the project-wide lazy-gettext idiom (i18n-safe);
 # per-line pyright ignores below suppress the unfold-stub str-typing mismatch.
 import contextlib
-from typing import ClassVar
+from typing import Any, ClassVar, override
 
 with contextlib.suppress(ModuleNotFoundError):
     from django_stubs_ext import QuerySetAny
@@ -11,8 +11,12 @@ from django_admin_runner.admin import CommandRunnerModelAdminMixin
 
 from django.conf import settings
 from django.contrib import admin
+from django.contrib.admin.options import InlineModelAdmin
 from django.contrib.postgres.aggregates import JSONBAgg
+from django.db import models
+from django.db.models import F
 from django.db.models.functions import JSONObject, Lower
+from django.forms import Field
 from django.http import HttpRequest
 from django.shortcuts import redirect
 from django.urls import reverse, reverse_lazy
@@ -76,6 +80,8 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         "is_modified",
         "is_active",
         "review_tag",
+        "visits_30d",
+        "visits_365d",
         "description_quality_display",
         "view_link",
     )
@@ -102,7 +108,7 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
             RelatedOnlyCheckboxFilter,
         ),  # Filter by sources (checkboxes, only orgs linked to huts)
     )
-    fieldsets = HutAdminFieldsets
+    fieldsets = HutAdminFieldsets  # type: ignore  # admin fieldsets/list_filter typing drift (lazy gettext)
     autocomplete_fields = ("hut_owner", "hut_type_open", "hut_type_closed")
     readonly_fields = (
         "name_i18n",
@@ -114,7 +120,10 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
     )
     list_per_page = 50
 
-    def get_inlines(self, request, obj):
+    @override
+    def get_inlines(
+        self, request: HttpRequest, obj: Hut | None
+    ) -> list[type[InlineModelAdmin[Any, Any]]]:
         """Dynamically add availability inline if app is installed"""
         inlines = [
             HutImageAssociationEditInline,
@@ -124,12 +133,13 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
             HutSourceViewInline,
         ]
         if HutAvailabilityViewInline is not None:
-            inlines.append(HutAvailabilityViewInline)
-        return inlines
+            inlines.append(HutAvailabilityViewInline)  # type: ignore  # argument typing drift vs stubs
+        return inlines  # type: ignore  # unfold inlines lack py.typed: class drift vs django-stubs
 
-    def formfield_for_dbfield(  # pyright: ignore[reportIncompatibleMethodOverride]  # untyped django_admin_runner base in MRO
-        self, db_field, request, **kwargs
-    ):
+    @override
+    def formfield_for_dbfield(
+        self, db_field: models.Field[Any, Any], request: HttpRequest, **kwargs: Any
+    ) -> Field | None:
         """Customize FK querysets and the `open_monthly` widget.
 
         The plain Category/Organization querysets contain thousands of OSM
@@ -152,7 +162,10 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
             )
         return super().formfield_for_dbfield(db_field, request, **kwargs)
 
+    @override
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
+        from server.apps.visits.models import visit_window_annotation
+
         qs = super().get_queryset(request).prefetch_related("image_set")
         # prefetch_related("orgs_source", "orgs_source__organization").
         return qs.select_related(
@@ -165,10 +178,22 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
                     link_i18n="orgs_source__link",
                 )
             ),
+            visits_30d=visit_window_annotation(Hut, days=30),
+            visits_365d=visit_window_annotation(Hut, days=365),
         )
 
+    @display(description=_("Visits 30d"), ordering="visits_30d")
+    def visits_30d(self, obj: Hut):
+        """Visit sum over the last 30 days (openspec: place-visit-counter)."""
+        return obj.visits_30d  # type: ignore  # dynamic attr: plugin-less inference gap
+
+    @display(description=_("Visits 1y"), ordering="visits_365d")
+    def visits_365d(self, obj: Hut):
+        """Visit sum over the last year (openspec: place-visit-counter)."""
+        return obj.visits_365d  # type: ignore  # dynamic attr: plugin-less inference gap
+
     @display(
-        description=_("Status"),  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+        description=_("Status"),
         ordering="status",
         label={
             Hut.ReviewStatusChoices.review: "info",
@@ -177,49 +202,46 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
             Hut.ReviewStatusChoices.rework: "danger",
         },
     )
-    def review_tag(self, obj):
+    def review_tag(self, obj: Hut):
         return obj.review_status
 
     @display(header=True, ordering=Lower("name"))
-    def title(self, obj):
+    def title(self, obj: Hut):
         # if obj.hut_owner:
         #    owner = textwrap.shorten(obj.hut_owner.name, width=30, placeholder="...")
         # else:
         #    owner = "-"
         return (obj.name_i18n, obj.slug)  # self.icon_thumb(obj.type.icon_simple.url))
 
-    @display(header=True, description=_("Type"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
-    def hut_type(self, obj):
+    @display(header=True, description=_("Type"))
+    def hut_type(self, obj: Hut):
         opened = mark_safe(f'<span class = "text-xs">{obj.hut_type_open.slug}</span>')
         closed = mark_safe(
             f'<span class = "text-xs">{obj.hut_type_closed.slug if obj.hut_type_closed else "-"}</span>'
         )
         return (opened, closed)
 
-    @display(header=True, description=_("Location"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
-    def location_coords(self, obj):
+    @display(header=True, description=_("Location"))
+    def location_coords(self, obj: Hut):
         return (
             f"{obj.location.y:.3f}/{obj.location.x:.3f}",
             f"{obj.elevation}m" if obj.elevation else "-",
         )
 
     @display(description="")
-    def symbol_img(self, obj):  # new
-        if (
-            obj.hut_type_open.symbol_detailed
-            and obj.hut_type_open.symbol_detailed.svg_file
-        ):
+    def symbol_img(self, obj: Hut):  # new
+        if obj.hut_type_open.symbol_color and obj.hut_type_open.symbol_color.svg_file:
             return mark_safe(
-                f'<img src="{obj.hut_type_open.symbol_detailed.svg_file.url}" width="50px"/>'
+                f'<img src="{obj.hut_type_open.symbol_color.svg_file.url}" width="50px"/>'
             )
         return "-"
 
-    @display(description=_("Sources"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+    @display(description=_("Sources"))
     def logo_orgs(self, obj: Hut) -> str:  # new
         SRC = settings.MEDIA_URL
         imgs = [
             f'<a href={o["link_i18n"]} target="blank"><img class="inline pr-2" src="{SRC}/{o["logo"]}" width="24px" alt="{o["name_i18n"]}"/></a>'
-            for o in obj.orgs  # pyright: ignore[reportAttributeAccessIssue]  # JSONBAgg annotation
+            for o in obj.orgs  # type: ignore  # dynamic attr: plugin-less inference gap
         ]
 
         # return ", ".join([str(o.organization.name + o.link_i18n) for o in obj.orgs.all()])
@@ -239,14 +261,21 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
             '<span class="material-symbols-outlined"> disabled_visible </span>'
         )
 
-    @display(description=_("Photos"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
-    def hut_images(self, obj):  # new
+    @display(description=_("Photos"))
+    def hut_images(self, obj: Hut):  # new
         img_html = "<div>"
+        # Bound the tab: huts with dozens of pins rendered dozens of imagor
+        # transforms (each a cold origin fetch) and made the change page crawl.
+        max_images = 30
+        images = obj.image_set.select_related("source_org", "license")
+        total = images.count()
+        shown = 0
         for i, img in enumerate(
-            obj.image_set.select_related("source_org", "license")
-            .order_by("details__order")
-            .all()
+            images.order_by(F("details__score").desc(nulls_last=True), "pk")[
+                :max_images
+            ]
         ):
+            shown += 1
             link = reverse("admin:images_image_change", args=[img.pk])
             img_tag = f"""
               <a href='{link}' target='_blank'>{img.get_image_tag(radius=10, height=120, width=200)}</a>
@@ -275,13 +304,23 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
                                       """
                 )
             # print(img.details.order)
+            # Pinned external images have no local file — link to the raw
+            # source instead of img.image.url (which raises ValueError and
+            # 500'd the whole change page for pinned huts).
+            view_url = img.source_url_raw or (img.image.url if img.image else "")
+            view_button = (
+                f"<span><a class='text-xs' href=\"{view_url}\" target='_blank'> "
+                f"<span class='material-symbols-outlined'> visibility </span> </a>"
+                if view_url
+                else ""
+            )
             img_info = f"""
               <span class="text-xs">{public_private_tag}</span>
               <h2><b>#{i + 1} - {img.caption_i18n}</b></h2>
               Status: <i>{img.review_status}</i><br/>
               {", ".join(author_source)}<br/>
               <small>{lic}</small><br/>
-            <span><a class="text-xs" href="{img.image.url}" target='_blank'> <span class="material-symbols-outlined"> visibility </span> </a>
+            {view_button}
             <span><a class="text-xs" href="{link}" target='_blank'> <span class="material-symbols-outlined"> edit </span> </a>
             """
             img_html += f"""<div style="padding:5px;">
@@ -292,11 +331,17 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
                                 {img_info}
                               </div>
                             </div>"""
+        if total > shown:
+            img_html += (
+                f"<p><small>… and {total - shown} more — "
+                f"<a href='{reverse('admin:images_image_changelist')}?details__hut={obj.pk}' target='_blank'>"
+                f"open the image list</a></small></p>"
+            )
         img_html += "</div>"
         return mark_safe(img_html)
 
-    @display(description=_("Photo"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
-    def hut_thumb(self, obj):  # new
+    @display(description=_("Photo"))
+    def hut_thumb(self, obj: Hut):  # new
         if obj.photos:  # old style, show if available
             return (
                 ImagorImage(obj.photos)
@@ -304,7 +349,9 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
                 .get_html()
             )
 
-        img = obj.image_set.order_by("details__order").first()
+        img = obj.image_set.order_by(
+            F("details__score").desc(nulls_last=True), "pk"
+        ).first()
         if img:
             return img.get_image_tag(radius=15, height=50, width=50)
         return ""
@@ -319,40 +366,40 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
     actions_detail = ("action_detail_prev", "action_detail_next")
 
     ## TODO: check if form is saved, save form and show next (or tell them to save)
-    @action(description=_("Next"), permissions=["view"])  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+    @action(description=_("Next"), permissions=["view"])
     def action_detail_next(self, request: HttpRequest, object_id: int):  # obj: Hut):
         obj = Hut.objects.get(id=object_id)
         return redirect(
-            reverse_lazy("admin:huts_hut_change", args=(obj.next() or object_id,))  # pyright: ignore[reportArgumentType]  # lazy URL
+            str(reverse_lazy("admin:huts_hut_change", args=(obj.next() or object_id,)))
         )
 
-    @action(description=_("Previous"), permissions=["view"])  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+    @action(description=_("Previous"), permissions=["view"])
     def action_detail_prev(self, request: HttpRequest, object_id: int):  # obj: Hut):
         obj = Hut.objects.get(id=object_id)
         return redirect(
-            reverse_lazy("admin:huts_hut_change", args=(obj.prev() or object_id,))  # pyright: ignore[reportArgumentType]  # lazy URL
+            str(reverse_lazy("admin:huts_hut_change", args=(obj.prev() or object_id,)))
         )
 
-    @action(description=_(mark_safe("set to <b>done</b>")), permissions=["change"])  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+    @action(description=_(mark_safe("set to <b>done</b>")), permissions=["change"])
     def action_row_set_review_to_done(
         self, request: HttpRequest, object_id: int
     ):  # obj: Hut):
         obj = Hut.objects.get(id=object_id)
         obj.review_status = Hut.ReviewStatusChoices.done
         obj.save()
-        return redirect(request.META.get("HTTP_REFERER"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+        return redirect(request.META.get("HTTP_REFERER") or "/")
 
-    @action(description=_(mark_safe("set to <b>review</b>")), permissions=["change"])  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+    @action(description=_(mark_safe("set to <b>review</b>")), permissions=["change"])
     def action_row_set_review_to_review(
         self, request: HttpRequest, object_id: int
     ):  # obj: Hut):
         obj = Hut.objects.get(id=object_id)
         obj.review_status = Hut.ReviewStatusChoices.review
         obj.save()
-        return redirect(request.META.get("HTTP_REFERER"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+        return redirect(request.META.get("HTTP_REFERER") or "/")
 
     @action(
-        description=_(mark_safe("set to <b>reject</b> (inactive)")),  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+        description=_(mark_safe("set to <b>reject</b> (inactive)")),
         permissions=["delete"],
     )
     def action_row_set_inactive(
@@ -362,10 +409,10 @@ class HutsAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         obj.review_status = Hut.ReviewStatusChoices.reject
         obj.is_active = False
         obj.save()
-        return redirect(request.META.get("HTTP_REFERER"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+        return redirect(request.META.get("HTTP_REFERER") or "/")
 
-    @action(description=_(mark_safe("<b>delete</b> entry")), permissions=["delete"])  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+    @action(description=_(mark_safe("<b>delete</b> entry")), permissions=["delete"])
     def action_row_delete(self, request: HttpRequest, object_id: int):  # obj: Hut):
         obj = Hut.objects.get(id=object_id)
         obj.delete()
-        return redirect(request.META.get("HTTP_REFERER"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+        return redirect(request.META.get("HTTP_REFERER") or "/")

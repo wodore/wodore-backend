@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any, override
+
 from modeltrans.fields import TranslationField
 
 from django.conf import settings
-from django.db import models
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, models, transaction
 from django.utils.translation import gettext_lazy as _
 
 from server.apps.categories.models import Category
 from server.apps.organizations.models import Organization
 from server.core.models import TimeStampedModel
+
+from .uri import is_web_url, scheme_of, validate_url_for_scheme
 
 
 class ReviewStatus(models.TextChoices):
@@ -37,11 +42,14 @@ class ExternalLink(TimeStampedModel):
         help_text=_("Short unique identifier (6 characters)"),
     )
 
-    url = models.URLField(
+    url = models.CharField(
+        max_length=200,
         db_index=True,
+        validators=[validate_url_for_scheme],
         verbose_name=_("URL"),
         help_text=_(
-            "The URL of the external link (translatable - defaults to first language)"
+            "The URL of the external link (translatable - defaults to first "
+            "language). Any scheme its URI kind accepts: http(s), tel:, mailto:"
         ),
     )
 
@@ -65,6 +73,23 @@ class ExternalLink(TimeStampedModel):
         related_name="external_links",
         verbose_name=_("Link Type"),
         help_text=_("Type of link (e.g., social, website, api, document)"),
+    )
+
+    # Typed URIs (external-link-uris): the transport kind — a second,
+    # independent dimension next to the loose link_type purposes.
+    uri_kind = models.ForeignKey(
+        Category,
+        on_delete=models.RESTRICT,
+        null=False,  # introduced nullable, backfilled, then NOT NULL (0010)
+        blank=True,  # forms may leave it empty — save() derives from the URL
+        db_index=True,
+        related_name="+",
+        limit_choices_to={"parent__slug": "uri"},
+        verbose_name=_("URI Kind"),
+        help_text=_(
+            "Transport kind of the URL (uri.phone / uri.email / uri.website); "
+            "derived from the URL's scheme on save"
+        ),
     )
 
     # Translatable content
@@ -164,7 +189,7 @@ class ExternalLink(TimeStampedModel):
         help_text=_("Whether this link is active (soft delete)"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("External Link")
         verbose_name_plural = _("External Links")
         ordering = ["-created"]
@@ -191,15 +216,31 @@ class ExternalLink(TimeStampedModel):
             ),
         ]
 
-    def save(self, *args, skip_health_check=False, **kwargs):
+    @override
+    def save(
+        self,
+        *args: Any,
+        skip_health_check: bool = False,
+        **kwargs: Any,
+    ) -> None:
         """
         Auto-generate identifier if not provided and run health check.
+
+        A unique collision on the freshly minted identifier retries
+        with a re-mint inside a savepoint (the constraint is the
+        authority — the old probe-based generation was TOCTOU-racy).
 
         Args:
             skip_health_check: If True, skip health check (useful for bulk imports)
         """
-        if not self.identifier:
+        minted_identifier = not self.identifier
+        if minted_identifier:
             self.identifier = self.generate_unique_identifier()
+
+        # Typed URIs (external-link-uris): the kind follows the URL —
+        # one derivation step covers admin forms, imports and API
+        # writes alike (no endpoint or signal).
+        self._derive_uri_kind()
 
         # Auto-detect template from URL pattern
         if self.url and "{" in self.url and "}" in self.url:
@@ -208,11 +249,23 @@ class ExternalLink(TimeStampedModel):
             self.is_template = False
 
         # Auto-detect source organization from URL domain if not set
-        if not self.source and self.url and not self.is_template:
+        # (web-only behaviour — tel:/mailto: URLs never hit the network)
+        if (
+            not self.source
+            and self.url
+            and not self.is_template
+            and is_web_url(self.url)
+        ):
             self.source = self._auto_detect_source()
 
         # Auto-extract title from webpage if label is not provided
-        if not self.label and self.url and not self.is_template:
+        # (web-only behaviour)
+        if (
+            not self.label
+            and self.url
+            and not self.is_template
+            and is_web_url(self.url)
+        ):
             self._auto_extract_title()
 
         # Only run health check if enabled and either:
@@ -221,6 +274,7 @@ class ExternalLink(TimeStampedModel):
         should_check = (
             self.run_health_check
             and self.url
+            and is_web_url(self.url)
             and not skip_health_check
             and (not self.is_template or self.template_vars)
         )
@@ -228,7 +282,98 @@ class ExternalLink(TimeStampedModel):
         if should_check:
             self.check_health()
 
-        super().save(*args, **kwargs)
+        for attempt in range(3):
+            try:
+                with transaction.atomic():
+                    super().save(*args, **kwargs)
+                return
+            except IntegrityError:
+                if not minted_identifier or attempt == 2:
+                    raise
+                self.identifier = self.generate_unique_identifier()
+
+    def _uri_kind_schemes(self) -> set[str]:
+        """Schemes the current ``uri_kind`` accepts (empty set if unset)."""
+        if self.uri_kind_id is None:
+            return set()
+        extra = getattr(self.uri_kind, "extra", None) or {}
+        return {str(s).lower() for s in extra.get("schemes", [])}
+
+    @classmethod
+    def derive_uri_kind_for_url(cls, url: str) -> Category | None:
+        """Vocabulary kind whose accepted schemes contain the URL's scheme."""
+        scheme = scheme_of(url)
+        if scheme is None:
+            return None
+        return Category.objects.filter(
+            parent__slug="uri",
+            is_active=True,
+            extra__schemes__contains=scheme,
+        ).first()
+
+    def _derive_uri_kind(self) -> None:
+        """Make the URI kind follow the URL (external-link-uris).
+
+        Re-derives whenever the URL's scheme falls outside the current
+        kind's accepted schemes (enter or change); a manual override
+        within the kind's schemes is honored; an unknown scheme is
+        rejected. ``save()`` calls this — the derivation is the reason
+        kindless saves cannot happen once the column is NOT NULL.
+        """
+        if not self.url:
+            return
+        scheme = scheme_of(self.url)
+        if scheme is None:
+            msg = f"'{self.url}' has no URL scheme."
+            raise ValidationError({"url": msg})
+        if scheme in self._uri_kind_schemes():
+            return  # entered/overridden within the kind's schemes
+        derived = self.derive_uri_kind_for_url(self.url)
+        if derived is None:
+            msg = (
+                f"URL scheme '{scheme}:' matches no URI kind "
+                "(vocabulary: uri.phone/uri.email/uri.website)."
+            )
+            raise ValidationError({"url": msg})
+        self.uri_kind = derived
+
+    @override
+    def clean(self) -> None:
+        """Scheme↔kind consistency + URI well-formedness (external-link-uris).
+
+        ``save()`` skips ``clean()`` — the save-path derivation is the
+        primary guard; this mirrors it for form validation.
+        """
+        super().clean()
+        kind = self.uri_kind
+        if kind is not None:
+            parent_slug = (
+                Category.objects.filter(pk=kind.parent_id)
+                .values_list("slug", flat=True)
+                .first()
+            )
+            if parent_slug != "uri":
+                msg = "URI kind must be a category under the 'uri' parent."
+                raise ValidationError({"uri_kind": msg})
+        self._validate_urls_against_kind()
+
+    def _validate_urls_against_kind(self) -> None:
+        """Validate every populated URL variant (default + languages)."""
+        accepted = self._uri_kind_schemes()
+        variants: list[str] = [self.url] if self.url else []
+        for code in settings.LANGUAGE_CODES:
+            value = getattr(self, f"url_{code}", None)
+            if value:
+                variants.append(value)
+        for value in variants:
+            validate_url_for_scheme(value)
+            scheme = scheme_of(value)
+            if accepted and scheme not in accepted:
+                msg = (
+                    f"URL scheme '{scheme}:' is not accepted by URI kind "
+                    f"'{self.uri_kind}'."
+                )
+                raise ValidationError({"url": msg})
 
     def _auto_extract_title(self) -> None:
         """
@@ -430,7 +575,7 @@ class ExternalLink(TimeStampedModel):
 
         return None
 
-    def check_health(self) -> dict:
+    def check_health(self) -> dict[str, Any]:
         """
         Check the health of all translated URLs by making HEAD requests.
 
@@ -448,6 +593,16 @@ class ExternalLink(TimeStampedModel):
         Returns:
             Dictionary with health check results for all languages
         """
+        # Non-web kinds (tel:, mailto:) are exempt by policy — never
+        # network-check them (external-link-uris; defensive: the
+        # selector and save() gate already skip them).
+        if not is_web_url(self.url):
+            return {
+                "success": True,
+                "skipped": True,
+                "error": "Non-web URI kind - health check skipped",
+            }
+
         import requests
 
         from django.utils import timezone
@@ -609,16 +764,14 @@ class ExternalLink(TimeStampedModel):
         }
 
     @classmethod
-    def generate_unique_identifier(cls, length: int = 6, max_attempts: int = 10) -> str:
+    def generate_unique_identifier(cls, length: int = 6) -> str:
         """
-        Generate a unique short identifier.
+        Mint a random short identifier (``[a-z0-9]``, cryptographic
+        source) — a pure function with no database access.
 
-        Args:
-            length: Length of identifier (default 6)
-            max_attempts: Maximum attempts to find unique identifier
-
-        Returns:
-            Unique identifier string
+        Uniqueness is enforced by ``save()``, which retries on the
+        unique constraint inside a savepoint (the former probe loop
+        here was TOCTOU-racy and cost one query per attempt).
 
         Examples:
             "a3f9b2", "x7k2m9", "p4t8w1"
@@ -627,22 +780,9 @@ class ExternalLink(TimeStampedModel):
         import string
 
         charset = string.ascii_lowercase + string.digits
+        return "".join(secrets.choice(charset) for _ in range(length))
 
-        for attempt in range(max_attempts):
-            identifier = "".join(secrets.choice(charset) for _ in range(length))
-
-            if not cls._identifier_exists(identifier):
-                return identifier
-
-        # Fallback: try longer identifier
-        return cls.generate_unique_identifier(length=length + 1)
-
-    @classmethod
-    def _identifier_exists(cls, identifier: str) -> bool:
-        """Check if an identifier already exists in the database."""
-        return cls.objects.filter(identifier=identifier).exists()
-
-    def render_url(self, lang: str | None = None, **kwargs) -> str:
+    def render_url(self, lang: str | None = None, **kwargs: str) -> str:
         """
         Render template URL with provided variables.
 
@@ -668,6 +808,11 @@ class ExternalLink(TimeStampedModel):
         # Determine language
         if lang is None:
             lang = translation.get_language()
+
+        # {lang} is substitutable in URLs (SBB-style /{lang} SPA
+        # paths) — the named parameter doubles as the substitution
+        # value for the resolved language.
+        kwargs.setdefault("lang", lang)
 
         # Get URL for the specified language
         url_attr = f"url_{lang}"
@@ -709,3 +854,135 @@ class ExternalLink(TimeStampedModel):
     def description_i18n(self) -> str:
         """Get the translated description."""
         return getattr(self, "description_de", self.description)
+
+
+class ExternalAction(TimeStampedModel):
+    """Open-in action — a curated hand-off of a map feature to an app.
+
+    OpenSpec ``external-actions``: a thin scoping row over an
+    :class:`ExternalLink` (which keeps owning the URL template, i18n
+    label and health checks — D1). Three orthogonal axes decide where
+    the action is offered:
+
+    * ``kinds`` — M2M to the ``map.*`` kind tree; a feature matches
+      when its kind identifier (2-slug ``Category.identifier``, unique
+      per design) is among the action's kinds. Empty = any point,
+      including category-less ones (a ``map``-rooted kind would not
+      match those).
+    * ``countries`` — ISO-3166 alpha-2 list; empty = global. The
+      client passes the code it already has (``adm0_iso`` on Transitland
+      tile features) — the API never resolves coordinates.
+    * ``user`` — NULL = public/curated row (public CDN-cacheable
+      endpoint); set = user-owned private action (the ``/v1/my/``
+      namespace, private and never CDN-cached).
+
+    The render endpoint addresses actions by the backing link's
+    ``identifier`` (the action model deliberately carries none of its
+    own — D6); rendering resolves public-action-for-link OR
+    requester-owned-action-for-link, else 404.
+    """
+
+    link = models.ForeignKey(
+        ExternalLink,
+        on_delete=models.CASCADE,
+        related_name="actions",
+        verbose_name=_("Link"),
+        help_text=_("The link this action scopes (owns the URL template)"),
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        db_index=True,
+        related_name="external_actions",
+        verbose_name=_("User"),
+        help_text=_(
+            "Empty = public/curated action (CDN path); set = private "
+            "user action (served only to this user under /my/)"
+        ),
+    )
+    kinds = models.ManyToManyField(
+        Category,
+        blank=True,
+        related_name="external_actions",
+        verbose_name=_("Kinds"),
+        help_text=_(
+            "Kind-level categories (map.* identifiers) this action "
+            "applies to; empty = any point"
+        ),
+        limit_choices_to={"parent__slug": "map", "is_active": True},
+    )
+    countries = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name=_("Countries"),
+        help_text=_("ISO-3166 alpha-2 codes this action applies to; empty = global"),
+    )
+    order = models.PositiveSmallIntegerField(
+        default=100,
+        db_index=True,
+        verbose_name=_("Order"),
+        help_text=_("Picker ordering (lower first)"),
+    )
+    is_active = models.BooleanField(
+        default=True,
+        db_index=True,
+        verbose_name=_("Active"),
+        help_text=_("Inactive actions are excluded from every endpoint"),
+    )
+
+    if TYPE_CHECKING:
+        link_id: int
+        user_id: int | None
+        objects: models.Manager[ExternalAction]
+
+    class Meta:
+        verbose_name = _("External Action")
+        verbose_name_plural = _("External Actions")
+        ordering = ("order", "pk")
+        indexes = (models.Index(fields=("is_active", "user")),)
+        constraints = (
+            # One PUBLIC action per link; per-user duplicates likewise
+            # rejected (D4 — partial uniques; Postgres treats NULLs as
+            # distinct, hence the conditions).
+            models.UniqueConstraint(
+                fields=("link",),
+                condition=models.Q(user__isnull=True),
+                name="externalactions_public_link_unique",
+            ),
+            models.UniqueConstraint(
+                fields=("user", "link"),
+                condition=models.Q(user__isnull=False),
+                name="externalactions_user_link_unique",
+            ),
+        )
+
+    def __str__(self) -> str:
+        scope = ",".join(self.countries) if self.countries else "global"
+        owner = self.user_id if self.user_id else "public"
+        return f"{self.link.label_i18n} [{scope}, {owner}]"  # type: ignore[attr-defined]  # forward FK label via link
+
+    @override
+    def clean(self) -> None:
+        """Kinds must be kind-level categories of the map tree (D2).
+
+        The 2-slug identifiers start with ``map.`` by construction
+        (children of the map root); the map root itself is NOT
+        targetable — "everything" is the empty kinds list.
+        """
+        super().clean()
+        # An unsaved instance has no pk — the kinds M2M cannot be
+        # queried yet (defer validation to the saved-check path).
+        if self.pk is not None:
+            for kind in self.kinds.all():
+                if not kind.identifier.startswith("map."):
+                    msg = _(
+                        "Kind %(kind)s is not a map kind-level category "
+                        "(identifier must start with 'map.')"
+                    )
+                    raise ValidationError({"kinds": msg % {"kind": kind.identifier}})
+        for code in self.countries:
+            if not (isinstance(code, str) and len(code) == 2 and code.isupper()):
+                msg = _("Country codes must be uppercase ISO-3166 alpha-2")
+                raise ValidationError({"countries": msg % {"code": code}})

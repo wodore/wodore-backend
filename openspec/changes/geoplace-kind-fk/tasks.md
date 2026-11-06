@@ -1,0 +1,87 @@
+# Tasks: geoplace-kind-fk
+
+## 1. Model + migration
+
+- [ ] 1.1 `GeoPlace.kind` FK (`categories.Category`, null=True,
+      SET_NULL, `related_name="places_anchored"`, `kind_id`
+      declaration) + Meta stays (auto FK index)
+- [ ] 1.2 Migration `0073_geoplace_kind_fk`: AddField + backfill
+      (first association per place by `(order, slug)`, chunked) +
+      reverse (null out)
+- [ ] 1.3 `kinds.py`: `anchor_category(categories)` helper (first by
+      `(order, slug)` — the rule every consumer uses)
+
+## 2. Write paths
+
+- [ ] 2.1 `_create_from_schema` / `_update_from_schema`: derive
+      `kind` + `domain` together from the spec list; protection key
+      `"kind"` alongside `"domain"`
+- [ ] 2.2 OSM bulk path: `kind_id` in the bulk_update fields
+- [ ] 2.3 Wodore import: verify via the schema path (no extra work
+      expected — test pins it)
+
+## 3. API
+
+- [ ] 3.1 `anchor_kinds_for` reads `place.kind_id` (single indexed
+      query; keep the association fallback for pre-backfill rows in
+      the same transaction window)
+- [ ] 3.2 `kind_ref_for` gains `classifier` + `extra` from the
+      anchor association
+- [ ] 3.3 `build_categories_data` excludes the anchor kind row
+- [ ] 3.4 `kind` filter: direct FK join
+      (`kind__identifier__in / kind__slug__in`)
+- [ ] 3.5 `CategoryKindRefSchema`: `classifier: str | None`,
+      `extra: dict | None` (additive); snapshot regenerate; registry
+      note (categories narrowing rides the unreleased version)
+
+## 4. Admin + verification
+
+- [ ] 4.1 GeoPlace admin: `kind` FK readonly replaces
+      `kind_display`; fieldset pairing with `domain`
+- [ ] 4.2 Tests: FK == first association after every write path
+      (schema create/update, bulk, wodore); backfill correctness;
+      kind member classifier/extra; categories exclude anchor; kind
+      filter; lane DB migrate + spot-check
+- [ ] 4.3 Full suite + pyrefly + makemigrations --check; PR
+      (`type:feature`, `api:breaking` for the categories narrowing —
+      unreleased, `BUILD`)
+
+## 5. Anchoring fix — mode.standard defines the kind
+
+- [ ] 5.1 `kinds.py`: `ANCHOR_CLASSIFIER_PRIORITY`
+      (`mode.standard` → 0, neutral 1); `anchor_category`,
+      `kind_root_category`, `place_domain` accept association-like
+      items and order by `(priority, order, slug)`; `order_by_anchor`
+      ORM twin
+- [ ] 5.2 `_rederive_place_kind` receiver + geonames import paths:
+      derive from associations (classifier-aware)
+- [ ] 5.3 Migration `0074_reanchor_kind_mode_standard`: re-anchor
+      places with a mode.standard association (raw SQL, scoped
+      EXISTS), reverse restores the order-only rule
+- [ ] 5.4 pk-0 truthiness fix in `anchor_kinds_for` + place detail
+      (`kind_id is not None`)
+- [ ] 5.5 Tests: mixed standard+reduced anchoring, reduced-only,
+      classifier-less regression, pk-0 kind member, migration
+      re-anchor + reverse, wodore import e2e kind pin
+
+## 6. Regression fix — schema writes carry the classifiers
+
+Staging follow-up to #469: the `--update` re-import re-anchored
+~1150 mixed-mode places back to `accommodation.unknown` — the
+schema write paths passed bare categories
+(`[spec.category for spec in place_types]`) to the anchor helpers,
+stripping the classifier priority tier. (Associations kept their
+classifiers; the earlier "zero mode.standard" reading was a
+measurement artifact.)
+
+- [ ] 6.1 `_geoplace.py`: pass the spec list directly to
+      `anchor_category` / `place_domain` / `kind_root_category` /
+      `validate_place_extra` (duck-typed since 5.1) — create, update
+      and the operations/seasonality contract gates
+- [ ] 6.2 Tests: schema create/update with mixed
+      mode.standard + mode.reduced specs at production orders
+      (unknown 0 < hut 50) — kind anchors from the standard type,
+      associations persist classifiers; wodore create + `--update`
+      re-import e2e (the staging scenario); fixtures forced to
+      production orders (seed rows default to order 0 and passed
+      vacuously through the slug tiebreak)

@@ -5,7 +5,7 @@ DOT issues (roles from Django groups) - usable directly against
 ``AuthBearer``-protected endpoints. Requires ``OIDC_ENABLED`` (default on).
 """
 
-from typing import Any
+from typing import Any, override
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -15,10 +15,11 @@ from django.core.management.base import BaseCommand, CommandError, CommandParser
 class Command(BaseCommand):
     help = "Mint a built-in provider access token for a user (API testing)"
 
+    @override
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "-u",
-            "--user",
+            "--user",  # type: ignore  # residual span suppression
             help="User email (fixture users: admin@local.test, editor@local.test)",
             default="admin@local.test",
         )
@@ -31,15 +32,17 @@ class Command(BaseCommand):
             "-l", "--list-users", help="List available user emails", action="store_true"
         )
 
+    @override
     def handle(
         self,
-        user: str,
-        issuer: str,
-        list_users: bool,
         *args: Any,
         **options: Any,
     ) -> None:
         from server.apps.local_auth import tokens
+
+        user: str = options["user"]
+        issuer: str = options["issuer"]
+        list_users: bool = options["list_users"]
 
         if not settings.OIDC_ENABLED:
             raise CommandError(
@@ -64,6 +67,8 @@ class Command(BaseCommand):
             )
             raise CommandError(1)
         token = tokens.issue_access_token(
-            user_obj, issuer, settings.LOCAL_AUTH_CLIENT_ID
+            user_obj,  # type: ignore  # residual span suppression
+            issuer,
+            settings.LOCAL_AUTH_CLIENT_ID,  # type: ignore  # argument typing drift vs stubs
         )
         print(token)

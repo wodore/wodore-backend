@@ -1,24 +1,17 @@
 from enum import Enum
 
-from ninja import ModelSchema
 from pydantic import BaseModel
 
-from .models import WeatherCode
+from server.apps.api.enums import IncludeModeEnum
 
-
-class IncludeModeEnum(str, Enum):
-    """Include mode for nested objects - controls level of detail."""
-
-    no = "no"
-    slug = "slug"
-    all = "all"
+__all__ = ["DayTimeEnum", "IncludeModeEnum", "SymbolStyleEnum"]
 
 
 class SymbolStyleEnum(str, Enum):
     """Symbol style variants."""
 
-    detailed = "detailed"
-    simple = "simple"
+    color = "color"
+    primitive = "primitive"
     mono = "mono"
 
 
@@ -27,24 +20,6 @@ class DayTimeEnum(str, Enum):
 
     day = "day"
     night = "night"
-
-
-class WeatherCodeSchema(ModelSchema):
-    """Schema for WeatherCode model - returns all fields."""
-
-    class Meta:
-        model = WeatherCode
-        fields = "__all__"
-        fields_optional = "__all__"
-
-
-class WeatherCodeOptional(ModelSchema):
-    """Schema for WeatherCode model with all fields optional."""
-
-    class Meta:
-        model = WeatherCode
-        fields = "__all__"
-        fields_optional = "__all__"
 
 
 class SymbolURLSchema(BaseModel):
@@ -60,8 +35,8 @@ class CategoryRefSchema(BaseModel):
 
     slug: str
     name: str | None = None
-    symbol_detailed: str | None = None
-    symbol_simple: str | None = None
+    symbol_color: str | None = None
+    symbol_primitive: str | None = None
     symbol_mono: str | None = None
 
 

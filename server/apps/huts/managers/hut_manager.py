@@ -8,7 +8,7 @@ from django.db.models.functions import Coalesce, Greatest
 from server.core.managers import BaseManager
 
 
-class HutManager(MultilingualManager, BaseManager):  # pyright: ignore[reportIncompatibleMethodOverride]  # get_queryset MRO generics
+class HutManager(MultilingualManager, BaseManager):
     """Manager for Hut model with search capabilities."""
 
     def search(
@@ -122,7 +122,7 @@ class HutManager(MultilingualManager, BaseManager):  # pyright: ignore[reportInc
         }
 
         # Add the trigram similarity annotations
-        annotations.update(similarity_annotations)  # pyright: ignore[reportArgumentType, reportCallIssue]  # RawSQL values
+        annotations.update(similarity_annotations)  # type: ignore  # argument typing drift vs stubs
 
         # Annotate with search rank and individual similarity scores
         qs = qs.annotate(**annotations)

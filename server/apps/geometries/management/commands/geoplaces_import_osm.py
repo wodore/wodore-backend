@@ -12,11 +12,14 @@ Usage:
     app geoplaces_import_osm --overpass ch --output-dir /tmp         # Use /tmp for logs (Docker)
 """
 
+from __future__ import annotations
+
 import tempfile
 import threading
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, override
 
 import httpx
 import osmium
@@ -29,13 +32,19 @@ from django.db import transaction
 from django.utils import timezone
 
 from server.apps.categories.models import Category
+from server.apps.geometries.config.osm_base import OSMMapping
 from server.apps.geometries.config.osm_categories import (
     get_categories,
     get_enabled_categories,
     match_tags_to_category,
 )
-from server.apps.geometries.models import GeoPlace
+from server.apps.geometries.models import AmenityDetail, GeoPlace
 from server.apps.organizations.models import Organization
+from server.apps.parties.services import resolve_party_by_name
+
+if TYPE_CHECKING:
+    from rich.console import Console
+    from rich.progress import Progress, TaskID
 
 # Global Overpass server list with labels for display
 OVERPASS_SERVERS = [
@@ -53,7 +62,7 @@ class OSMElement:
     osm_type: str  # "node" or "way"
     lat: float
     lon: float
-    tags: dict
+    tags: dict[str, str]
     action: (
         str | None
     )  # "create", "modify", "delete" for diff mode; None for full import
@@ -64,7 +73,7 @@ class OSMElement:
 class OSMHandler(osmium.SimpleHandler):
     """Handler for parsing OSM PBF files using category mappings."""
 
-    def __init__(self, category_names: list[str] = None):
+    def __init__(self, category_names: list[str] | None = None):
         super().__init__()
         self.amenities = []
         self.category_names = category_names
@@ -75,7 +84,7 @@ class OSMHandler(osmium.SimpleHandler):
         else:
             self.categories = get_enabled_categories()
 
-    def node(self, n):
+    def node(self, n: Any) -> None:
         """Process OSM nodes (point features)."""
         # Check if this matches any category
         tags = dict(n.tags)
@@ -105,7 +114,7 @@ class OSMHandler(osmium.SimpleHandler):
 
             self.amenities.append(data)
 
-    def way(self, w):
+    def way(self, w: Any) -> None:
         """Process OSM ways (polygon features)."""
         tags = dict(w.tags)
         match_result = match_tags_to_category(tags, self.category_names)
@@ -120,7 +129,8 @@ class OSMHandler(osmium.SimpleHandler):
             tags = mapping.pre_process(tags)
 
         # Calculate centroid from way nodes (locations are provided by NodeLocationsForWays)
-        lons, lats = [], []
+        lons: list[float] = []
+        lats: list[float] = []
         for node in w.nodes:
             if node.location.valid():
                 lons.append(node.location.lon)
@@ -156,10 +166,10 @@ class OSMHandler(osmium.SimpleHandler):
         osm_id: int,
         lat: float,
         lon: float,
-        tags: dict,
+        tags: dict[str, str],
         category_slug: str,
-        mapping,
-    ) -> dict:
+        mapping: OSMMapping,
+    ) -> dict[str, Any]:
         """Extract amenity data from OSM element."""
         # Use default_name from mapping if no name tag exists
         name = tags.get("name", "")
@@ -180,6 +190,7 @@ class OSMHandler(osmium.SimpleHandler):
             "phone": tags.get("phone") or tags.get("contact:phone"),
             "website": tags.get("website") or tags.get("contact:website"),
             "brand": tags.get("brand"),
+            "operator": tags.get("operator"),
         }
 
 
@@ -187,15 +198,15 @@ class OSMHandler(osmium.SimpleHandler):
 class Command(BaseCommand):
     help = "Import amenities from OpenStreetMap via Geofabrik"
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self._error_log_file = None
+        self._error_log_file: Path | None = None
         self._error_count = 0
         self._thread_local = threading.local()
         self._category_rank_map: dict[str, int] = {}
 
-    def _get_cache(self, cache_name: str) -> dict:
-        cache = getattr(self._thread_local, cache_name, None)
+    def _get_cache(self, cache_name: str) -> dict[str, Any]:
+        cache: dict[str, Any] | None = getattr(self._thread_local, cache_name, None)
         if cache is None:
             cache = {}
             setattr(self._thread_local, cache_name, cache)
@@ -218,7 +229,7 @@ class Command(BaseCommand):
         return rank_map
 
     @staticmethod
-    def _get_category_slugs(data: dict) -> list[str]:
+    def _get_category_slugs(data: dict[str, Any]) -> list[str]:
         category_slugs = data.get("category_slugs")
         if category_slugs:
             return category_slugs
@@ -226,13 +237,13 @@ class Command(BaseCommand):
         return [category_slug] if category_slug else []
 
     @staticmethod
-    def _matches_single_tag(tags: dict, tag_str: str) -> bool:
+    def _matches_single_tag(tags: dict[str, Any], tag_str: str) -> bool:
         if "=" in tag_str:
             key, value = tag_str.split("=", 1)
             return tags.get(key) == value
         return tag_str in tags
 
-    def _tags_match(self, tags: dict, osm_filters: list) -> bool:
+    def _tags_match(self, tags: dict[str, Any], osm_filters: list[Any]) -> bool:
         for item in osm_filters:
             if isinstance(item, tuple):
                 if not any(self._matches_single_tag(tags, t) for t in item):
@@ -242,11 +253,13 @@ class Command(BaseCommand):
                     return False
         return True
 
-    def _aggregate_amenities_by_element(self, amenities: list[dict]) -> list[dict]:
+    def _aggregate_amenities_by_element(
+        self, amenities: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         if not amenities:
             return amenities
 
-        grouped: dict[tuple[str, int], dict[str, object]] = {}
+        grouped: dict[tuple[str, int], dict[str, Any]] = {}
         for data in amenities:
             key = (data["osm_type"], data["osm_id"])
             entry = grouped.setdefault(
@@ -261,14 +274,14 @@ class Command(BaseCommand):
                 if current is None or rank < current:
                     entry["category_ranks"][category_slug] = rank
 
-        aggregated: list[dict] = []
+        aggregated: list[dict[str, Any]] = []
         for entry in grouped.values():
             items = entry["items"]
             delete_item = next(
                 (item for item in items if item.get("action") == "delete"), None
             )
 
-            def _item_rank(item: dict) -> int:
+            def _item_rank(item: dict[str, Any]) -> int:
                 category_slugs = self._get_category_slugs(item)
                 if not category_slugs:
                     return 1_000_000
@@ -280,7 +293,7 @@ class Command(BaseCommand):
             base = delete_item or min(items, key=_item_rank)
             category_ranks: dict[str, int] = entry["category_ranks"]
             if category_ranks:
-                per_parent: dict[str, dict[str, object]] = {}
+                per_parent: dict[str, dict[str, Any]] = {}
                 for slug, rank in category_ranks.items():
                     parent_slug = slug.split(".", 1)[0]
                     existing = per_parent.get(parent_slug)
@@ -298,6 +311,7 @@ class Command(BaseCommand):
 
         return aggregated
 
+    @override
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "region",
@@ -379,14 +393,15 @@ class Command(BaseCommand):
             help="Directory for error log files (default: '.' for current directory, use '/tmp' for Docker environments)",
         )
 
-    def handle(self, *args, **options):
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         """Main command execution."""
         import signal
 
         # Set up signal handler for graceful shutdown
         self._shutdown_requested = False
 
-        def signal_handler(signum, frame):
+        def signal_handler(signum: int, frame: Any) -> None:
             """Handle Ctrl+C gracefully."""
             if not self._shutdown_requested:
                 self._shutdown_requested = True
@@ -483,9 +498,7 @@ class Command(BaseCommand):
         )
         for cat in categories:
             mapping_count = len(cat.mappings)
-            self.stdout.write(
-                f"  • {cat.category}: {mapping_count} mappings ({cat.detail_type})"
-            )
+            self.stdout.write(f"  • {cat.category}: {mapping_count} mappings")
         self.stdout.write(self.style.SUCCESS(f"{'=' * 60}\n"))
 
         # 1. Drop existing places if requested (standalone operation)
@@ -790,11 +803,11 @@ class Command(BaseCommand):
     def _log_error_to_file(
         self,
         name: str,
-        category: str = None,
-        osm_type: str = None,
-        osm_id: int = None,
-        error: str = None,
-        osm_tags: dict = None,
+        category: str | None = None,
+        osm_type: str | None = None,
+        osm_id: int | None = None,
+        error: str | None = None,
+        osm_tags: dict[str, str] | None = None,
     ) -> None:
         """Log error to file immediately (on-the-fly).
 
@@ -836,7 +849,7 @@ class Command(BaseCommand):
                 f.write(f"   Error: {error}\n")
             f.write("\n")
 
-    def _load_state(self, state_file: Path) -> dict:
+    def _load_state(self, state_file: Path) -> dict[str, Any]:
         """Load import state from JSON file.
 
         Returns dict with structure:
@@ -871,7 +884,7 @@ class Command(BaseCommand):
                 return {"countries": {}}
         return {"countries": {}}
 
-    def _save_state(self, state_file: Path, state: dict) -> None:
+    def _save_state(self, state_file: Path, state: dict[str, Any]) -> None:
         """Save import state to JSON file.
 
         Uses atomic write to prevent corruption if interrupted.
@@ -903,7 +916,7 @@ class Command(BaseCommand):
 
     def _update_mapping_state(
         self,
-        state: dict,
+        state: dict[str, Any],
         country: str,
         mapping_slug: str,
         timestamp: str,
@@ -948,7 +961,7 @@ class Command(BaseCommand):
         }
 
     def _get_mapping_timestamp(
-        self, state: dict, country: str, mapping_slug: str
+        self, state: dict[str, Any], country: str, mapping_slug: str
     ) -> str | None:
         """Get last import timestamp for a specific country/mapping."""
         country = country.upper()
@@ -1018,17 +1031,17 @@ class Command(BaseCommand):
             return Path()
 
     def _upsert_amenity(
-        self, data: dict, osm_org: Organization, run_start: datetime
+        self, data: dict[str, Any], osm_org: Organization, run_start: datetime
     ) -> str:
         """Create or update GeoPlace + AmenityDetail using schema-based approach."""
         from hut_services import LocationSchema
 
         from server.apps.geometries.models import OperatingStatus
         from server.apps.geometries.schemas import (
-            BrandInput,
             DedupOptions,
             GeoPlaceAmenityInput,
-            PhoneSchema,
+            OperationInput,
+            PartyInput,
             SourceInput,
         )
         from server.apps.translations.schema import TranslationSchema
@@ -1051,30 +1064,46 @@ class Command(BaseCommand):
         # Parse opening hours
         opening_hours_data = self._parse_opening_hours(data.get("opening_hours"))
 
-        # Build phones list
-        phones = []
-        if data.get("phone"):
-            phone_numbers = self._format_phones(data.get("phone"))
-            phones = [PhoneSchema(**p) for p in phone_numbers]
+        # phones retired (external-link-uris): phone tags stay in
+        # osm_tags; numbers are served as uri.phone external links.
 
         # Get category identifiers
         category_slugs = self._get_category_slugs(data)
         categories = [self._get_or_create_category(slug) for slug in category_slugs]
-        category_identifiers = [category.identifier for category in categories]
+        category_identifiers = [
+            category.identifier for category in categories if category is not None
+        ]
         if not category_identifiers:
             raise ValueError("No categories resolved for OSM element")
 
-        # Build brand input if provided (only for chain brands, not product lists)
-        brand_input = None
-        if data.get("brand"):
-            # Skip if brand is a list (contains semicolons) - these are product brands, not chain brands
-            if ";" not in data["brand"]:
-                brand_category = self._get_or_create_brand_category(data["brand"])
-                brand_input = BrandInput(slug=brand_category.slug, name=data["brand"])
+        # Build party inputs (single-value tags only — ";" lists are
+        # product/brand lists, not chain identity). Operator-tag parties
+        # are minted into review (noisy free text). Name-only inputs:
+        # the write path resolves or mints via the dedup key
+        # (OpenSpec ``party-slug-minting``).
+        party_inputs = []
+        if data.get("brand") and ";" not in data["brand"]:
+            party_inputs.append(
+                PartyInput(
+                    name=data["brand"],
+                    role="role.brand",
+                )
+            )
+        if data.get("operator") and ";" not in data["operator"]:
+            party_inputs.append(
+                PartyInput(
+                    name=data["operator"],
+                    role="role.operator",
+                    review_status="review",
+                )
+            )
 
         # Calculate importance based on OSM tags and mapping
         mapping = data.get("mapping")
-        importance = self._calculate_osm_importance(data.get("tags", {}), mapping)
+        importance = self._calculate_osm_importance(
+            data.get("tags", {}),
+            mapping,  # type: ignore  # data["mapping"] carries the OSMMapping set in _process_elements
+        )
 
         # Build flattened GeoPlace schema
         schema = GeoPlaceAmenityInput(
@@ -1088,8 +1117,15 @@ class Command(BaseCommand):
             # Amenity fields (flattened)
             operating_status=OperatingStatus.OPEN,
             opening_hours=opening_hours_data,
-            phones=phones,
-            brand=brand_input,
+            parties=party_inputs,
+            # geoplace-kinds task 2.5: hours also ride a standard-mode
+            # operation row (typed home; the detail write retires in
+            # group 4)
+            operations=(
+                [OperationInput(mode="mode.standard", opening_hours=opening_hours_data)]
+                if opening_hours_data
+                else []
+            ),
         )
 
         # Build source input
@@ -1117,11 +1153,9 @@ class Command(BaseCommand):
         cache_key = f"osm_{source_id}"
         cached_place = place_cache.get(cache_key)
         if cached_place:
-            categories = GeoPlace._resolve_categories_from_identifiers(
-                schema.place_type_identifiers
-            )
+            place_types = GeoPlace._resolve_place_types(schema.place_type_identifiers)
             place, status = GeoPlace._update_from_schema(
-                cached_place, schema, categories, osm_org, source_input
+                cached_place, schema, place_types, osm_org, source_input
             )
         else:
             place, status = GeoPlace.update_or_create(
@@ -1231,7 +1265,7 @@ class Command(BaseCommand):
         # Process in batches to avoid timeout
         batch_size = 1000
         total_count = 0
-        place_ids = []
+        place_ids: list[int] = []
 
         self.stdout.write(
             f"  Batch processing stale places (batch size: {batch_size})..."
@@ -1248,7 +1282,7 @@ class Command(BaseCommand):
                 self.stdout.write(
                     f"    Deactivated {count} places (total: {total_count})"
                 )
-                place_ids = []
+                place_ids: list[int] = []
 
         # Process remaining places in final batch
         if place_ids:
@@ -1454,25 +1488,24 @@ class Command(BaseCommand):
 
         return total_deleted
 
-    def _precache_data(self, amenities: list[dict]):
-        """Pre-cache categories, brands, and organizations to reduce DB queries."""
+    def _precache_data(self, amenities: list[dict[str, Any]]):
+        """Pre-cache categories and parties to reduce DB queries."""
         # Cache for categories
         category_cache = self._get_cache("category_cache")
-        brand_cache = self._get_cache("brand_cache")
-        brand_org_cache = self._get_cache("brand_org_cache")
         category_cache.clear()
-        brand_cache.clear()
-        brand_org_cache.clear()
 
-        # Collect unique category slugs and brands
+        # Collect unique category slugs and party names
         category_slugs = set()
-        brands = set()
+        party_names = set()
+        operator_names = set()
 
         for data in amenities:
             category_slugs.update(self._get_category_slugs(data))
             if data.get("brand") and ";" not in data["brand"]:
-                # Only cache chain brands, not product lists
-                brands.add(data["brand"].lower())
+                # Only chain brands, not product lists
+                party_names.add(data["brand"])
+            if data.get("operator") and ";" not in data["operator"]:
+                operator_names.add(data["operator"])
 
         # Pre-create all categories
         for category_slug in category_slugs:
@@ -1483,159 +1516,113 @@ class Command(BaseCommand):
             except (OSError, ValueError, KeyError, TypeError):
                 pass
 
-        # Pre-create brand parent category
-        if brands:
-            brand_parent, _ = Category.objects.get_or_create(
-                slug="brand",
-                defaults={"name": "Brand"},
-            )
-
-            # Pre-create all brand categories and organizations
-            for brand_name in brands:
-                brand_slug = self._normalize_brand_slug(brand_name)
-                try:
-                    brand_category, _ = Category.objects.get_or_create(
-                        slug=brand_slug,
-                        defaults={
-                            "name": brand_name.title(),
-                            "parent": brand_parent,
-                        },
-                    )
-                    brand_cache[brand_name] = brand_category
-                except (OSError, ValueError, KeyError, TypeError):
-                    pass
+        # Pre-create parties. Operator names are minted first with
+        # review status — a name appearing as both brand and operator
+        # stays in the conservative review state. Dedup is by the
+        # normalized name (``extra.osm_name``, same-named manual
+        # parties adopted); slugs mint once on creation (OpenSpec
+        # ``party-slug-minting``).
+        for name in operator_names:
+            resolve_party_by_name(name, review_status="review")
+        for name in party_names:
+            resolve_party_by_name(name)
 
         self.stdout.write(
-            f"Cached {len(category_cache)} categories and {len(brand_cache)} brands"
+            f"Cached {len(category_cache)} categories and "
+            f"{len(party_names | operator_names)} parties"
         )
 
-    def _get_or_create_brand_category(self, brand_name: str) -> Category:
-        """Get or create brand category (cached)."""
-        brand_name_lower = brand_name.lower()
-        brand_cache = self._get_cache("brand_cache")
+    def _get_or_create_category(self, category_slug: str) -> Category | None:
+        """Get or create category by identifier (parent.slug format).
 
-        # Check cache first
-        if brand_name_lower in brand_cache:
-            return brand_cache[brand_name_lower]
-
-        # Fallback to DB query if not cached
-        parent, _ = Category.objects.get_or_create(
-            slug="brand",
-            defaults={
-                "name": "Brand",
-            },
-        )
-
-        brand_slug = self._normalize_brand_slug(brand_name)
-
-        brand_category, _ = Category.objects.get_or_create(
-            slug=brand_slug,
-            defaults={
-                "name": brand_name.title(),
-                "parent": parent,
-            },
-        )
-
-        # Cache for future use
-        brand_cache[brand_name_lower] = brand_category
-
-        return brand_category
-
-    def _normalize_brand_slug(self, brand_name: str) -> str:
-        """Normalize brand name to a consistent slug."""
-        return brand_name.lower().replace(" ", "_")[:50]
-
-    def _get_or_create_brand_organization(
-        self, brand_name: str, website: str | None
-    ) -> Organization:
-        """Get or create organization for brand (cached)."""
-        brand_slug = self._normalize_brand_slug(brand_name)
-        brand_org_cache = self._get_cache("brand_org_cache")
-
-        # Check cache first
-        if brand_slug in brand_org_cache:
-            return brand_org_cache[brand_slug]
-
-        # Extract base URL from website if available
-        url = None
-        if website:
-            # Extract domain from URL (e.g., https://www.volg.ch/... -> https://www.volg.ch)
-            from urllib.parse import urlparse
-
-            parsed = urlparse(website)
-            url = f"{parsed.scheme}://{parsed.netloc}"
-
-        org, _ = Organization.objects.get_or_create(
-            slug=brand_slug,
-            defaults={
-                "name": brand_name.title(),
-                "url": url or "",
-                "is_active": True,
-            },
-        )
-
-        # Update URL if it was empty and we have one now
-        if not org.url and url:
-            org.url = url
-            org.save(update_fields=["url"])
-
-        # Cache for future use
-        brand_org_cache[brand_slug] = org
-
-        return org
-
-    def _get_or_create_category(self, category_slug: str) -> Category:
-        """Get or create category by identifier (parent.slug format)."""
+        Map-tree aware (geoplace-category-tree): single-part slugs
+        resolve to contract groups (children of super-roots under the
+        ``map`` namespace root); two-part slugs resolve children by
+        their stored identifier under the group. New groups are
+        created under their registry-assigned super-root (default
+        ``amenity``); stray pre-tree roots re-parent under theirs.
+        """
         category_cache = self._get_cache("category_cache")
 
         # Check cache first
         if category_slug in category_cache:
             return category_cache[category_slug]
 
-        # Use identifier field for lookup - much simpler!
-        # identifier format: "root.slug" or "parent.slug"
-        # Our category_slug format: "slug" or "parent.slug"
-        # Need to handle: category_slug="restaurant" should match identifier="root.restaurant"
         parts = category_slug.split(".")
 
         if len(parts) == 1:
-            # Root category: "restaurant" -> identifier="root.restaurant"
-            identifier = f"root.{parts[0]}"
-            parent = None
-            slug = parts[0]
+            category = self._get_or_create_contract_group(parts[0])
         else:
-            # Child category: "restaurant.cafe" -> identifier="restaurant.cafe"
-            identifier = category_slug
-            parent_slug = parts[0]
-            slug = parts[1]
-
-            # Ensure parent exists
-            parent, _ = Category.objects.get_or_create(
-                slug=parent_slug,
-                parent=None,
-                defaults={"name": parent_slug.replace("_", " ").title()},
-            )
-
-        # Try to get by identifier (most efficient)
-        try:
-            category = Category.objects.get(identifier=identifier)
-        except Category.DoesNotExist:
-            # Create new category
-            category = Category.objects.create(
-                slug=slug,
-                parent=parent,
-                name=slug.replace("_", " ").title(),
-            )
-        except Category.MultipleObjectsReturned:
-            # Data inconsistency - use first match
-            category = Category.objects.filter(identifier=identifier).first()
+            parent = self._get_or_create_contract_group(parts[0])
+            # Child: stored identifier is "group.child"
+            try:
+                category = Category.objects.get(identifier=category_slug)
+            except Category.DoesNotExist:
+                category = Category.objects.create(
+                    slug=parts[1],
+                    parent=parent,
+                    name=parts[1].replace("_", " ").title(),
+                )
+            except Category.MultipleObjectsReturned:
+                # Data inconsistency - use first match
+                category = Category.objects.filter(identifier=category_slug).first()
 
         # Cache for future use
         category_cache[category_slug] = category
 
         return category
 
-    def _parse_opening_hours(self, opening_hours_str: str | None) -> dict:
+    def _get_or_create_contract_group(self, group_slug: str) -> Category:
+        """Contract group in the map tree (created under its super-root).
+
+        Existing groups resolve by tree position (child of a
+        super-root); unknown slugs create under the registry-assigned
+        super-root (kinds.py PLACE_KINDS, default amenity). Stray
+        pre-tree parentless roots re-parent — computed identifiers
+        refresh on save.
+        """
+        group_cache = self._get_cache("category_group_cache")
+        if group_slug in group_cache:
+            return group_cache[group_slug]
+
+        group = (
+            Category.objects.filter(slug=group_slug, parent__parent__slug="map").first()
+            or Category.objects.filter(slug=group_slug, parent__slug="map").first()
+        )
+        if group is None:
+            from server.apps.geometries.kinds import MAP_ROOT_SLUG, PLACE_KINDS
+
+            super_slug = (
+                PLACE_KINDS[group_slug].super_root
+                if group_slug in PLACE_KINDS
+                else "amenity"
+            )
+            map_root, _ = Category.objects.get_or_create(
+                slug=MAP_ROOT_SLUG, parent=None, defaults={"name": "Map"}
+            )
+            super_root, _ = Category.objects.get_or_create(
+                slug=super_slug,
+                parent=map_root,
+                defaults={"name": super_slug.replace("_", " ").title()},
+            )
+            stray = Category.objects.filter(slug=group_slug, parent=None).first()
+            if stray is not None:
+                stray.parent = super_root
+                # attname (parent_id) — matches the computed-field
+                # dependency key so `identifier` recomputes; the field
+                # name "parent" would skip the refresh (review P1)
+                stray.save(update_fields=["parent_id"])
+                group = stray
+            else:
+                group = Category.objects.create(
+                    slug=group_slug,
+                    parent=super_root,
+                    name=group_slug.replace("_", " ").title(),
+                )
+        group_cache[group_slug] = group
+        return group
+
+    def _parse_opening_hours(self, opening_hours_str: str | None) -> dict[str, Any]:
         """Parse OSM opening_hours format to our JSON schema."""
         if not opening_hours_str:
             return {}
@@ -1709,7 +1696,7 @@ class Command(BaseCommand):
 
             # Store raw string for reference
             if result:
-                result["_raw"] = opening_hours_str
+                result["_raw"] = opening_hours_str  # type: ignore  # raw string stored alongside interval lists
             else:
                 # If parsing produced no results, just store raw
                 result = {"_raw": opening_hours_str}
@@ -1720,7 +1707,7 @@ class Command(BaseCommand):
             # Fallback: store raw string
             return {"_raw": opening_hours_str}
 
-    def _format_phones(self, phone: str | None) -> list:
+    def _format_phones(self, phone: str | None) -> list[Any]:
         """Format phone number(s) to our JSON schema."""
         if not phone:
             return []
@@ -1730,7 +1717,9 @@ class Command(BaseCommand):
 
         return [{"number": p} for p in phones]
 
-    def _extract_i18n_field(self, tags: dict, field_name: str) -> dict:
+    def _extract_i18n_field(
+        self, tags: dict[str, Any], field_name: str
+    ) -> dict[str, Any]:
         """
         Extract multilingual field from OSM tags.
 
@@ -1775,23 +1764,23 @@ class Command(BaseCommand):
     def _process_mapping_worker(
         self,
         worker_id: int,
-        mapping_data: tuple,
+        mapping_data: tuple[str, OSMMapping],
         region: str,
         osm_org: Organization,
         run_start: datetime,
         category_names: list[str],
         api_endpoint: str | None,
-        headers: dict,
-        queries_md: dict,
+        headers: dict[str, Any],
+        queries_md: dict[str, Any],
         since: datetime | None,
         limit: int | None,
         dry_run: bool,
-        console,
-        progress,
-        overall_task,
-        state: dict = None,
-        state_file: Path = None,
-    ) -> dict:
+        console: Console,
+        progress: Progress,
+        overall_task: TaskID | None,
+        state: dict[str, Any] | None = None,
+        state_file: Path | None = None,
+    ) -> dict[str, Any]:
         """Worker function to process a single mapping in parallel.
 
         Returns a dict with:
@@ -1813,7 +1802,7 @@ class Command(BaseCommand):
         # Calculate server start index based on worker_id
         server_start_index = worker_id % len(OVERPASS_SERVERS)
 
-        def _hide_task_later(task_to_hide: int) -> None:
+        def _hide_task_later(task_to_hide: TaskID) -> None:
             def _hide() -> None:
                 try:
                     progress.update(task_to_hide, visible=False)
@@ -1841,10 +1830,10 @@ class Command(BaseCommand):
                 self._fetch_mapping_overpass(
                     region=region,
                     mapping=mapping,
-                    api_endpoint=api_endpoint,
+                    api_endpoint=api_endpoint,  # type: ignore  # argument typing drift vs stubs
                     headers=headers,
                     queries_md=queries_md,
-                    since=since,
+                    since=since,  # type: ignore  # argument typing drift vs stubs
                     limit=limit,
                     console=console,
                     server_start_index=server_start_index,
@@ -1901,8 +1890,6 @@ class Command(BaseCommand):
             # Pre-cache data and existing associations for this mapping
             self._clear_cache("place_cache")
             self._clear_cache("category_cache")
-            self._clear_cache("brand_cache")
-            self._clear_cache("brand_org_cache")
             self._precache_mapping_data(amenities)
             self._preload_place_cache(amenities, osm_org)
 
@@ -2035,7 +2022,7 @@ class Command(BaseCommand):
         overpass_queries_file: str | None = None,
         since: str | None = None,
         dry_run: bool = False,
-        state: dict | None = None,
+        state: dict[str, Any] | None = None,
         state_file: Path | None = None,
         output_dir: str = ".",
     ):
@@ -2073,9 +2060,9 @@ class Command(BaseCommand):
                 return
 
         # Load queries
-        queries_md = {}
+        queries_md: dict[str, Any] = {}
         if overpass_queries_file:
-            queries_md = self._load_queries_file(overpass_queries_file)
+            queries_md = self._load_queries_file(overpass_queries_file)  # type: ignore  # dynamic attr: plugin-less inference gap
 
         # Determine API endpoint
         api_endpoint = None
@@ -2296,7 +2283,7 @@ class Command(BaseCommand):
         overpass_queries_file: str | None = None,
         since: str | None = None,
         dry_run: bool = False,
-        state: dict | None = None,
+        state: dict[str, Any] | None = None,
         state_file: Path | None = None,
     ) -> bool:
         """Process Overpass data using pipeline approach (fetch → process → import per mapping).
@@ -2488,8 +2475,6 @@ class Command(BaseCommand):
                 # MEMORY FIX: Clear all caches after each mapping to prevent accumulation
                 self._clear_cache("place_cache")
                 self._clear_cache("category_cache")
-                self._clear_cache("brand_cache")
-                self._clear_cache("brand_org_cache")
 
                 self._pipeline_created += created
                 self._pipeline_updated += updated
@@ -2614,7 +2599,7 @@ class Command(BaseCommand):
 
         return True
 
-    def _process_full_json(self, json_data: dict) -> list[OSMElement]:
+    def _process_full_json(self, json_data: dict[str, Any]) -> list[OSMElement]:
         """Convert JSON response to OSMElement list.
 
         All elements get action=None since we don't know if they changed.
@@ -2684,20 +2669,20 @@ class Command(BaseCommand):
                 continue
 
             # Extract tags
-            tags = {}
+            tags: dict[str, str] = {}
             for tag in osm_elem.findall("tag"):
-                tags[tag.get("k")] = tag.get("v")
+                tags[tag.get("k")] = tag.get("v")  # type: ignore  # OSM XML <tag> always carries k/v attrs
 
             # Get coordinates
             if osm_elem.tag == "node":
-                lat = float(osm_elem.get("lat"))
-                lon = float(osm_elem.get("lon"))
+                lat = float(osm_elem.get("lat"))  # type: ignore  # argument typing drift vs stubs
+                lon = float(osm_elem.get("lon"))  # type: ignore  # argument typing drift vs stubs
             else:  # way
                 # For ways, use center from <center> tag
                 center = osm_elem.find("center")
                 if center is not None:
-                    lat = float(center.get("lat"))
-                    lon = float(center.get("lon"))
+                    lat = float(center.get("lat"))  # type: ignore  # argument typing drift vs stubs
+                    lon = float(center.get("lon"))  # type: ignore  # argument typing drift vs stubs
                 else:
                     continue  # Skip ways without center
 
@@ -2719,13 +2704,15 @@ class Command(BaseCommand):
     def _fetch_mapping_overpass(
         self,
         region: str,
-        mapping,
+        mapping: OSMMapping,
         api_endpoint: str,
-        headers: dict,
-        queries_md,
+        headers: dict[str, Any],
+        # Queries log sink: an open file handle (pipeline mode writes a
+        # rendered Markdown log) or the queries dict (worker mode).
+        queries_md: Any,
         since: str | None,
         limit: int | None,
-        console=None,
+        console: Console | None = None,
         server_start_index: int = 0,
     ) -> tuple[list[OSMElement] | None, int, str, int]:
         """Fetch elements for a single mapping from Overpass API.
@@ -2891,9 +2878,9 @@ class Command(BaseCommand):
     def _process_elements(
         self,
         elements: list[OSMElement],
-        mapping,
+        mapping: OSMMapping,
         category_names: list[str],
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Process OSMElement list into amenity data format.
 
         Returns:
@@ -2957,20 +2944,23 @@ class Command(BaseCommand):
 
         return amenities
 
-    def _precache_mapping_data(self, amenities: list[dict]):
-        """Pre-cache categories and brands for a mapping's amenities."""
+    def _precache_mapping_data(self, amenities: list[dict[str, Any]]):
+        """Pre-cache categories and parties for a mapping's amenities."""
         if not amenities:
             return
 
-        # Collect unique category slugs and brands
+        # Collect unique category slugs and party names
         category_slugs = set()
-        brands = set()
+        party_names = set()
+        operator_names = set()
 
         for data in amenities:
             category_slugs.update(self._get_category_slugs(data))
             if data.get("brand") and ";" not in data["brand"]:
-                # Only cache chain brands, not product lists
-                brands.add(data["brand"].lower())
+                # Only chain brands, not product lists
+                party_names.add(data["brand"])
+            if data.get("operator") and ";" not in data["operator"]:
+                operator_names.add(data["operator"])
 
         # Pre-create categories if not cached
         category_cache = self._get_cache("category_cache")
@@ -2984,32 +2974,19 @@ class Command(BaseCommand):
                 except (OSError, ValueError, KeyError, TypeError):
                     pass
 
-        # Pre-create brand categories if not cached
-        brand_cache = self._get_cache("brand_cache")
-
-        if brands:
-            brand_parent, _ = Category.objects.get_or_create(
-                slug="brand",
-                defaults={"name": "Brand"},
-            )
-
-            for brand_name in brands:
-                if brand_name not in brand_cache:
-                    brand_slug = self._normalize_brand_slug(brand_name)
-                    try:
-                        brand_category, _ = Category.objects.get_or_create(
-                            slug=brand_slug,
-                            defaults={
-                                "name": brand_name.title(),
-                                "parent": brand_parent,
-                            },
-                        )
-                        brand_cache[brand_name] = brand_category
-                    except (OSError, ValueError, KeyError, TypeError):
-                        pass
+        # Pre-create parties (operator names first — they mint into
+        # review; a name that is both brand and operator stays in the
+        # conservative state). Idempotent: the resolver dedups by the
+        # normalized name (``extra.osm_name``, same-named manual
+        # parties adopted) and slugs mint once on creation (OpenSpec
+        # ``party-slug-minting``).
+        for name in operator_names:
+            resolve_party_by_name(name, review_status="review")
+        for name in party_names:
+            resolve_party_by_name(name)
 
     def _preload_place_cache(
-        self, amenities: list[dict], osm_org: Organization
+        self, amenities: list[dict[str, Any]], osm_org: Organization
     ) -> None:
         """Pre-load GeoPlace associations for a mapping's amenities."""
         if not amenities:
@@ -3032,12 +3009,12 @@ class Command(BaseCommand):
 
     def _import_amenities(
         self,
-        amenities: list[dict],
+        amenities: list[dict[str, Any]],
         osm_org: Organization,
         run_start: datetime,
         dry_run: bool,
-        progress=None,
-        task_id: int | None = None,
+        progress: Progress | None = None,
+        task_id: TaskID | None = None,
         total_count: int | None = None,
         downloaded_count: int | None = None,
         downloaded_bytes: int | None = None,
@@ -3181,8 +3158,6 @@ class Command(BaseCommand):
             if idx > 0 and idx % 500 == 0:
                 self._clear_cache("place_cache")
                 self._clear_cache("category_cache")
-                self._clear_cache("brand_cache")
-                self._clear_cache("brand_org_cache")
 
         return created_count, updated_count, skipped_count, deleted_count, error_count
 
@@ -3193,7 +3168,7 @@ class Command(BaseCommand):
         limit: int | None = None,
         queries_file: str | None = None,
         since: str | None = None,
-    ) -> list[dict] | None:
+    ) -> list[dict[str, Any]] | None:
         """Fetch amenities from Overpass API.
 
         Args:
@@ -3291,6 +3266,7 @@ class Command(BaseCommand):
                 max_retries = 3
                 retry_delay = 5  # seconds
 
+                result: dict[str, Any] = {}  # assigned on success; re-raised otherwise
                 for attempt in range(max_retries):
                     try:
                         # Make direct HTTP request to Overpass API
@@ -3465,7 +3441,7 @@ class Command(BaseCommand):
 
     def _filter_pbf(
         self, pbf_path: Path, category_names: list[str], force: bool = False
-    ) -> Path:
+    ) -> Path | None:
         """Pre-filter PBF file using osmium tags-filter CLI for performance.
 
         Extracts all tags from osm_filters and creates osmium filter expressions.
@@ -3566,7 +3542,15 @@ class Command(BaseCommand):
         source_org: Organization | None = None,
         place_name: str | None = None,
     ):
-        """Add external link to place via ExternalLink model."""
+        """Add external link to place via ExternalLink model.
+
+        Manual link edits are shielded: ``"links"`` in the place's
+        ``protected_fields`` (set by the admin's external-link inline)
+        skips import link writes entirely.
+        """
+        if "links" in (place.protected_fields or []):
+            return
+
         from server.apps.external_links.models import ExternalLink
 
         # Get or create parent category (link_type)
@@ -3640,7 +3624,7 @@ class Command(BaseCommand):
             external_link=external_link,
         )
 
-    def _precache_categories_batch(self, amenities: list[dict]):
+    def _precache_categories_batch(self, amenities: list[dict[str, Any]]):
         """Pre-fetch all categories in a single query for batch processing.
 
         This is much faster than looking up categories individually during import.
@@ -3677,7 +3661,7 @@ class Command(BaseCommand):
 
     def _upsert_amenities_hybrid_bulk(
         self,
-        amenities: list[dict],
+        amenities: list[dict[str, Any]],
         osm_org: Organization,
         run_start: datetime,
         dry_run: bool,
@@ -3729,7 +3713,7 @@ class Command(BaseCommand):
             return (0, 0, len(amenities), 0, 0)
 
         # Process in batches using fill-and-process strategy
-        buffer = []
+        buffer: list[dict[str, Any]] = []
         total_processed = 0
 
         for idx, data in enumerate(amenities, 1):
@@ -3767,7 +3751,7 @@ class Command(BaseCommand):
 
     def _process_batch_with_retry(
         self,
-        batch: list[dict],
+        batch: list[dict[str, Any]],
         osm_org: Organization,
         run_start: datetime,
         max_retries: int = 3,
@@ -3792,8 +3776,8 @@ class Command(BaseCommand):
         from django.db import DatabaseError
 
         # Step 1: Check all for duplicates (BBox queries)
-        new_places = []
-        existing_places = []
+        new_places: list[dict[str, Any]] = []
+        existing_places: list[tuple[GeoPlace, dict[str, Any]]] = []
 
         place_cache = self._get_cache("place_cache")
 
@@ -3868,8 +3852,8 @@ class Command(BaseCommand):
 
     def _bulk_create_and_update(
         self,
-        new_places: list[dict],
-        existing_places: list[tuple],
+        new_places: list[dict[str, Any]],
+        existing_places: list[tuple[GeoPlace, dict[str, Any]]],
         osm_org: Organization,
         run_start: datetime,
     ) -> tuple[int, int, int, int]:
@@ -3913,7 +3897,6 @@ class Command(BaseCommand):
                     detail = AmenityDetail(
                         operating_status="open",
                         opening_hours=data.get("opening_hours"),
-                        phones=self._format_phones(data.get("phone")),
                     )
                     amenity_details_to_create.append(detail)
 
@@ -3933,6 +3916,20 @@ class Command(BaseCommand):
                     GeoPlaceCategory.objects.bulk_create(
                         associations, ignore_conflicts=True
                     )
+
+                # Derive domain + kind from the just-attached
+                # categories — bulk_create bypasses save(), the
+                # schema-path derivation never runs on this PBF branch
+                # (review P1; geoplace-kind-fk D4)
+                from server.apps.geometries.kinds import (
+                    anchor_category,
+                    place_domain,
+                )
+
+                for place, categories in zip(created_geoplaces, categories_to_create):
+                    place.kind = anchor_category(categories)
+                    place.domain = place_domain(categories)
+                GeoPlace.objects.bulk_update(created_geoplaces, ["kind", "domain"])
 
                 # Now create details with proper references
                 for place, detail in zip(created_geoplaces, amenity_details_to_create):
@@ -3958,9 +3955,9 @@ class Command(BaseCommand):
 
             # Part 2: Bulk update existing places
             if existing_places:
-                places_to_update = []
-                details_to_update = []
-                detail_by_place_id = {}
+                places_to_update: list[GeoPlace] = []
+                details_to_update: list[AmenityDetail] = []
+                detail_by_place_id: dict[int, AmenityDetail] = {}
 
                 place_ids = [existing.id for existing, _ in existing_places]
                 if place_ids:
@@ -3983,8 +3980,6 @@ class Command(BaseCommand):
                     if detail:
                         if data.get("opening_hours"):
                             detail.opening_hours = data["opening_hours"]
-                        if data.get("phone"):
-                            detail.phones = self._format_phones(data["phone"])
                         details_to_update.append(detail)
 
                 # Bulk update
@@ -3995,14 +3990,16 @@ class Command(BaseCommand):
 
                 if details_to_update:
                     AmenityDetail.objects.bulk_update(
-                        details_to_update, ["opening_hours", "phones"]
+                        details_to_update, ["opening_hours"]
                     )
 
                 updated_count += len(existing_places)
 
         return (created_count, updated_count, skipped_count, 0)
 
-    def _calculate_osm_importance(self, tags: dict, mapping) -> int:
+    def _calculate_osm_importance(
+        self, tags: dict[str, Any], mapping: OSMMapping
+    ) -> int:
         """
         Calculate importance for OSM-imported places based on tags and category.
 
@@ -4079,9 +4076,10 @@ class Command(BaseCommand):
         # Clamp to range
         return max(min_importance, min(importance, max_importance))
 
-    def _prepare_geoplace(self, data: dict) -> tuple[GeoPlace, list[Category]]:
+    def _prepare_geoplace(
+        self, data: dict[str, Any]
+    ) -> tuple[GeoPlace, list[Category]]:
         """Prepare GeoPlace instance from amenity data."""
-        from server.apps.geometries.models import OperatingStatus
 
         # Get categories first (needed for slug fallback)
         categories = [
@@ -4091,7 +4089,10 @@ class Command(BaseCommand):
 
         # Calculate importance based on OSM tags and mapping (already in data)
         mapping = data.get("mapping")
-        importance = self._calculate_osm_importance(data.get("tags", {}), mapping)
+        importance = self._calculate_osm_importance(
+            data.get("tags", {}),
+            mapping,  # type: ignore  # data["mapping"] carries the OSMMapping set in _process_elements
+        )
 
         # Get name (may be empty string if no name and no default_name)
         name = data.get("name", "")
@@ -4101,7 +4102,9 @@ class Command(BaseCommand):
             name=name,
             location=Point(data["lon"], data["lat"], srid=4326),
             country_code=self._guess_country_code(Point(data["lon"], data["lat"])),
-            detail_type=OperatingStatus.OPEN.value,  # All amenities are open for now
+            # domain is derived on write from the category tree
+            # (geoplace-category-tree) — this legacy path creates
+            # places before categories; the schema path derives it.
             importance=importance,  # Use calculated importance
             is_active=True,
             is_public=True,
@@ -4110,12 +4113,14 @@ class Command(BaseCommand):
         # Generate slug (uses UUID-based uniqueness, no DB check needed)
         # If name is empty, use the first category's slug as fallback for slug
         slug_name = name if name else ""
-        slug_category = categories[0].slug if categories else None
+        slug_category = (
+            categories[0].slug if categories and categories[0] is not None else None
+        )
         place.slug = GeoPlace.generate_unique_slug(
             slug_name, category_slug=slug_category
         )
 
-        return place, categories
+        return place, [c for c in categories if c is not None]
 
     def _get_dedup_options(self):
         """Get deduplication options."""
@@ -4126,7 +4131,7 @@ class Command(BaseCommand):
             distance_any=4,
         )
 
-    def _data_to_schema(self, data: dict):
+    def _data_to_schema(self, data: dict[str, Any]):
         """Convert amenity data to schema."""
         from hut_services import LocationSchema
 
@@ -4141,7 +4146,7 @@ class Command(BaseCommand):
             operating_status="open",
         )
 
-    def _data_to_source(self, data: dict, run_start: datetime):
+    def _data_to_source(self, data: dict[str, Any], run_start: datetime):
         """Convert amenity data to source input."""
         from server.apps.geometries.schemas import SourceInput
 

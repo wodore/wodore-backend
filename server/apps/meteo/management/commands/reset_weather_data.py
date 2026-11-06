@@ -1,4 +1,6 @@
-from django.core.management.base import BaseCommand
+from typing import Any, override
+
+from django.core.management.base import BaseCommand, CommandParser
 from django.db import transaction
 
 from server.apps.meteo.models import (
@@ -11,7 +13,8 @@ from server.apps.meteo.models import (
 class Command(BaseCommand):
     help = "Reset weather data by deleting WeatherCode entries, collections, and optionally symbols"
 
-    def add_arguments(self, parser):
+    @override
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--icons",
             action="store_true",
@@ -39,7 +42,8 @@ class Command(BaseCommand):
         )
 
     @transaction.atomic
-    def handle(self, *args, **options):
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         dry_run = options.get("dry_run", False)
         delete_icons = options.get("icons", False)
         collection_slug = options.get("collection")
@@ -55,6 +59,17 @@ class Command(BaseCommand):
         symbols_count = 0
 
         # Delete collections and their mappings
+        # Pre-computed below under the same guards that gate their use —
+        # initialize so the checker (and any future guard slip) sees bindings.
+        from server.apps.symbols.models import Symbol
+
+        collections_qs = WeatherCodeSymbolCollection.objects.none()
+        collections_count = 0
+        symbols_qs = Symbol.objects.none()
+        symbols_count = 0
+        codes_qs = WeatherCode.objects.none()
+        total_codes = 0
+
         if not codes_only:
             collections_qs = WeatherCodeSymbolCollection.objects.all()
             if collection_slug:
@@ -93,8 +108,6 @@ class Command(BaseCommand):
                         .distinct()
                     )
                     all_symbol_ids = set(symbol_day_ids) | set(symbol_night_ids)
-
-                    from server.apps.symbols.models import Symbol
 
                     symbols_qs = Symbol.objects.filter(id__in=all_symbol_ids)
                     symbols_count = symbols_qs.count()

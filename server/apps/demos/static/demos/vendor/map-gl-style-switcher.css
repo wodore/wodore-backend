@@ -1,0 +1,279 @@
+/* Override MapLibre GL and Mapbox GL control styles for style switcher */
+.maplibregl-ctrl.style-switcher,
+.mapboxgl-ctrl.style-switcher {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  background: #fff;
+  border-radius: 6px;
+  padding: 4px;
+  margin: 8px;
+  transition: box-shadow 0.2s;
+  min-width: unset;
+  width: auto;
+  user-select: none;
+  cursor: pointer;
+}
+
+/* RTL support */
+[dir="rtl"] .maplibregl-ctrl.style-switcher,
+[dir="rtl"] .mapboxgl-ctrl.style-switcher,
+.maplibregl-ctrl.style-switcher[dir="rtl"],
+.mapboxgl-ctrl.style-switcher[dir="rtl"] {
+  direction: rtl;
+}
+
+/* Theme variants */
+.maplibregl-ctrl.style-switcher.style-switcher-dark,
+.mapboxgl-ctrl.style-switcher.style-switcher-dark {
+  background: #2a2a2a;
+  color: #fff;
+  border: 1px solid #444;
+}
+
+.maplibregl-ctrl.style-switcher.style-switcher-light,
+.mapboxgl-ctrl.style-switcher.style-switcher-light {
+  background: #ffffff;
+  color: #333;
+  border: 1px solid #ddd;
+}
+
+/* List container */
+.style-switcher-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* RTL support for list */
+[dir="rtl"] .style-switcher-list,
+.style-switcher-list[dir="rtl"] {
+  direction: rtl;
+}
+
+/* Individual style items */
+.style-switcher-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+  position: relative;
+  overflow: hidden;
+}
+
+.style-switcher-item:hover {
+  background: #f0f8ff;
+  transform: translateY(-1px);
+}
+
+.style-switcher-item.selected {
+  background: #e6f0ff;
+  font-weight: 600;
+  border: 1px solid #0066cc;
+}
+
+/* When labels are hidden, shrink items to image size only */
+.style-switcher-item:not(:has(span)) {
+  min-width: unset;
+  width: 40px;
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* Hide label span if showLabels is false (for safety) */
+.style-switcher-item.hide-label span {
+  display: none !important;
+}
+
+/* Dark theme item styles */
+.maplibregl-ctrl.style-switcher.style-switcher-dark .style-switcher-item:hover,
+.mapboxgl-ctrl.style-switcher.style-switcher-dark .style-switcher-item:hover {
+  background: #333;
+}
+
+.maplibregl-ctrl.style-switcher.style-switcher-dark
+  .style-switcher-item.selected,
+.mapboxgl-ctrl.style-switcher.style-switcher-dark
+  .style-switcher-item.selected {
+  background: #404040;
+  border-color: #666;
+}
+
+/* Image styles */
+.style-switcher-item img {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 2px;
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+/* Image styles - dark theme */
+.maplibregl-ctrl.style-switcher.style-switcher-dark .style-switcher-item img,
+.mapboxgl-ctrl.style-switcher.style-switcher-dark .style-switcher-item img {
+  background: #555;
+  border-color: #666;
+}
+
+/* Text styles */
+.style-switcher-item span {
+  font-size: 14px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Accessibility improvements */
+.maplibregl-ctrl.style-switcher:focus,
+.mapboxgl-ctrl.style-switcher:focus {
+  outline: 2px solid #0066cc;
+  outline-offset: 1px;
+}
+
+.style-switcher-item:focus {
+  outline: 2px solid #0066cc;
+  outline-offset: 1px;
+}
+
+/* Animation for expand/collapse */
+.style-switcher-list {
+  animation-name: fadeIn;
+  animation-timing-function: ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Scrollbar styling */
+.style-switcher-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.style-switcher-list::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 2px;
+}
+
+.style-switcher-list::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 2px;
+}
+
+/* Scrollbar styling - dark theme */
+.maplibregl-ctrl.style-switcher.style-switcher-dark
+  .style-switcher-list::-webkit-scrollbar-track,
+.mapboxgl-ctrl.style-switcher.style-switcher-dark
+  .style-switcher-list::-webkit-scrollbar-track {
+  background: #2a2a2a;
+}
+
+.maplibregl-ctrl.style-switcher.style-switcher-dark
+  .style-switcher-list::-webkit-scrollbar-thumb,
+.mapboxgl-ctrl.style-switcher.style-switcher-dark
+  .style-switcher-list::-webkit-scrollbar-thumb {
+  background: #555;
+}
+
+/* ========================================
+   Outlined design variant
+   ======================================== */
+
+/* Container: translucent backdrop so items remain legible over the map,
+   while keeping the visible border and no box-shadow that defines this variant. */
+.maplibregl-ctrl.style-switcher.style-switcher-outlined,
+.mapboxgl-ctrl.style-switcher.style-switcher-outlined {
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: none;
+  border: 1.5px solid #ccc;
+}
+
+/* Items: border on each item, no background fill */
+.style-switcher-outlined .style-switcher-item {
+  background: transparent;
+  border: 1.5px solid #ddd;
+  border-radius: 4px;
+}
+
+.style-switcher-outlined .style-switcher-item:hover {
+  background: transparent;
+  border-color: #999;
+  transform: none;
+}
+
+/* Selected item: stronger border, no background fill */
+.style-switcher-outlined .style-switcher-item.selected {
+  background: transparent;
+  border-color: #0066cc;
+  border-width: 1.5px;
+}
+
+/* Images: border style matching the outlined aesthetic */
+.style-switcher-outlined .style-switcher-item img {
+  border: 1.5px solid #ccc;
+  border-radius: 3px;
+  background: transparent;
+}
+
+/* Dark + outlined combo: translucent dark backdrop for legibility, lighter borders for contrast */
+.maplibregl-ctrl.style-switcher.style-switcher-dark.style-switcher-outlined,
+.mapboxgl-ctrl.style-switcher.style-switcher-dark.style-switcher-outlined {
+  background: rgba(42, 42, 42, 0.9);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-color: #555;
+}
+
+.style-switcher-dark.style-switcher-outlined .style-switcher-item {
+  border-color: #555;
+}
+
+.style-switcher-dark.style-switcher-outlined .style-switcher-item:hover {
+  background: transparent;
+  border-color: #888;
+}
+
+.style-switcher-dark.style-switcher-outlined .style-switcher-item.selected {
+  background: transparent;
+  border-color: #6699cc;
+}
+
+.style-switcher-dark.style-switcher-outlined .style-switcher-item img {
+  border-color: #555;
+  background: transparent;
+}
+
+/* Scrollbar: subtle styling for outlined variant */
+.style-switcher-outlined .style-switcher-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.style-switcher-outlined .style-switcher-list::-webkit-scrollbar-thumb {
+  background: #ccc;
+}
+
+.style-switcher-dark.style-switcher-outlined
+  .style-switcher-list::-webkit-scrollbar-thumb {
+  background: #555;
+}

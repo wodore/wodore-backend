@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Any, override
 
 from colorfield.fields import ColorField
 from django_cleanup import cleanup
@@ -14,6 +15,7 @@ from django.utils.translation import gettext_lazy as _
 # from modeltrans.manager import MultilingualManager
 from server.core.managers import BaseMutlilingualManager
 from server.core.models import TimeStampedModel
+from server.core.storage import hashed_media_storage
 
 
 @cleanup.ignore
@@ -25,6 +27,11 @@ class Organization(TimeStampedModel):
     i18n = TranslationField(
         fields=("name", "fullname", "description", "attribution", "url")
     )
+    name_i18n: str
+    fullname_i18n: str
+    description_i18n: str
+    attribution_i18n: str
+    url_i18n: str
     objects = BaseMutlilingualManager()
 
     slug = models.SlugField(unique=True, verbose_name=_("Slug"), db_index=True)
@@ -62,6 +69,9 @@ class Organization(TimeStampedModel):
         ),
     )
     logo = models.ImageField(
+        # Content-hashed storage: media is immutable-cached, a URL must
+        # never change content (server.core.storage).
+        storage=hashed_media_storage,
         max_length=300,
         upload_to="organizations/logos",
         default="organizations/logos/missing.png",
@@ -88,13 +98,13 @@ class Organization(TimeStampedModel):
         unique=False, default=0, verbose_name=_("Order")
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Organization")
         ordering = ("order", "name_i18n")
         indexes = (GinIndex(fields=["i18n"]),)
 
     def __str__(self) -> str:
-        return self.name_i18n  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation
+        return self.name_i18n
 
     @classmethod
     @lru_cache(50)
@@ -147,7 +157,8 @@ class Organization(TimeStampedModel):
             return 0
         return highest_order.get("order", 0) + 1
 
-    def save(self, *args, **kwargs):
+    @override
+    def save(self, *args: Any, **kwargs: Any) -> None:
         if self.order == 0 or self.order is None:
             self.order = Organization.get_next_order_number()
         super().save(*args, **kwargs)

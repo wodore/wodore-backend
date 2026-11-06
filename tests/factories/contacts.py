@@ -2,17 +2,19 @@ import factory
 
 from server.apps.contacts.models import Contact, ContactFunction
 
+from . import _fmt_seq
 
-class ContactFunctionFactory(factory.django.DjangoModelFactory):
+
+class ContactFunctionFactory(factory.django.DjangoModelFactory[ContactFunction]):
     class Meta:
         model = ContactFunction
 
-    slug = factory.Sequence(lambda n: f"function-{n}")
-    name = factory.Sequence(lambda n: f"Function {n}")
+    slug = factory.Sequence(_fmt_seq("function-"))
+    name = factory.Sequence(_fmt_seq("Function "))
     priority = 10
 
 
-class ContactFactory(factory.django.DjangoModelFactory):
+class ContactFactory(factory.django.DjangoModelFactory[Contact]):
     class Meta:
         model = Contact
 

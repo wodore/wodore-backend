@@ -17,11 +17,48 @@ from django.db.models.functions import Cast
 from django.utils import timezone
 
 from server.apps.huts.models import Hut, HutTypeHelper
+from server.apps.huts.schemas_booking import HutBookingsSchema
 from server.apps.organizations.models import Organization
 
 from .models import AvailabilityStatus, HutAvailability, HutAvailabilityHistory
+from .place_dualwrite import mirror_batch, mirror_mark_failure, mirror_status
+from .place_link import hut_slug_to_place_ids
 
-SERVICES: dict = settings.SERVICES
+# Values are hut-services ``BaseService`` instances (plus private-service
+# subclasses merged in settings); typed as ``Any`` because the installed
+# library stubs lag the runtime signature (progress_callback/cached).
+SERVICES: dict[str, Any] = settings.SERVICES
+
+#: Per-statement timeout (ms) for availability batch writes. The global
+#: ``statement_timeout`` (15 s) protects API traffic but is too tight for
+#: the largest single chunk of a batch write — a cancelled statement
+#: discards all of its work, so the batch loop would repeat it. ``SET
+#: LOCAL`` scopes the raised limit to the batch transaction only.
+BATCH_STATEMENT_TIMEOUT_MS = 120_000
+
+#: Max rows per INSERT/UPDATE statement for availability batch writes.
+#: An unbatched ``bulk_create``/``bulk_update`` makes Postgres materialize
+#: every row version of the whole statement in one backend (~100 MB per
+#: ~10k-row statement here) — enough to OOM-kill a small container.
+BULK_WRITE_BATCH_SIZE = 500
+
+
+def _sanitize_negative_free(bookings: dict[int, Any]) -> None:
+    """Clamp negative ``places.free`` sentinels to ``None`` (in place).
+
+    Some sources report unknown free counts as negative numbers — DOC's
+    Tyler API returns ``TotalAvailable = -1`` for "count not published"
+    (Great Walk huts). The availability tables enforce ``free >= 0``, so
+    unknown counts must arrive as ``None``: without this clamp every
+    batch containing such a date dies on
+    ``availability_hutavailability_free_check`` and the affected hut's
+    whole availability update is lost.
+    """
+    for hut_booking in bookings.values():
+        for booking in hut_booking.bookings:
+            places = getattr(booking, "places", None)
+            if places is not None and places.free is not None and places.free < 0:
+                places.free = None
 
 
 class UpdateResult(NamedTuple):
@@ -63,7 +100,7 @@ class AvailabilityService:
         days: int = 365,
         request_interval: float = 0.1,
         progress_callback: Callable[[], None] | None = None,
-    ) -> list:
+    ) -> list[HutBookingsSchema]:
         """
         Fetch booking data from external services (original Hut.get_bookings logic).
 
@@ -87,17 +124,14 @@ class AvailabilityService:
             TotalFallback,
         )
 
-        from server.apps.huts.schemas_booking import HutBookingsSchema
-
         bookings: dict[int, HutServiceBookingSchema] = {}
-        huts = []
+        huts: list[dict[str, Any]] = []
 
         # Build base queryset with prefetch to avoid N+1 queries
         obj = Hut.objects.prefetch_related(
             "hut_type_open", "hut_type_closed", "availability_source_ref"
         )
         obj = obj.filter(slug__in=hut_slugs)
-
         # TODO: Future optimization - parallel service calls
         # If we have multiple booking services (hrs, sac, etc.), we could fetch them
         # concurrently using ThreadPoolExecutor or asyncio to reduce total fetch time.
@@ -185,7 +219,9 @@ class AvailabilityService:
             # source_id from DB is a string (CharField), but external service may use int keys
             # Try both string and int lookup for compatibility
             source_id_str = h.get("source_id")
-            booking = bookings.get(source_id_str)  # Try string key first
+            booking = (
+                bookings.get(source_id_str) if source_id_str is not None else None
+            )  # Try string key first
             if booking is None and source_id_str:
                 # Try converting to int if string lookup failed
                 try:
@@ -211,9 +247,9 @@ class AvailabilityService:
                     ):
                         # Same capacity for both states - rely on external unattended flag
                         if b.unattended and h.get("hut_type_closed_slug") is not None:
-                            b.hut_type = h["hut_type_closed_slug"]  # pyright: ignore[reportAttributeAccessIssue]
+                            b.hut_type = h["hut_type_closed_slug"]  # type: ignore  # msgspec Struct dynamic attr (hut-services)
                         else:
-                            b.hut_type = (  # pyright: ignore[reportAttributeAccessIssue]
+                            b.hut_type = (  # type: ignore  # msgspec Struct dynamic attr (hut-services)
                                 h.get("hut_type_open_slug") or HutTypeEnum.unknown.value
                             )
                     # Use capacity to determine state: fewer beds = closed, more beds = open
@@ -225,11 +261,11 @@ class AvailabilityService:
                         and h.get("hut_type_closed_slug") is not None
                     ):
                         # Booking total is at or below closed capacity → reduced/closed state
-                        b.hut_type = h["hut_type_closed_slug"]  # pyright: ignore[reportAttributeAccessIssue]
+                        b.hut_type = h["hut_type_closed_slug"]  # type: ignore  # msgspec Struct dynamic attr (hut-services)
                     # Default: open state (includes unknown status, no closed type, etc.)
                     else:
                         # Fall back to open (default), or unknown if open is also None
-                        b.hut_type = (  # pyright: ignore[reportAttributeAccessIssue]
+                        b.hut_type = (  # type: ignore  # msgspec Struct dynamic attr (hut-services)
                             h.get("hut_type_open_slug") or HutTypeEnum.unknown.value
                         )
 
@@ -237,6 +273,8 @@ class AvailabilityService:
                 # Ensure source_id is always a string (may come as int from DB)
                 if "source_id" in h and h["source_id"] is not None:
                     h["source_id"] = str(h["source_id"])
+
+        _sanitize_negative_free(bookings)
         return [HutBookingsSchema(**h) for h in huts]
 
     @staticmethod
@@ -282,6 +320,9 @@ class AvailabilityService:
         successful_huts = []
         failed_huts = []
         now = timezone.now()
+        # One association read per run, shared by every batch's place
+        # mirror (Phase C review N1)
+        place_mapping = hut_slug_to_place_ids()
 
         # Process huts in batches: fetch batch → process batch → repeat
         for i in range(0, len(huts), batch_size):
@@ -298,16 +339,19 @@ class AvailabilityService:
                     progress_callback=fetch_progress_callback,
                 )
             except Exception as fetch_error:
-                # If fetch fails for this batch, mark all batch huts as failed
+                # If fetch fails for this batch, mark all batch huts as failed.
+                # One shared timestamp for hut AND place side (Phase C
+                # review F1: keeps the place-driven cadence in step).
+                failure_time = timezone.now()
                 for hut in batch_huts:
                     status, _ = AvailabilityStatus.objects.get_or_create(
-                        hut=hut, defaults={"last_checked": now}
+                        hut=hut, defaults={"last_checked": failure_time}
                     )
-                    status.mark_failure()
+                    status.mark_failure(now=failure_time)
                     failed_huts.append(hut)
                     results.append(
                         UpdateResult(
-                            hut_id=hut.id,  # pyright: ignore[reportAttributeAccessIssue]
+                            hut_id=hut.id,
                             hut_slug=hut.slug,
                             success=False,
                             error_message=f"Batch fetch error: {fetch_error!s}",
@@ -315,6 +359,8 @@ class AvailabilityService:
                     )
                     if process_progress_callback is not None:
                         process_progress_callback()
+                # Dual-write: mirror the fetch failures (Phase C)
+                mirror_mark_failure(batch_huts, failure_time)
                 # Continue with next batch
                 continue
 
@@ -330,7 +376,7 @@ class AvailabilityService:
                     failed_huts.append(hut)
                     results.append(
                         UpdateResult(
-                            hut_id=hut.id,  # pyright: ignore[reportAttributeAccessIssue]
+                            hut_id=hut.id,
                             hut_slug=hut.slug,
                             success=False,
                             error_message="No booking data returned",
@@ -348,6 +394,7 @@ class AvailabilityService:
                         batch=batch_huts_with_data,
                         now=now,
                         update_history_last_checked=update_history_last_checked,
+                        place_mapping=place_mapping,
                     )
 
                     for result in batch_results:
@@ -377,7 +424,7 @@ class AvailabilityService:
                         failed_huts.append(hut)
                         results.append(
                             UpdateResult(
-                                hut_id=hut.id,  # pyright: ignore[reportAttributeAccessIssue]
+                                hut_id=hut.id,
                                 hut_slug=hut.slug,
                                 success=False,
                                 error_message=f"Batch processing error: {e!s}",
@@ -451,6 +498,10 @@ class AvailabilityService:
                     ],
                 )
 
+            # Dual-write: mirror fetch health onto the place status
+            # (Phase C)
+            mirror_status(successful_huts, failed_huts, now)
+
         successful = sum(1 for r in results if r.success)
         failed = sum(1 for r in results if not r.success)
 
@@ -466,6 +517,7 @@ class AvailabilityService:
         batch: list[tuple[Hut, Any]],
         now: datetime.datetime | None = None,
         update_history_last_checked: bool = False,
+        place_mapping: dict[str, int] | None = None,
     ) -> list[UpdateResult]:
         """
         Process multiple huts in a single transaction for better performance.
@@ -511,8 +563,17 @@ class AvailabilityService:
                 # It returns Category objects (the actual FK model for HutAvailability.hut_type)
                 hut_type_cache[hut_type_slug] = HutTypeHelper.values.get(hut_type_slug)
 
-        # Use a single transaction for the entire batch
+        # Use a single transaction for the entire batch. Keep each
+        # statement's memory and runtime bounded (see BULK_WRITE_BATCH_SIZE /
+        # BATCH_STATEMENT_TIMEOUT_MS): the writes below are chunked so the
+        # backend never materializes one giant statement.
         with transaction.atomic():
+            from django.db import connection
+
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"SET LOCAL statement_timeout = {int(BATCH_STATEMENT_TIMEOUT_MS)}"
+                )
             # Bulk fetch all existing availabilities for all huts in the batch
             # CRITICAL: Use select_related to avoid N+1 queries on foreign keys
             existing_availabilities = HutAvailability.objects.filter(
@@ -531,6 +592,9 @@ class AvailabilityService:
             all_availabilities_to_update = []
             all_availabilities_unchanged = []
             all_unchanged_availability_ids = []
+            # (hut_id, date) of rows already queued for creation — see the
+            # create branch below.
+            queued_new: dict[tuple[int, datetime.date], HutAvailability] = {}
 
             # Process each hut in the batch
             for hut, hut_booking in batch:
@@ -538,7 +602,7 @@ class AvailabilityService:
                 if not source_org:
                     results.append(
                         UpdateResult(
-                            hut_id=hut.id,  # pyright: ignore[reportAttributeAccessIssue]
+                            hut_id=hut.id,
                             hut_slug=hut.slug,
                             success=False,
                             error_message=f"Organization '{hut_booking.source}' not found",
@@ -571,26 +635,44 @@ class AvailabilityService:
                     availability = availability_index.get((hut.id, booking.date))
 
                     if availability is None:
-                        # Create new availability record
-                        new_avail = HutAvailability(
-                            hut=hut,
-                            availability_date=booking.date,
-                            source_organization=source_org,
-                            source_id=source_hut_id,
-                            free=booking.free,
-                            total=booking.total,
-                            free_tolerance=booking.free_tolerance,
-                            occupancy_percent=booking.occupancy_percent,
-                            occupancy_steps=booking.occupancy_steps,
-                            occupancy_status=occupancy_status,
-                            reservation_status=reservation_status,
-                            link=booking.link or "",
-                            hut_type=hut_type_obj,
-                            first_checked=now,
-                            last_checked=now,
-                        )
-                        all_new_availabilities.append(new_avail)
-                        created_count += 1
+                        # Create new availability record. The same payload can
+                        # carry several bookings for one (hut, date) (e.g. one
+                        # per hut type) while the unique constraint allows only
+                        # one row — re-use the already-queued row and let the
+                        # latest values win instead of violating
+                        # ``unique_hut_date`` and rolling back the whole batch.
+                        new_avail = queued_new.get((hut.id, booking.date))
+                        if new_avail is None:
+                            new_avail = HutAvailability(
+                                hut=hut,
+                                availability_date=booking.date,
+                                source_organization=source_org,
+                                source_id=source_hut_id,
+                                free=booking.free,
+                                total=booking.total,
+                                free_tolerance=booking.free_tolerance,
+                                occupancy_percent=booking.occupancy_percent,
+                                occupancy_steps=booking.occupancy_steps,
+                                occupancy_status=occupancy_status,
+                                reservation_status=reservation_status,
+                                link=booking.link or "",
+                                hut_type=hut_type_obj,
+                                first_checked=now,
+                                last_checked=now,
+                            )
+                            queued_new[(hut.id, booking.date)] = new_avail
+                            all_new_availabilities.append(new_avail)
+                            created_count += 1
+                        else:
+                            new_avail.free = booking.free
+                            new_avail.total = booking.total
+                            new_avail.free_tolerance = booking.free_tolerance
+                            new_avail.occupancy_percent = booking.occupancy_percent
+                            new_avail.occupancy_steps = booking.occupancy_steps
+                            new_avail.occupancy_status = occupancy_status
+                            new_avail.reservation_status = reservation_status
+                            new_avail.link = booking.link or ""
+                            new_avail.hut_type = hut_type_obj
                     else:
                         # Check if data changed
                         changed = (
@@ -642,7 +724,7 @@ class AvailabilityService:
 
                 results.append(
                     UpdateResult(
-                        hut_id=hut.id,  # pyright: ignore[reportAttributeAccessIssue]
+                        hut_id=hut.id,
                         hut_slug=hut.slug,
                         success=True,
                         records_created=created_count,
@@ -651,10 +733,12 @@ class AvailabilityService:
                     )
                 )
 
-            # Bulk create new availability records
+            # Bulk create new availability records (batch_size bounds the
+            # per-statement memory — see BULK_WRITE_BATCH_SIZE)
             if all_new_availabilities:
                 created_availabilities = HutAvailability.objects.bulk_create(
-                    all_new_availabilities
+                    all_new_availabilities,
+                    batch_size=BULK_WRITE_BATCH_SIZE,
                 )
 
                 # Create initial history entries for new records
@@ -682,6 +766,7 @@ class AvailabilityService:
                     fields=[
                         "free",
                         "total",
+                        "free_tolerance",
                         "occupancy_percent",
                         "occupancy_steps",
                         "occupancy_status",
@@ -690,6 +775,7 @@ class AvailabilityService:
                         "hut_type",
                         "last_checked",
                     ],
+                    batch_size=BULK_WRITE_BATCH_SIZE,
                 )
 
             # Bulk update unchanged availability records
@@ -697,11 +783,15 @@ class AvailabilityService:
                 HutAvailability.objects.bulk_update(
                     all_availabilities_unchanged,
                     fields=["last_checked"],
+                    batch_size=BULK_WRITE_BATCH_SIZE,
                 )
 
             # Bulk create history entries
             if all_new_history_entries:
-                HutAvailabilityHistory.objects.bulk_create(all_new_history_entries)
+                HutAvailabilityHistory.objects.bulk_create(
+                    all_new_history_entries,
+                    batch_size=BULK_WRITE_BATCH_SIZE,
+                )
 
                 # Update history counts in results
                 history_by_hut = {}
@@ -749,11 +839,21 @@ class AvailabilityService:
                         ],
                     )
 
+            # Dual-write: mirror the batch onto the place tables (Phase C
+            # of the geoplace-availability change, design D7) — same
+            # transaction, same ``now``; unmatched huts are logged inside.
+            mirror_batch(
+                batch=batch,
+                now=now,
+                update_history_last_checked=update_history_last_checked,
+                mapping=place_mapping,
+            )
+
         return results
 
     @staticmethod
     def _process_hut_bookings(
-        hut: Hut, hut_booking, now: timezone.datetime = None
+        hut: Hut, hut_booking: HutBookingsSchema, now: datetime.datetime | None = None
     ) -> UpdateResult:
         """
         Process booking data for a single hut and store in database.
@@ -969,7 +1069,7 @@ class AvailabilityService:
         # to avoid N individual database writes
 
         return UpdateResult(
-            hut_id=hut.id,  # pyright: ignore[reportAttributeAccessIssue]
+            hut_id=hut.id,
             hut_slug=hut.slug,
             success=True,
             records_created=created_count,
@@ -1006,7 +1106,7 @@ class AvailabilityService:
             batch_result.results[0]
             if batch_result.results
             else UpdateResult(
-                hut_id=hut.id,  # pyright: ignore[reportAttributeAccessIssue]
+                hut_id=hut.id,
                 hut_slug=hut.slug,
                 success=False,
                 error_message="No result returned from batch update",

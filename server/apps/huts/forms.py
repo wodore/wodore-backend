@@ -1,3 +1,5 @@
+from typing import Any, override
+
 from django import forms
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
@@ -182,7 +184,7 @@ CHOICES = [
 ]
 
 
-class MonthlyOpenAdminForm(forms.ModelForm):
+class MonthlyOpenAdminForm(forms.ModelForm[Hut]):
     url = forms.CharField(required=False, label="URL")
 
     # Radio fields for each month
@@ -223,9 +225,9 @@ class MonthlyOpenAdminForm(forms.ModelForm):
 
     class Meta:
         model = Hut
-        fields = []  # Exclude 'open_monthly' from default form fields
+        fields: list[str] = []  # Exclude 'open_monthly' from default form fields
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         instance = kwargs.get("instance")
         if instance and instance.open_monthly:
@@ -236,7 +238,8 @@ class MonthlyOpenAdminForm(forms.ModelForm):
                     month_key, "unknown"
                 )
 
-    def save(self, commit=True):
+    @override
+    def save(self, commit: bool = True) -> Hut:
         instance = super().save(commit=False)
         instance.open_monthly = {
             "url": self.cleaned_data["url"],

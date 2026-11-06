@@ -1,16 +1,20 @@
+from __future__ import annotations
+
 import json
-from typing import ClassVar
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Any, ClassVar, cast, override
 
 from django_admin_runner.admin import CommandRunnerModelAdminMixin
 
 from django import forms
-from django.conf import settings
 from django.contrib import admin
+from django.db import models as db_models
 from django.db.models.functions import Lower
 from django.forms import ModelForm
+from django.http import HttpRequest
 from django.template.response import TemplateResponse
 from django.utils.html import format_html, format_html_join
-from django.utils.safestring import mark_safe
+from django.utils.safestring import SafeString, mark_safe
 from django.utils.translation import gettext_lazy as _
 
 from unfold import admin as unfold_admin
@@ -21,6 +25,7 @@ from unfold.contrib.filters.admin import (
 )
 from unfold.decorators import display
 
+from server.apps.envvars.registry import resolve_setting
 from server.apps.manager.admin import ModelAdmin
 from server.apps.manager.widgets import UnfoldReadonlyJSONSuit
 from server.apps.translations.admin_helpers import (
@@ -35,14 +40,18 @@ from ..models import (
     GeoPlace,
     GeoPlaceCategory,
     GeoPlaceExternalLink,
+    GeoPlaceParty,
     GeoPlaceSourceAssociation,
 )
 from ..utils import get_progress_bar
 
+if TYPE_CHECKING:
+    from server.apps.categories.models import Category
+
 ## Custom Admin Forms
 
 
-class _GeoPlaceSourceAssociationForm(ModelForm):
+class _GeoPlaceSourceAssociationForm(ModelForm[GeoPlaceSourceAssociation]):
     """Form for GeoPlace source associations."""
 
     schema = forms.JSONField(
@@ -61,7 +70,7 @@ class _GeoPlaceSourceAssociationForm(ModelForm):
             "delete_policy",
         )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         instance = kwargs.get("instance")
         initial = kwargs.get("initial", {})
 
@@ -100,13 +109,14 @@ class GeoPlaceSourceAssociationInline(unfold_admin.TabularInline):
     show_change_link = True
     verbose_name = _("Source")
 
-    def has_add_permission(self, request, obj):
+    @override
+    def has_add_permission(self, request: HttpRequest, obj: Any) -> bool:  # type: ignore  # inline-admin default-param drift, plugin-less
         return False
 
-    def has_delete_permission(self, request, obj):  # pyright: ignore[reportIncompatibleMethodOverride]  # inline-admin default-param drift, plugin-less
+    def has_delete_permission(self, _request, _obj):  # type: ignore  # inline-admin default-param drift, plugin-less
         return False
 
-    @display(description=_("Extra Data"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Extra Data"))
     def extra_display(self, obj: GeoPlaceSourceAssociation) -> str:
         """Display extra data in a readable format."""
         if not obj.extra:
@@ -139,14 +149,15 @@ class GeoPlaceExternalLinkInline(unfold_admin.TabularInline):
     show_change_link = True
     verbose_name = _("External Link")
 
-    def has_add_permission(self, request, obj):
+    @override
+    def has_add_permission(self, request: HttpRequest, obj: Any) -> bool:  # type: ignore  # inline-admin default-param drift, plugin-less
         return True
 
-    def has_delete_permission(self, request, obj):  # pyright: ignore[reportIncompatibleMethodOverride]  # inline-admin default-param drift, plugin-less
+    def has_delete_permission(self, _request, _obj):  # type: ignore  # inline-admin default-param drift, plugin-less
         return True
 
 
-def _format_categories_list(categories) -> str:
+def _format_categories_list(categories: Sequence[Category]) -> str:
     if not categories:
         return "-"
 
@@ -167,25 +178,123 @@ def _format_categories_list(categories) -> str:
     )
 
 
+class GeoPlaceCategoryInlineForm(forms.ModelForm[GeoPlaceCategory]):
+    """Category association form with a schema-driven extra editor.
+
+    The ``extra`` field renders through Unfold's jedison-based
+    ``UnfoldAdminJSONSchemaWidget`` with the schema resolved for the
+    row's category (own category first, else parent) — the editor UI
+    is generated from the JSON Schema. Rows without a schema keep
+    the plain JSON textarea. Validation funnels through
+    ``GeoPlaceCategory.validate_attributes`` — the same helper
+    ``clean()`` and the import use (D3).
+    """
+
+    class Meta:
+        model = GeoPlaceCategory
+        fields = ("category", "classifier", "extra")
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        from unfold.widgets import UnfoldAdminJSONSchemaWidget
+
+        from server.apps.geometries.models import GeoPlaceCategory, resolve_extra_schema
+
+        # Narrow the generic ModelForm instance (its ``instance`` types
+        # as the abstract base — the FK-id attribute is only known on
+        # the concrete model).
+        instance = cast(GeoPlaceCategory, self.instance)
+        if instance.category_id:
+            schema_row = resolve_extra_schema(instance.category)
+            if schema_row is not None and schema_row.schema:
+                self.fields["extra"].widget = UnfoldAdminJSONSchemaWidget(
+                    attrs={"schema": schema_row.schema}
+                )
+
+    @override
+    def clean(self) -> dict[str, Any]:
+        cleaned: dict[str, Any] = super().clean() or {}
+        extra = cleaned.get("extra") or {}
+        if not isinstance(extra, dict):
+            raise forms.ValidationError({"extra": _("Extra must be a JSON object")})
+        category = cleaned.get("category") or self.instance.category
+        GeoPlaceCategory.validate_attributes(category, cleaned.get("classifier"), extra)
+        return cleaned
+
+
 class GeoPlaceCategoryInline(unfold_admin.TabularInline):
-    """GeoPlace category association inline with optional classifier."""
+    """GeoPlace category association inline with operation mode."""
 
     model = GeoPlaceCategory
+    form = GeoPlaceCategoryInlineForm
     tab = True
     fields = (
         "category",
         "classifier",
+        "extra",
     )
     autocomplete_fields = ("category", "classifier")
     extra = 1
     show_change_link = True
     verbose_name = _("Category")
 
-    def has_add_permission(self, request, obj):
+    @override
+    def formfield_for_foreignkey(
+        self,
+        db_field: db_models.ForeignKey[Any, Any],
+        request: HttpRequest,
+        **kwargs: Any,
+    ):
+        """Scope the classifier autocomplete to the kind registry's
+        allowed subtrees (PLACE_KINDS — today mode.*; registry-driven
+        instead of hardcoded, geoplace-kinds task 1.4)."""
+        from server.apps.categories.models import Category
+
+        from ..kinds import PLACE_KINDS
+
+        if db_field.name == "classifier":
+            allowed_roots = sorted(
+                {root for kind in PLACE_KINDS.values() for root in kind.classifiers}
+            )
+            kwargs["queryset"] = Category.objects.filter(
+                parent__slug__in=allowed_roots
+            ).order_by("order")
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    @override
+    def has_add_permission(self, request: HttpRequest, obj: Any) -> bool:  # type: ignore  # inline-admin default-param drift, plugin-less
         return True
 
-    def has_delete_permission(self, request, obj):  # pyright: ignore[reportIncompatibleMethodOverride]  # inline-admin default-param drift, plugin-less
+    def has_delete_permission(self, _request, _obj):  # type: ignore  # inline-admin default-param drift, plugin-less
         return True
+
+
+class GeoPlacePartyInline(unfold_admin.TabularInline):
+    """GeoPlace party association inline (role-classified)."""
+
+    model = GeoPlaceParty
+    tab = True
+    fields = ("party", "role", "order")
+    autocomplete_fields = ("party", "role")
+    extra = 0
+    show_change_link = True
+    verbose_name = _("Party")
+
+    @override
+    def formfield_for_foreignkey(
+        self,
+        db_field: db_models.ForeignKey[Any, Any],
+        request: HttpRequest,
+        **kwargs: Any,
+    ):
+        """Scope the role autocomplete to the role.* subtree."""
+        from server.apps.categories.models import Category
+
+        if db_field.name == "role":
+            kwargs["queryset"] = Category.objects.filter(parent__slug="role").order_by(
+                "order"
+            )
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 ## ADMIN
@@ -201,8 +310,42 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
     """
 
     form = required_i18n_fields_form_factory("name")
+
+    @override
+    def get_form(
+        self,
+        request: HttpRequest,
+        obj: Any = None,
+        change: bool = False,
+        **kwargs: Any,
+    ) -> Any:
+        """Render ``GeoPlace.extra`` through the JSON-Schema widget with
+        the place's kind-root schema (task 2.6) — same editor as the
+        association extra."""
+        form_class = super().get_form(request, obj=obj, change=change, **kwargs)
+        if obj is not None and getattr(obj, "pk", None):
+            from ..kinds import kind_root_category
+            from ..models import resolve_extra_schema
+
+            categories = list(obj.categories.all())
+            root = kind_root_category(categories)
+            schema_row = resolve_extra_schema(root) if root is not None else None
+            if schema_row is not None and schema_row.schema.get("properties"):
+                from unfold.widgets import UnfoldAdminJSONSchemaWidget
+
+                form_class.base_fields["extra"].widget = UnfoldAdminJSONSchemaWidget(
+                    attrs={"schema": schema_row.schema}
+                )
+        return form_class
+
     list_filter_submit = True  # Add submit button for filters
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
+
+    # domain derives on write from the category tree
+    # (geoplace-category-tree) — never hand-edited; kind is the
+    # derived anchor category FK (first association by order/slug,
+    # maintained by the rederive receiver on association writes)
+    readonly_fields = ("domain", "kind")
 
     list_display = (
         "category_icon",
@@ -214,6 +357,8 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         "importance_display",
         "review_tag",
         "description_quality_display",
+        "visits_30d",
+        "visits_365d",
         "is_public",
         "is_active",
         "timestamps_display",
@@ -237,6 +382,14 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
             AutocompleteSelectMultipleFilter,
         ),  # Filter by categories with autocomplete
         (
+            "categories__parent",
+            AutocompleteSelectMultipleFilter,
+        ),  # Filter by category parent (e.g. all accommodations)
+        (
+            "source_set",
+            AutocompleteSelectMultipleFilter,
+        ),  # Filter by source organization (geonames, osm, wodore, ...)
+        (
             "country_code",
             ChoicesDropdownFilter,
         ),  # Filter by country with dropdown
@@ -249,8 +402,6 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         "categories__name_i18n",
         "categories__slug",
     )
-
-    autocomplete_fields = ("parent",)
 
     readonly_fields = (
         "slug",
@@ -271,26 +422,110 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         "is_public",
         "is_active",
         "importance",
+        "visits_30d",
+        "visits_365d",
         "created",
         "modified",
     )
 
-    fieldsets = GeoPlaceAdminFieldsets
+    fieldsets = GeoPlaceAdminFieldsets  # type: ignore  # admin fieldsets/list_filter typing drift (lazy gettext)
 
     list_per_page = 50
 
-    def get_queryset(self, request):
-        return super().get_queryset(request).prefetch_related("categories__parent")
+    @override
+    def get_queryset(self, request: HttpRequest):
+        from server.apps.visits.models import visit_window_annotation
 
-    def get_inlines(self, request, obj):
+        return (
+            super()
+            .get_queryset(request)
+            .prefetch_related("categories__parent")
+            .annotate(
+                visits_30d=visit_window_annotation(GeoPlace, days=30),
+                visits_365d=visit_window_annotation(GeoPlace, days=365),
+            )
+        )
+
+    def get_inlines(self, _request, _obj):  # type: ignore  # admin hook signature drift vs stubs
         """Return inlines for admin."""
         return [
             GeoPlaceCategoryInline,
             GeoPlaceSourceAssociationInline,
             GeoPlaceExternalLinkInline,
+            GeoPlacePartyInline,
         ]
 
-    def get_urls(self):
+    @override
+    def save_formset(
+        self,
+        request: HttpRequest,
+        form: Any,
+        formset: Any,
+        change: bool,
+    ) -> None:
+        """Manual association edits protect the place from import overwrites.
+
+        OpenSpec geoplace-parties decision 7: associations carry no
+        automatic tracking, so the inline formset save explicitly marks
+        the place ``is_modified`` and records the association in
+        ``protected_fields`` — parties role-scoped
+        (``{"parties": ["role.brand"]}``, recording the roles the edit
+        touched), links and categories flat (``"links"`` /
+        ``"categories"`` — no scoping axis needed yet).
+        """
+        protected_inline_models = (
+            GeoPlaceParty,
+            GeoPlaceExternalLink,
+            GeoPlaceCategory,
+        )
+        if formset.has_changed() and formset.model in protected_inline_models:
+            place = form.instance
+            place.is_modified = True
+            protected = list(place.protected_fields or [])
+
+            if formset.model is GeoPlaceParty:
+                # Role-scoped: record the roles this edit touched. A
+                # legacy flat "parties" entry (all roles) is kept —
+                # protection never narrows silently.
+                if "parties" in protected:
+                    place.save(update_fields=["is_modified"])
+                else:
+                    changed_roles: set[str] = set()
+                    for obj, _data in formset.changed_objects:
+                        if obj.role_id:
+                            changed_roles.add(obj.role.identifier)
+                    for obj in (*formset.new_objects, *formset.deleted_objects):
+                        if obj.role_id:
+                            changed_roles.add(obj.role.identifier)
+                    scoped: set[str] = set()
+                    for entry in protected:
+                        if isinstance(entry, dict) and isinstance(
+                            entry.get("parties"), list
+                        ):
+                            scoped.update(str(role) for role in entry["parties"])
+                    protected = [
+                        entry
+                        for entry in protected
+                        if not (isinstance(entry, dict) and "parties" in entry)
+                    ]
+                    protected.append({"parties": sorted(scoped | changed_roles)})
+                    place.protected_fields = protected
+                    place.save(update_fields=["is_modified", "protected_fields"])
+            else:
+                field_name = (
+                    "links" if formset.model is GeoPlaceExternalLink else "categories"
+                )
+                if field_name not in protected:
+                    protected.append(field_name)
+                    place.protected_fields = protected
+                    place.save(update_fields=["is_modified", "protected_fields"])
+                else:
+                    place.save(update_fields=["is_modified"])
+
+        super().save_formset(request, form, formset, change)
+
+    @override
+    def get_urls(self) -> list[Any]:
         from django.urls import path
 
         urls = super().get_urls()
@@ -303,16 +538,15 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         ]
         return custom_urls + urls
 
-    def tilemap_view(self, request):
+    def tilemap_view(self, request: HttpRequest):
         """Interactive tile map with clustering debug and overlay filtering."""
         from server.apps.categories.models import Category
         from server.apps.geometries.config.osm_categories import CATEGORY_REGISTRY
 
         category_slugs = [cat.category for cat in CATEGORY_REGISTRY]
         categories = (
-            Category.objects.filter(
-                parent__isnull=True, slug__in=category_slugs, is_active=True
-            )
+            Category.objects.contract_groups()
+            .filter(slug__in=category_slugs, is_active=True)
             .order_by("order", "slug")
             .values("slug", "name_i18n", "color")
         )
@@ -332,9 +566,7 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
             "title": _("Tile Map"),
             "has_permission": True,
             "overlay_categories_json": json.dumps(overlay_categories),
-            "martin_tile_url": getattr(
-                settings, "MARTIN_TILE_URL", "http://localhost:8075"
-            ),
+            "martin_tile_url": resolve_setting("MARTIN_TILE_URL"),
             "is_fullwidth": "1",
         }
         return TemplateResponse(request, "admin/geometries_tilemap.html", context)
@@ -342,7 +574,7 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
     # Display methods
 
     @display(description="")
-    def category_icon(self, obj):
+    def category_icon(self, obj: GeoPlace) -> str:
         """Display the first category's symbol icon with priority: detailed → simple → mono."""
         # Get first category (ordered by the through model's order field)
         first_category = obj.categories.order_by("order", "slug").first()
@@ -350,7 +582,7 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
             return ""
 
         # Try symbols in priority order: detailed → simple → mono
-        for symbol_attr in ["symbol_detailed", "symbol_simple", "symbol_mono"]:
+        for symbol_attr in ["symbol_color", "symbol_primitive", "symbol_mono"]:
             symbol = getattr(first_category, symbol_attr, None)
             if symbol and symbol.svg_file and symbol.svg_file.name:
                 return mark_safe(
@@ -360,28 +592,39 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         return ""
 
     @display(header=True, ordering=Lower("name"))
-    def title(self, obj):
+    def title(self, obj: GeoPlace) -> tuple[str, SafeString]:
         """Display name and slug in the same column, like Hut admin."""
         return (obj.name_i18n, mark_safe(f"<small><code>{obj.slug}</code></small>"))
 
-    @display(description=_("Categories"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Categories"))
     def categories_display(self, obj: GeoPlace) -> str:
         """Display categories with parents if available."""
         categories = list(obj.categories.all())
         return _format_categories_list(categories)
 
-    @display(description=_("Elevation"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Kind"))
+    def kind_display(self, obj: GeoPlace) -> str:
+        """The anchoring kind category (first by order/slug) — derived.
+
+        Not a stored column: the kind IS the first category
+        association (the same anchor ``domain`` derives its super-root
+        from). Editable via the Categories inline below.
+        """
+        first = obj.categories.order_by("order", "slug").first()
+        return first.identifier if first else "—"
+
+    @display(description=_("Elevation"))
     def elevation_display(self, obj: GeoPlace) -> str:
         """Display elevation with unit."""
         if obj.elevation is not None:
             return f"{obj.elevation} m"
         return "-"
 
-    @display(description=_("Sources"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Sources"))
     def sources_display(self, obj: GeoPlace) -> str:
         """Display source organizations as icons."""
 
-        sources = obj.source_associations.select_related("organization").all()  # pyright: ignore[reportAttributeAccessIssue]  # reverse relation, plugin-less
+        sources = obj.source_associations.select_related("organization").all()  # type: ignore  # dynamic attr: plugin-less inference gap
         if not sources:
             return "-"
 
@@ -411,7 +654,7 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
 
         return mark_safe(f"<span>{''.join(imgs)}</span>")
 
-    @display(description=_("Importance"), ordering="importance")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Importance"), ordering="importance")
     def importance_display(self, obj: GeoPlace) -> str:
         """Display importance as a progress bar with blue color range."""
         # Use blue color gradient
@@ -423,7 +666,17 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
             active=True,
         )
 
-    @display(description=_("Created/Modified"), ordering="modified")  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Visits 30d"), ordering="visits_30d")
+    def visits_30d(self, obj: GeoPlace) -> int:
+        """Visit sum over the last 30 days (openspec: place-visit-counter)."""
+        return obj.visits_30d  # type: ignore  # dynamic attr: plugin-less inference gap
+
+    @display(description=_("Visits 1y"), ordering="visits_365d")
+    def visits_365d(self, obj: GeoPlace) -> int:
+        """Visit sum over the last year (openspec: place-visit-counter)."""
+        return obj.visits_365d  # type: ignore  # dynamic attr: plugin-less inference gap
+
+    @display(description=_("Created/Modified"), ordering="modified")
     def timestamps_display(self, obj: GeoPlace) -> str:
         """Display created and modified timestamps in one column with small font."""
         created = obj.created.strftime("%Y-%m-%d %H:%M") if obj.created else "-"
@@ -439,7 +692,7 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         )
 
     @display(
-        description=_("Review"),  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+        description=_("Review"),
         label={
             "new": "warning",
             "review": "info",
@@ -451,7 +704,7 @@ class GeoPlaceAdmin(LLMAdminMixin, CommandRunnerModelAdminMixin, ModelAdmin):
         """Display review status as colored label."""
         return obj.review_status
 
-    @display(description=_("Location"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Location"))
     def location_display(self, obj: GeoPlace) -> str:
         """Display location coordinates."""
         if obj.location:
@@ -471,14 +724,13 @@ class AmenityDetailAdmin(ModelAdmin):
     Admin interface for AmenityDetail model.
 
     Provides management of amenity-specific details like opening hours,
-    operating status, and brand information.
+    operating status, and contact information.
     """
 
     list_display = (
         "place_name",
         "place_categories",
         "operating_status",
-        "brand",
         "has_opening_hours",
         "has_phones",
         "created",
@@ -489,8 +741,6 @@ class AmenityDetailAdmin(ModelAdmin):
 
     list_filter = (
         "operating_status",
-        "brand__parent",
-        "brand",
         "geo_place__categories__parent",
         "geo_place__categories",
         "geo_place__country_code",
@@ -504,28 +754,7 @@ class AmenityDetailAdmin(ModelAdmin):
         "geo_place__categories__slug",
     )
 
-    autocomplete_fields = ("geo_place", "brand")
-
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        """Filter FK choices based on field type."""
-        if db_field.name == "brand":
-            # Only show categories that are children of 'brands' parent
-            # or adjust this filter based on your category structure
-            from server.apps.categories.models import Category
-
-            # Try to get brands parent category
-            brands_parent = Category.objects.filter(identifier="root.brand").first()
-            if brands_parent:
-                kwargs["queryset"] = Category.objects.filter(
-                    parent=brands_parent
-                ).order_by("name")
-            else:
-                # Fallback: show all categories (or implement different logic)
-                kwargs["queryset"] = Category.objects.filter(
-                    parent__isnull=False
-                ).order_by("parent__name", "name")
-
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    autocomplete_fields = ("geo_place",)
 
     readonly_fields = (
         "created",
@@ -546,14 +775,6 @@ class AmenityDetailAdmin(ModelAdmin):
             {
                 "fields": [
                     "operating_status",
-                ],
-            },
-        ),
-        (
-            _("Brand"),
-            {
-                "fields": [
-                    "brand",
                 ],
             },
         ),
@@ -586,7 +807,8 @@ class AmenityDetailAdmin(ModelAdmin):
 
     list_per_page = 50
 
-    def get_queryset(self, request):
+    @override
+    def get_queryset(self, request: HttpRequest):
         return (
             super()
             .get_queryset(request)
@@ -596,23 +818,23 @@ class AmenityDetailAdmin(ModelAdmin):
 
     # Display methods
 
-    @display(description=_("Place Name"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Place Name"))
     def place_name(self, obj: AmenityDetail) -> str:
         """Display associated place name."""
         return obj.geo_place.name_i18n
 
-    @display(description=_("Categories"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Categories"))
     def place_categories(self, obj: AmenityDetail) -> str:
         """Display place categories."""
         categories = list(obj.geo_place.categories.all())
         return _format_categories_list(categories)
 
-    @display(description=_("Opening Hours"), boolean=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Opening Hours"), boolean=True)
     def has_opening_hours(self, obj: AmenityDetail) -> bool:
         """Check if opening hours are defined."""
         return bool(obj.opening_hours)
 
-    @display(description=_("Phones"), boolean=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Phones"), boolean=True)
     def has_phones(self, obj: AmenityDetail) -> bool:
         """Check if phone numbers are defined."""
         return bool(obj.phones)

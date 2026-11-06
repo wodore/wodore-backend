@@ -29,8 +29,17 @@ ignore_add = [".venv"]
 # its own name, cloned from the quiescent `wodore_template` snapshot —
 # same state as the dev main DB. Need current data? Refresh first:
 #   scripts/db-refresh-template.sh
-post_start = 'scripts/lane-venv.sh && scripts/lane-db.sh create && scripts/sync-martin.sh'
-pre_done = 'scripts/lane-martin.sh stop && scripts/lane-db.sh drop'
+# Both hooks share their bodies with paseo.json (worktree.setup/teardown)
+# and with the pi-agent lane step 1 — same scripts, every host.
+post_start = 'scripts/lane-setup.sh'
+pre_done = 'scripts/lane-teardown.sh'
+
+[run]
+# `workz run` executes this detached on the lane's allocated port. Never
+# rely on the auto-detected bare `manage.py runserver`: it would bypass
+# lane-run.sh (infisical + lane POSTGRES_DB/MARTIN_TILE_URL injection)
+# and hit the shared dev database.
+cmd = 'scripts/lane-dev.sh fg'
 
 [isolation]
 # Dev-server port range for `workz run` — clear of django (8000),

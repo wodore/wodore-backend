@@ -49,6 +49,14 @@ OrganizationAdminFieldsets = [
         },
     ),
     (
+        _("Status"),
+        {
+            "fields": [
+                ("is_active", "is_public"),
+            ],
+        },
+    ),
+    (
         _("Colors"),
         {
             # "classes": ["collapse"],

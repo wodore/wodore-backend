@@ -7,7 +7,6 @@ from .osm_base import CategoryMappings, OSMMapping
 
 OUTDOOR_SERVICES = CategoryMappings(
     category="outdoor_services",
-    detail_type="amenity",
     mappings=[
         OSMMapping(
             osm_filters=[("shop=ski", "amenity=ski_rental")],  # OR

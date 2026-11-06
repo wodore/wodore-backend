@@ -8,7 +8,6 @@ from .osm_base import CategoryMappings, OSMMapping
 
 TOURISM = CategoryMappings(
     category="tourism",
-    detail_type="amenity",
     mappings=[
         # Information - all types combined
         OSMMapping(

@@ -1,3 +1,5 @@
+from typing import override
+
 from django.contrib import admin
 from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _
@@ -75,10 +77,12 @@ class BoundaryAdmin(ModelAdmin):
         ),
     )
 
+    @override
     def has_add_permission(self, request: HttpRequest) -> bool:
         """Disable manual creation - data is imported via command."""
         return False
 
+    @override
     def has_delete_permission(
         self, request: HttpRequest, obj: Boundary | None = None
     ) -> bool:

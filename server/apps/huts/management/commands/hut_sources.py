@@ -1,6 +1,6 @@
 import sys
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, override
 
 import click
 from django_admin_runner import register_command
@@ -42,9 +42,10 @@ def add_hut_source_db(  # type: ignore[no-any-unimported]
         UpdateCreateStatus.ignored: 0,
     }
     for number, hut in enumerate(huts, start=number):
+        no_location = hut.location is None
         shut = HutSource(
             source_id=hut.source_id,
-            location=dbPoint(hut.location.lon_lat) if hut.location else None,
+            location=None if no_location else dbPoint(hut.location.lon_lat),  # type: ignore  # dynamic attr: plugin-less inference gap
             organization=org,
             name=hut.name,
             source_data=hut.source_data.model_dump(by_alias=True, mode="json")
@@ -61,7 +62,21 @@ def add_hut_source_db(  # type: ignore[no-any-unimported]
             if init
             else HutSource.ReviewStatusChoices.new
         )
+        if no_location:
+            # coordinate-less huts stay in review — they cannot become Hut
+            # entries (no location) until coordinates are added manually
+            review_status = HutSource.ReviewStatusChoices.review
         shut, status = HutSource.add(shut, new_review_status=review_status)
+        if no_location and status in (
+            UpdateCreateStatus.created,
+            UpdateCreateStatus.updated,
+        ):
+            shut.review_comment = (
+                "No coordinates from the source — add a location in the admin "
+                "to make this hut importable (hut_sources without location "
+                "are skipped by the hut import)."
+            )
+            shut.save(update_fields=["review_comment"])
         _hut_name = shut.name if len(shut.name) < 18 else shut.name[:15] + ".."
         _name = f"  Hut {number!s: <3} {'`' + shut.source_id + '`':<15} {_hut_name:<20} {'(' + str(shut.organization) + ')':<8}"
         click.echo(f"{_name: <48}", nl=False)
@@ -76,7 +91,7 @@ def add_hut_source_db(  # type: ignore[no-any-unimported]
         click.secho(
             f"  ... {status.value:<8}", fg=status_color.get(status, "red"), nl=False
         )
-        click.secho(f" (#{shut.id})", dim=True)  # pyright: ignore[reportAttributeAccessIssue]
+        click.secho(f" (#{shut.id})", dim=True)
         source_huts.append(shut)
     added = counter[UpdateCreateStatus.created]
     updated = counter[UpdateCreateStatus.updated]
@@ -99,7 +114,7 @@ def add_hutsources_function(
     lang = kwargs.get("lang")
     with_minisite = kwargs.get("with_minisite", False)
     for org in selected_orgs:
-        service_class: BaseService = settings.SERVICES.get(org, None)
+        service_class: BaseService[Any] | None = settings.SERVICES.get(org, None)
         if service_class is not None:
             service = service_class
             obj.stdout.write(f"Get data from '{service.__class__.__name__}'")
@@ -145,9 +160,9 @@ def add_hutsources_function(
 @register_command(group="Huts")
 class Command(CRUDCommand[HutSource]):
     # help = ""
-    model = HutSource  # pyright: ignore[reportAssignmentType] — CRUDCommand convention: class assigned to `model`
+    model = HutSource  # type: ignore  # argument typing drift vs stubs
     model_names = "hutsources"
-    add_function = add_hutsources_function  # pyright: ignore[reportAssignmentType] — see `model`
+    add_function = add_hutsources_function  # type: ignore  # argument typing drift vs stubs
     use_limit_arg = True
     use_offset_arg = True
     # use_update_arg = True
@@ -155,6 +170,7 @@ class Command(CRUDCommand[HutSource]):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
 
+    @override
     def add_arguments(self, parser: CommandParser) -> None:
         super().add_arguments(parser)
         parser.add_argument(
@@ -185,9 +201,10 @@ class Command(CRUDCommand[HutSource]):
             ),
         )
 
-    def handle(
+    @override
+    def handle(  # type: ignore  # required named params before *args: signature drift vs CRUDCommand.handle (Django call_command kwargs)
         self, sources: str, lang: str, with_minisite: bool, *args: Any, **options: Any
-    ) -> None:  # type: ignore[override]
+    ) -> None:
         if sources.lower().strip() == "all":
             org_list = list(settings.SERVICES.keys())
         else:

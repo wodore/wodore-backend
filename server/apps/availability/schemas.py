@@ -74,8 +74,11 @@ class HutAvailabilityPropertiesSchema(BaseModel):
     source: str = Field(
         ..., description="Source organization slug (e.g., 'hrs', 'sac')"
     )
-    source_link: str = Field(
-        ..., description="External link to the hut page on the source website"
+    # NOTE: the GeoJSON aggregate never included source_link (the former
+    # ninja direct-write path skipped response validation, so the required
+    # marker went unnoticed). Optional = matches the actual wire format.
+    source_link: str | None = Field(
+        None, description="External link to the hut page on the source website"
     )
     days: int = Field(..., description="Number of days of availability data", ge=1)
     start_date: datetime.date = Field(

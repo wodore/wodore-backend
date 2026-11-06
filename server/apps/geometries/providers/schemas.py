@@ -29,7 +29,7 @@ class Source:
 
     slug: str
     source_id: str | None = None
-    source_data: dict | None = None
+    source_data: dict[str, Any] | None = None
     priority: int = 10
 
     def __repr__(self) -> str:
@@ -55,6 +55,7 @@ class GeoPlaceSchema:
 
     slug: str
     name: str
+    name_i18n: str
     lat: float
     lon: float
     id: int | None = None  # Database ID (optional, not used by providers)
@@ -179,16 +180,19 @@ def geoplace_to_schema(geoplace: Any) -> GeoPlaceSchema:
             )
             sources.append(source)
 
-    # Extract OSM data from osm_tags if available
-    if geoplace.osm_tags:
+    # Extract OSM data from osm_tags if available. getattr: a Hut (no
+    # osm_tags attribute) passed here by mistake must degrade gracefully
+    # instead of raising AttributeError and killing the whole fetch.
+    osm_tags = getattr(geoplace, "osm_tags", None)
+    if osm_tags:
         # Check if there's an OSM organization source
         has_osm_org = any(s.slug in ["osm", "openstreetmap"] for s in sources)
-        if not has_osm_org and geoplace.osm_tags:
+        if not has_osm_org:
             # Add OSM tags as a source
             osm_source = Source(
                 slug="osm",
-                source_id=geoplace.osm_tags.get("id"),
-                source_data={"tags": geoplace.osm_tags},
+                source_id=osm_tags.get("id"),
+                source_data={"tags": osm_tags},
                 priority=20,
             )
             sources.append(osm_source)
@@ -197,6 +201,7 @@ def geoplace_to_schema(geoplace: Any) -> GeoPlaceSchema:
         id=geoplace.id,  # Include database ID
         slug=geoplace.slug or "",
         name=geoplace.name_i18n,
+        name_i18n=geoplace.name_i18n,
         lat=geoplace.location.y,
         lon=geoplace.location.x,
         sources=sources,
@@ -220,7 +225,7 @@ def hut_to_schema(hut: Any) -> GeoPlaceSchema:
     if hasattr(hut, "hut_sources"):
         for hut_source in hut.hut_sources.all():
             # Build source_data dict
-            source_data = {}
+            source_data: dict[str, Any] = {}
             if hut_source.source_data:
                 source_data = hut_source.source_data
             if hut_source.source_properties:
@@ -238,6 +243,7 @@ def hut_to_schema(hut: Any) -> GeoPlaceSchema:
         id=hut.id,  # Include database ID
         slug=hut.slug or "",
         name=hut.name_i18n,
+        name_i18n=hut.name_i18n,
         lat=hut.location.y,
         lon=hut.location.x,
         sources=sources,

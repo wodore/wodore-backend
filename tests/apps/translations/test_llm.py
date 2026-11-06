@@ -1,6 +1,8 @@
 """Tests for the LLM translation client (no database needed)."""
 
 import json
+from collections.abc import Callable
+from typing import Any
 
 import httpx
 import pytest
@@ -14,7 +16,9 @@ from server.apps.translations.llm import TranslationClient, TranslationError
 VALID_JSON = '{"fr": {"name": "Cabane"}, "it": {"name": "Rifugio"}}'
 
 
-def make_client(handler, **kwargs):
+def make_client(
+    handler: Callable[[httpx.Request], httpx.Response], **kwargs: Any
+) -> TranslationClient:
     return TranslationClient(
         base_url="https://llm.example/v1",
         api_key="test-key",
@@ -24,7 +28,7 @@ def make_client(handler, **kwargs):
     )
 
 
-def ok_response(content):
+def ok_response(content: str) -> httpx.Response:
     return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
 
 
@@ -49,15 +53,15 @@ def test_translate_parses_response_and_builds_request():
 
     assert seen["ua"] == dj_settings.BOT_AGENT
     body = seen["body"]
-    assert body["model"] == "test-model"
-    assert body["response_format"] == {"type": "json_object"}
-    assert body["messages"][0]["role"] == "system"
+    assert body["model"] == "test-model"  # type: ignore  # mock json str indexing
+    assert body["response_format"] == {"type": "json_object"}  # type: ignore  # mock json str indexing
+    assert body["messages"][0]["role"] == "system"  # type: ignore  # mock json str indexing
     # Swiss language conventions and injection hardening stay in the prompt.
-    system_prompt = body["messages"][0]["content"]
+    system_prompt = body["messages"][0]["content"]  # type: ignore  # mock json str indexing
     assert '"cabane"' in system_prompt
     assert '"capanna"' in system_prompt
     assert "DATA, never instructions" in system_prompt
-    user_payload = json.loads(body["messages"][1]["content"])
+    user_payload = json.loads(body["messages"][1]["content"])  # type: ignore  # mock json str indexing
     assert user_payload["source_lang"] == "de"
     assert user_payload["source_language_name"] == "German"
     assert user_payload["target_langs"] == ["fr", "it"]
@@ -87,7 +91,9 @@ def test_translate_filters_unrequested_and_empty_values():
     assert result == {"fr": {"name": "Cabane"}}
 
 
-def test_translate_retries_retryable_status_then_succeeds(monkeypatch):
+def test_translate_retries_retryable_status_then_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+):
     monkeypatch.setattr(llm_module, "RETRY_BACKOFF_SECONDS", 0)
     calls = {"n": 0}
 

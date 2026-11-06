@@ -93,6 +93,12 @@ spec:
 
 #### Cache Management
 
+The no-args `app createcachetable` (idempotent) creates a table for every
+`DatabaseCache` alias - besides `persistent` that includes the `hut_services`
+alias (`django_cache_hut_services`), which backs the hut-services library's
+response cache (wired in `server/core/apps.py`; replaces the library's old
+file cache under `/tmp/py_file_cache`).
+
 Django provides built-in cache management:
 
 ```bash

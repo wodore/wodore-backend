@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import ClassVar
+from collections.abc import Callable
+from typing import Any, ClassVar, Self, override
 
 from modeltrans.fields import TranslationField
 
@@ -21,13 +22,14 @@ class GeoPlaceDetailBase(TimeStampedModel):
             _trackable_fields = ["operating_status", "opening_hours", "phones", "brand"]
     """
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         abstract = True
 
     # Child classes should override this
     _trackable_fields: ClassVar[list[str]] = []
 
-    def save(self, *args, track_modifications=True, **kwargs):
+    @override
+    def save(self, *args: Any, track_modifications: bool = True, **kwargs: Any) -> None:
         """Save the detail and track modifications to parent GeoPlace.
 
         Args:
@@ -58,7 +60,7 @@ class GeoPlaceDetailBase(TimeStampedModel):
         trackable_fields = self._get_trackable_fields()
 
         # Helper function to normalize values for comparison
-        def normalize_value(value):
+        def normalize_value(value: Any) -> Any:
             """Treat None and empty string as equivalent."""
             if value is None or value == "":
                 return ""
@@ -83,7 +85,7 @@ class GeoPlaceDetailBase(TimeStampedModel):
 
         # Update parent GeoPlace if any fields were modified
         if modified_fields:
-            place = self.geo_place  # pyright: ignore[reportAttributeAccessIssue]  # abstract FK
+            place = self.geo_place  # type: ignore  # dynamic attr: plugin-less inference gap
             place.is_modified = True
 
             # Add modified detail fields to parent's protected_fields
@@ -122,7 +124,10 @@ class GeoPlaceDetailBase(TimeStampedModel):
         return translation_fields
 
     def _track_translation_field(
-        self, original, field_name: str, normalize_value
+        self,
+        original: Self,
+        field_name: str,
+        normalize_value: Callable[[Any], Any],
     ) -> list[str]:
         """Track changes to a translation field with granular suffix protection.
 

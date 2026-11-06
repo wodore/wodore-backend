@@ -6,12 +6,14 @@ from django.utils.translation import gettext_lazy as _
 
 from server.core.managers import BaseMutlilingualManager
 from server.core.models import TimeStampedModel
+from server.core.storage import hashed_media_storage
 
 
 class ContactFunction(TimeStampedModel):
     """Function of a contact, e.g. warden ..."""
 
     i18n = TranslationField(fields=("name",))
+    name_i18n: str
     objects = BaseMutlilingualManager()
 
     slug = models.SlugField(unique=True, db_index=True)
@@ -23,6 +25,9 @@ class ContactFunction(TimeStampedModel):
         help_text=_("For example 'warden', 'hut owner', 'cook', ..."),
     )
     symbol = models.ImageField(
+        # Content-hashed storage: media is immutable-cached, a URL must
+        # never change content (server.core.storage).
+        storage=hashed_media_storage,
         max_length=300,
         upload_to="contacts/function/symbol",
         default="contacts/function/symbol/default.png",
@@ -40,10 +45,10 @@ class ContactFunction(TimeStampedModel):
 
     # contacts -> access all contacts
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Contact Function")
         ordering = ("priority", "name_i18n")
         indexes = (GinIndex(fields=["i18n"]),)
 
     def __str__(self) -> str:
-        return self.name_i18n  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation
+        return self.name_i18n

@@ -3,10 +3,12 @@ import contextlib
 with contextlib.suppress(ModuleNotFoundError):
     from django_stubs_ext import QuerySetAny
 
+from typing import override
+
 from django.contrib import admin
 from django.db import models
 from django.http import HttpRequest
-from django.utils.safestring import mark_safe
+from django.utils.safestring import SafeString, mark_safe
 from django.utils.translation import gettext_lazy as _
 
 from unfold.admin import TabularInline
@@ -39,6 +41,7 @@ class WeatherCodeSymbolInline(TabularInline):
     can_delete = False
     show_change_link = True
 
+    @override
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         qs = super().get_queryset(request)
         # Optimize with select_related to avoid N+1 queries
@@ -49,22 +52,22 @@ class WeatherCodeSymbolInline(TabularInline):
             "symbol_night",
         )
 
-    @display(description=_("Collection"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-    def collection_display(self, obj):
+    @display(description=_("Collection"))
+    def collection_display(self, obj: WeatherCodeSymbol) -> str:
         """Display collection slug."""
         if obj.collection:
             return obj.collection.slug
         return "-"
 
-    @display(description=_("Weather Code"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-    def weather_code_display(self, obj):
+    @display(description=_("Weather Code"))
+    def weather_code_display(self, obj: WeatherCodeSymbol) -> str:
         """Display weather code."""
         if obj.weather_code:
             return f"WMO {obj.weather_code.code}"
         return "-"
 
-    @display(description=_("Day"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-    def symbol_day_preview(self, obj):
+    @display(description=_("Day"))
+    def symbol_day_preview(self, obj: WeatherCodeSymbol) -> SafeString:
         """Show day symbol preview."""
         try:
             if obj.symbol_day and obj.symbol_day.svg_file:
@@ -76,8 +79,8 @@ class WeatherCodeSymbolInline(TabularInline):
             pass
         return mark_safe('<span style="color:#999;">-</span>')
 
-    @display(description=_("Night"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-    def symbol_night_preview(self, obj):
+    @display(description=_("Night"))
+    def symbol_night_preview(self, obj: WeatherCodeSymbol) -> SafeString:
         """Show night symbol preview."""
         try:
             if obj.symbol_night and obj.symbol_night.svg_file:
@@ -139,7 +142,7 @@ class WeatherCodeAdmin(ModelAdmin):
     )
     # Note: Inlines disabled for performance - use WeatherCodeSymbol admin to manage symbols
     # inlines = [WeatherCodeSymbolInlineForWeatherCode]
-    fieldsets = (  # pyright: ignore[reportAssignmentType]  # unfold _FieldsetSpec gap
+    fieldsets = (
         (
             _("WMO Code"),
             {
@@ -171,6 +174,7 @@ class WeatherCodeAdmin(ModelAdmin):
         ),
     )
 
+    @override
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         qs = super().get_queryset(request)
         qs = qs.select_related("category")
@@ -189,8 +193,8 @@ class WeatherCodeAdmin(ModelAdmin):
         )
         return qs
 
-    @display(description=_("Category"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-    def category_display(self, obj):
+    @display(description=_("Category"))
+    def category_display(self, obj: WeatherCode) -> str:
         """Display category."""
         if obj.category and obj.category.parent:
             return f"{obj.category.parent.slug}.{obj.category.slug}"
@@ -198,8 +202,8 @@ class WeatherCodeAdmin(ModelAdmin):
             return obj.category.slug
         return "-"
 
-    @display(description=_("Day"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-    def symbol_preview_day(self, obj):
+    @display(description=_("Day"))
+    def symbol_preview_day(self, obj: WeatherCode) -> SafeString:
         """Show day symbol preview from weather-icons-filled collection."""
         try:
             # Use prefetched symbols to avoid extra queries
@@ -218,8 +222,8 @@ class WeatherCodeAdmin(ModelAdmin):
             pass
         return mark_safe('<span style="color:#999;">-</span>')
 
-    @display(description=_("Night"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-    def symbol_preview_night(self, obj):
+    @display(description=_("Night"))
+    def symbol_preview_night(self, obj: WeatherCode) -> SafeString:
         """Show night symbol preview from weather-icons-filled collection."""
         try:
             # Use prefetched symbols to avoid extra queries
@@ -235,8 +239,8 @@ class WeatherCodeAdmin(ModelAdmin):
             pass
         return mark_safe('<span style="color:#999;">-</span>')
 
-    @display(description=_("Day Description"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-    def description_preview_day(self, obj):
+    @display(description=_("Day Description"))
+    def description_preview_day(self, obj: WeatherCode) -> str:
         """Show truncated day description."""
         if obj.description_day:
             desc = obj.description_day
@@ -289,7 +293,7 @@ class WeatherCodeSymbolCollectionAdmin(ModelAdmin):
     )
     # Note: Inlines disabled for performance - use WeatherCodeSymbol admin to manage symbols
     # inlines = [WeatherCodeSymbolInlineForCollection]
-    fieldsets = (  # pyright: ignore[reportAssignmentType]  # unfold _FieldsetSpec gap
+    fieldsets = (
         (
             None,
             {
@@ -315,6 +319,7 @@ class WeatherCodeSymbolCollectionAdmin(ModelAdmin):
         ),
     )
 
+    @override
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         qs = super().get_queryset(request)
         qs = qs.select_related("source_org")
@@ -323,15 +328,15 @@ class WeatherCodeSymbolCollectionAdmin(ModelAdmin):
         # Note: Removed prefetch since inlines are disabled for performance
         return qs
 
-    @display(description=_("Organization"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-    def source_org_display(self, obj):
+    @display(description=_("Organization"))
+    def source_org_display(self, obj: WeatherCodeSymbolCollection) -> str:
         """Display source organization."""
         if obj.source_org:
             return obj.source_org.name or obj.source_org.slug
         return "-"
 
-    @display(description=_("Symbol Count"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-    def symbol_count(self, obj):
+    @display(description=_("Symbol Count"))
+    def symbol_count(self, obj: WeatherCodeSymbolCollection) -> int:
         """Display number of symbols in collection."""
         # Use annotated count if available, otherwise fall back to query
         return getattr(obj, "symbols_count", obj.symbols.count() if obj.pk else 0)
@@ -364,7 +369,7 @@ class WeatherCodeSymbolAdmin(ModelAdmin):
         "created",
         "modified",
     )
-    fieldsets = (  # pyright: ignore[reportAssignmentType]  # unfold _FieldsetSpec gap
+    fieldsets = (
         (
             None,
             {
@@ -395,6 +400,7 @@ class WeatherCodeSymbolAdmin(ModelAdmin):
         ),
     )
 
+    @override
     def get_queryset(self, request: HttpRequest) -> "QuerySetAny":
         qs = super().get_queryset(request)
         return qs.select_related(
@@ -404,22 +410,22 @@ class WeatherCodeSymbolAdmin(ModelAdmin):
             "symbol_night",
         )
 
-    @display(description=_("Weather Code"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-    def weather_code_display(self, obj):
+    @display(description=_("Weather Code"))
+    def weather_code_display(self, obj: WeatherCodeSymbol) -> str:
         """Display weather code."""
         if obj.weather_code:
             return f"WMO {obj.weather_code.code} ({obj.weather_code.slug})"
         return "-"
 
-    @display(description=_("Collection"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-    def collection_display(self, obj):
+    @display(description=_("Collection"))
+    def collection_display(self, obj: WeatherCodeSymbol) -> str:
         """Display collection."""
         if obj.collection:
             return obj.collection.slug
         return "-"
 
-    @display(description=_("Day Symbol"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-    def symbol_preview_day(self, obj):
+    @display(description=_("Day Symbol"))
+    def symbol_preview_day(self, obj: WeatherCodeSymbol) -> SafeString:
         """Show day symbol preview."""
         try:
             if obj.symbol_day and obj.symbol_day.svg_file:
@@ -431,8 +437,8 @@ class WeatherCodeSymbolAdmin(ModelAdmin):
             pass
         return mark_safe('<span style="color:#999;">-</span>')
 
-    @display(description=_("Night Symbol"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-    def symbol_preview_night(self, obj):
+    @display(description=_("Night Symbol"))
+    def symbol_preview_night(self, obj: WeatherCodeSymbol) -> SafeString:
         """Show night symbol preview."""
         try:
             if obj.symbol_night and obj.symbol_night.svg_file:

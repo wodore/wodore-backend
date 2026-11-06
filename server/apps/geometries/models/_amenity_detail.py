@@ -9,7 +9,7 @@ from ._base_detail import GeoPlaceDetailBase
 
 if TYPE_CHECKING:
     from server.apps.geometries.models import GeoPlace
-    from server.apps.geometries.schemas import AmenityDetailInput
+    from server.apps.geometries.schemas import GeoPlaceAmenityInput, PartyInput
     from server.core.utils import UpdateCreateStatus
 
 
@@ -46,8 +46,6 @@ class AmenityDetail(GeoPlaceDetailBase):
         "operating_status",
         "opening_months",
         "opening_hours",
-        "phones",
-        "brand",
     ]
 
     # OneToOne relationship to GeoPlace
@@ -100,17 +98,6 @@ class AmenityDetail(GeoPlaceDetailBase):
         help_text=_(
             "List of phone numbers: [{'number': '+41 123 456 78 90', 'label': 'Main'}]"
         ),
-    )
-
-    # Brand information
-    brand = models.ForeignKey(
-        "categories.Category",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="amenity_brands",
-        verbose_name=_("Brand"),
-        help_text=_("Brand category (e.g., Volg, Migros, Coop)"),
     )
 
     class Meta:
@@ -188,15 +175,87 @@ class AmenityDetail(GeoPlaceDetailBase):
         ]
         if 1 <= month <= 12:
             if not self.opening_months:
-                self.opening_months = {}
+                self.opening_months = dict[str, str]()
             self.opening_months[month_names[month - 1]] = status
             self.save(update_fields=["opening_months"])
+
+    @classmethod
+    def _write_party_associations(
+        cls,
+        place: GeoPlace,
+        parties: list[PartyInput],
+        *,
+        respect_protection: bool = False,
+    ) -> bool:
+        """Write schema party associations onto the place (idempotent).
+
+        Mirrors ``GeoPlaceParty.clean()`` validation: an unknown or
+        non-``role.*`` identifier raises ``ValueError`` instead of being
+        silently dropped. Returns True when a new association was
+        created. Shared by ``update_or_create`` and the GeoPlace-level
+        schema create/update paths.
+
+        With ``respect_protection`` (update paths), role-scoped party
+        protection applies: entries whose role identifier is protected
+        (``GeoPlace.protected_party_roles`` — ``{"parties":
+        ["role.brand"]}`` entries in ``protected_fields``) are skipped,
+        so a manually edited brand never blocks other roles from being
+        written. The legacy flat ``"parties"`` string (all roles) is
+        handled by the callers' gates before this runs.
+        """
+        from server.apps.categories.models import Category
+        from server.apps.parties.models import Party
+        from server.apps.parties.services import resolve_party_by_name
+
+        from . import GeoPlaceParty
+
+        entries: list[PartyInput] = parties
+        if respect_protection:
+            if "parties" in (place.protected_fields or []):
+                # Legacy flat entry: all roles protected.
+                entries = []
+            else:
+                protected_roles = place.protected_party_roles()
+                entries = [e for e in parties if e.role not in protected_roles]
+
+        created_any = False
+        for entry in entries:
+            role = Category.objects.filter(identifier=entry.role).first()
+            if role is None or role.parent_id is None or role.parent.slug != "role":
+                raise ValueError(f"Invalid party role identifier: {entry.role}")
+            party_defaults: dict[str, object] = {}
+            if entry.review_status:
+                party_defaults["review_status"] = entry.review_status
+            if entry.slug:
+                # Explicit slug: reference the existing party, or create
+                # it under that slug (pre-minting-era semantics).
+                party_defaults.setdefault(
+                    "name", entry.name or entry.slug.replace("_", " ").title()
+                )
+                party, _created = Party.objects.get_or_create(
+                    slug=entry.slug, defaults=party_defaults
+                )
+            elif entry.name:
+                # Name-only: dedup by the normalized name (the
+                # ``extra.osm_name`` import identity — same-named manual
+                # parties are adopted); the slug is minted once on
+                # creation (Party.save()).
+                party, _created = resolve_party_by_name(
+                    entry.name, review_status=entry.review_status
+                )
+            else:
+                raise ValueError("PartyInput needs a slug or a name")
+            _assoc, assoc_created = GeoPlaceParty.objects.get_or_create(
+                geo_place=place, party=party, role=role
+            )
+            created_any = created_any or assoc_created
+        return created_any
 
     @classmethod
     def update_or_create(
         cls,
         place: GeoPlace,
-        schema: AmenityDetailInput,
+        schema: GeoPlaceAmenityInput,
         protected_fields: set[str] | None = None,
     ) -> tuple[AmenityDetail, UpdateCreateStatus]:
         """
@@ -204,16 +263,16 @@ class AmenityDetail(GeoPlaceDetailBase):
 
         Args:
             place: GeoPlace instance
-            schema: AmenityDetailInput schema with detail data
+            schema: GeoPlaceAmenityInput schema with detail data
             protected_fields: Set of field names that should not be updated
 
         Returns:
             Tuple of (AmenityDetail instance, UpdateCreateStatus)
 
         Example:
-            from server.apps.geometries.schemas import AmenityDetailInput
+            from server.apps.geometries.schemas import GeoPlaceAmenityInput
 
-            schema = AmenityDetailInput(
+            schema = GeoPlaceAmenityInput(
                 operating_status="open",
                 opening_hours={"mon": [["09:00", "18:00"]]},
                 phones=[PhoneSchema(number="+41 123 456 789")],
@@ -224,7 +283,6 @@ class AmenityDetail(GeoPlaceDetailBase):
                 protected_fields={"phones"},
             )
         """
-        from server.apps.categories.models import Category
         from server.core import UpdateCreateStatus
 
         # Import schema here to avoid circular import during model loading
@@ -244,11 +302,14 @@ class AmenityDetail(GeoPlaceDetailBase):
         update_fields = []
 
         # Update operating_status
-        if "operating_status" not in protected:
-            if detail.operating_status != schema.operating_status:
-                detail.operating_status = schema.operating_status
-                update_fields.append("operating_status")
-                updated = True
+        if (
+            "operating_status" not in protected
+            and schema.operating_status is not None
+            and detail.operating_status != schema.operating_status
+        ):
+            detail.operating_status = schema.operating_status
+            update_fields.append("operating_status")
+            updated = True
 
         # Update opening_months
         if "opening_months" not in protected and schema.opening_months:
@@ -264,33 +325,23 @@ class AmenityDetail(GeoPlaceDetailBase):
                 update_fields.append("opening_hours")
                 updated = True
 
-        # Update phones
-        if "phones" not in protected and schema.phones:
-            new_phones = [
-                p.model_dump() if hasattr(p, "model_dump") else p for p in schema.phones
-            ]
-            if detail.phones != new_phones:
-                detail.phones = new_phones
-                update_fields.append("phones")
+        # phones retired (external-link-uris): written as uri.phone
+        # external links on the place — no detail-row write path
+        # Update party associations (place-level; replaces the former
+        # brand FK — parties attach to the place, not the detail row)
+        if "parties" not in protected and schema.parties:
+            if cls._write_party_associations(
+                place, schema.parties, respect_protection=True
+            ):
                 updated = True
-
-        # Update brand
-        if "brand" not in protected and schema.brand_slug:
-            try:
-                brand = Category.objects.get(slug=schema.brand_slug)
-                if detail.brand != brand:
-                    detail.brand = brand
-                    update_fields.append("brand")
-                    updated = True
-            except Category.DoesNotExist:
-                pass
 
         # Save the detail (without tracking modifications - this is an import)
         if is_new:
             detail.save(track_modifications=False)
             return detail, UpdateCreateStatus.created
         elif updated:
-            detail.save(update_fields=update_fields, track_modifications=False)
+            if update_fields:
+                detail.save(update_fields=update_fields, track_modifications=False)
             return detail, UpdateCreateStatus.updated
         else:
             return detail, UpdateCreateStatus.no_change

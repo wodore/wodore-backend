@@ -9,7 +9,8 @@ This examples uses Django's default media
 files serving technique in development.
 """
 
-from health_check import Cache, Database, Storage
+from dmr.routing import build_404_handler, build_500_handler
+from health_check import Cache, Storage
 from health_check.views import HealthCheckView
 
 from django.conf import settings
@@ -19,26 +20,57 @@ from django.contrib.admindocs import urls as admindocs_urls
 from django.urls import include, path
 from django.views.generic import TemplateView
 
-from .apps.api.api_v1 import api as api_v1
+from .apps.api import api_v1 as api_v1_module
+from .apps.api import assets_view
+from .apps.api.serializer import WodoreSerializer
+from .apps.apiversions.docs import VersionedSwagger
 from .apps.local_auth import account_views
 from .apps.main import urls as django_admin_urls
+from .apps.main import views as main_views
 from .apps.main.views import index
+from .core.db_health import FastDatabaseReadinessCheck, PoolStatsDatabaseCheck
 
 admin.autodiscover()
+
+# API-style JSON errors for unknown /v1/* paths (found by the schemathesis
+# contract run: Django's default HTML 404 violated the documented schema).
+handler404 = build_404_handler("v1/", serializer=WodoreSerializer)
+handler500 = build_500_handler("v1/", serializer=WodoreSerializer)
 
 # Define base URL patterns
 urlpatterns = [
     # Apps:
     path("main/", include(django_admin_urls, namespace="main")),
     # Health checks:
+    # /health/ is the DEEP check (database + cache + storage) - use it for
+    # readiness probes: "can this pod serve traffic right now?".
     path(
         "health/",
         HealthCheckView.as_view(
             checks=[
-                (Database, {}),
+                (PoolStatsDatabaseCheck, {}),
                 (Cache, {"cache_key": None}),
                 (Storage, {}),
             ],
+        ),
+    ),
+    # /health/live/ is the SHALLOW check - no dependencies at all. Use it
+    # for k8s liveness probes: "is the process (and, under ASGI, the event
+    # loop) alive?". A dependency check there would restart perfectly
+    # healthy pods during a database hiccup (restart storm against an
+    # already-struggling dependency).
+    path("health/live/", HealthCheckView.as_view(checks=[])),
+    # /health/ready/ is the FAST readiness check: the DB touch carries a
+    # hard per-check budget (default 2s), so an exhausted pool answers a
+    # clean 503 quickly instead of hanging until the kubelet probe times
+    # out (2026-10-05 staging wedge: 15s probe < 30s pool wait meant only
+    # "context deadline exceeded", plus one zombie health check per
+    # probe). Probe with a timeout of ~3x the budget. The deep /health/
+    # above stays for humans and debugging.
+    path(
+        "health/ready/",
+        HealthCheckView.as_view(
+            checks=[(FastDatabaseReadinessCheck, {"budget_seconds": 2.0})]
         ),
     ),
     # Locale:
@@ -48,15 +80,37 @@ urlpatterns = [
     # path("", include("admin_volt.urls")), # admin-volt
     path("admin/doc/", include(admindocs_urls)),
     path("admin/", admin.site.urls),
-    # Api:
-    path("v1/", api_v1.urls),  # type: ignore
+    # Api (django-modern-rest):
+    # Version-addressable OpenAPI schema — exact path BEFORE the /v1/
+    # include (serves stored snapshots for ?api_version=, live schema
+    # otherwise).
+    path("v1/openapi.json", api_v1_module.versioned_openapi_json),
+    path("v1/docs", VersionedSwagger.as_view(api_v1_module._cached_schema())),
+    *api_v1_module.urlpatterns,
     # Text and xml static files:
+    path("robots.txt", main_views.robots_txt),
+    # llms.txt: the bare root is ALWAYS English (the conventional LLM
+    # entry point, no Accept-Language negotiation); every OTHER language
+    # in settings.LANGUAGES gets a stable /llms.<lang>.txt variant. The
+    # language list lives in ONE place — settings.LANGUAGES — driving
+    # these routes, the view's cross-links header and the robots.txt
+    # Allow lines alike. Any other /llms.<lang>.txt spelling (unknown
+    # language, or the root language as a variant) permanently redirects
+    # to the English root instead of 404ing.
+    path("llms.txt", main_views.llms_txt),
+    *(
+        path(f"llms.{code}.txt", main_views.llms_txt, {"lang": code})
+        for code, _name in settings.LANGUAGES
+        if code != main_views.LLMS_ROOT_LANG
+    ),
+    path("llms.<str:lang>.txt", main_views.llms_txt_redirect),
+    # Backend-served brand assets (og/imagor pipeline references —
+    # e.g. the watermark composited onto og photos). No frontend
+    # dependency: the files are bundled in server/apps/api/assets/.
     path(
-        "robots.txt",
-        TemplateView.as_view(
-            template_name="txt/robots.txt",
-            content_type="text/plain",
-        ),
+        "assets/logo/<str:name>",
+        assets_view.serve_logo,
+        name="logo-asset",
     ),
     path(
         "humans.txt",
@@ -123,3 +177,11 @@ if settings.DEBUG:  # pragma: no cover
         ]
     except ModuleNotFoundError:
         pass
+
+# Demo pages (mapcompare etc.) — available in development (DEBUG, open)
+# and staging (DEMOS_ENABLED, superuser-only). Production has neither.
+if getattr(settings, "DEMOS_ENABLED", False):
+    urlpatterns = [
+        path("demos/", include("server.apps.demos.urls")),
+        *urlpatterns,
+    ]

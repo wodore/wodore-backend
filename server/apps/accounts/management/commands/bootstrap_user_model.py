@@ -18,6 +18,8 @@ Run once per existing database (dev main DB, wodore_template, lanes).
 
 from typing import Any
 
+from typing_extensions import override
+
 from django.core.management.base import BaseCommand
 from django.db import connection
 from django.utils import timezone
@@ -26,6 +28,7 @@ from django.utils import timezone
 class Command(BaseCommand):
     help = "Bootstrap the custom user model switch on pre-switch databases."
 
+    @override
     def handle(self, *args: Any, **options: Any) -> None:
         from django.core.management import call_command
 

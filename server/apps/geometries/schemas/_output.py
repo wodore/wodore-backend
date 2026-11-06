@@ -4,20 +4,20 @@ Schemas for GeoPlace API endpoints.
 
 from typing import Any
 
+import pydantic
 from hut_services import LocationSchema
-from ninja import Field, ModelSchema, Schema
+from pydantic import Field
 
 from django.conf import settings
 from django.http import HttpRequest
 
-from server.apps.categories.models import Category
 from server.apps.organizations.schema import (
     OrganizationSourceIdDetailSchema,
     OrganizationSourceIdSlugSchema,
 )
 
 
-class SymbolSchema(Schema):
+class SymbolSchema(pydantic.BaseModel):
     """Schema for symbol URLs with different variants."""
 
     simple: str | None = None
@@ -27,9 +27,9 @@ class SymbolSchema(Schema):
     @staticmethod
     def resolve_simple(obj: Any, request: HttpRequest | None = None) -> str | None:
         """Get simple symbol URL."""
-        if not hasattr(obj, "symbol_simple") or not obj.symbol_simple:
+        if not hasattr(obj, "symbol_primitive") or not obj.symbol_primitive:
             return None
-        path = str(obj.symbol_simple)
+        path = str(obj.symbol_primitive)
         if path.startswith("http"):
             return path
         media_url = getattr(settings, "MEDIA_URL", "/media/")
@@ -40,9 +40,9 @@ class SymbolSchema(Schema):
     @staticmethod
     def resolve_detailed(obj: Any, request: HttpRequest | None = None) -> str | None:
         """Get detailed symbol URL."""
-        if not hasattr(obj, "symbol_detailed") or not obj.symbol_detailed:
+        if not hasattr(obj, "symbol_color") or not obj.symbol_color:
             return None
-        path = str(obj.symbol_detailed)
+        path = str(obj.symbol_color)
         if path.startswith("http"):
             return path
         media_url = getattr(settings, "MEDIA_URL", "/media/")
@@ -64,35 +64,81 @@ class SymbolSchema(Schema):
         return f"{media_url}{path}"
 
 
-class CategorySchema(ModelSchema):
+class CategorySchema(pydantic.BaseModel):
     """Schema for category information in GeoPlace responses."""
 
-    name: str | None = Field(..., alias="name_i18n")
-    description: str | None = Field(None, alias="description_i18n")
+    model_config = pydantic.ConfigDict(from_attributes=True)
+
+    slug: str
+    name: str | None = Field(None, validation_alias="name_i18n")
+    description: str | None = Field(None, validation_alias="description_i18n")
     symbol: SymbolSchema | None = None
 
-    class Meta:
-        model = Category
-        fields = ("slug", "name", "description")
 
+class CategoryPlaceTypeSchema(pydantic.BaseModel):
+    """Schema for category place type with symbols (used in GeoPlace).
 
-class CategoryPlaceTypeSchema(Schema):
-    """Schema for category place type with symbols (used in GeoPlace)."""
+    ``classifier`` and ``extra`` are association-level attributes
+    (OpenSpec ``geoplace-capacity-and-types-via-categories``): the
+    season classification (``season.*`` identifier) and typed
+    per-association attributes (bed capacities).
+    """
 
     slug: str
     name: str
     description: str = ""
     symbol: dict[str, str] | None = None
+    classifier: str | None = None
+    extra: dict[str, Any] = pydantic.Field(default_factory=dict)
 
 
-class GeoPlaceBaseSchema(Schema):
+class PartyLinkSchema(pydantic.BaseModel):
+    """Schema for a party link (label + url)."""
+
+    url: str
+    label: str | None = None
+
+
+class PartySchema(pydantic.BaseModel):
+    """Schema for role-classified party associations (geoplace-parties)."""
+
+    role: str  # role category identifier, e.g. "role.operator"
+    slug: str
+    name: str | None = Field(None, validation_alias="name_i18n")
+    links: list[PartyLinkSchema] = Field(default_factory=list)
+    symbol: dict[str, str] | None = None  # resolved color/mono URLs
+
+
+class CategoryKindRefSchema(pydantic.BaseModel):
+    """The anchoring kind category of a place (preview-light).
+
+    The main category (e.g. ``accommodation.hut``) — stored as the
+    ``GeoPlace.kind`` FK (geoplace-kind-fk). ``name`` (request
+    language), ``symbol`` (the categories-member URL dict),
+    ``classifier`` (``mode.*`` season classification) and ``extra``
+    (schema-validated attributes) from the anchor association make a
+    preview that selects only ``kind`` self-sufficient.
+    """
+
+    identifier: str
+    slug: str
+    color: str | None = None
+    name: str | None = None
+    symbol: dict[str, str] | None = None
+    classifier: str | None = None
+    extra: dict[str, Any] | None = None
+
+
+class GeoPlaceBaseSchema(pydantic.BaseModel):
     """Base schema for GeoPlace with common fields."""
 
-    id: int
+    slug: str
     name: str
     country_code: str | None
     elevation: int | None
     importance: int
+    domain: str
+    kind: CategoryKindRefSchema | None = None
     location: LocationSchema
     categories: list[str] | list[CategoryPlaceTypeSchema] | None = None
     sources: (
@@ -100,18 +146,13 @@ class GeoPlaceBaseSchema(Schema):
         | list[OrganizationSourceIdDetailSchema]
         | None
     ) = None
+    parties: list[PartySchema] | None = None
 
 
 class GeoPlaceSearchSchema(GeoPlaceBaseSchema):
     """Schema for search results with location coordinates."""
 
     score: float | None = None
-
-
-class GeoPlaceDetailSchema(GeoPlaceSearchSchema):
-    """Detailed schema for GeoPlace with all public fields."""
-
-    parent: GeoPlaceBaseSchema | None = None
 
 
 class GeoPlaceNearbySchema(GeoPlaceBaseSchema):
@@ -123,22 +164,13 @@ class GeoPlaceNearbySchema(GeoPlaceBaseSchema):
 # Amenity schemas
 
 
-class WebsiteSchema(Schema):
-    """Schema for website with optional label."""
+class AmenityDetailSchema(pydantic.BaseModel):
+    """Schema for amenity detailed information.
 
-    url: str
-    label: str | None = None
-
-
-class PhoneSchema(Schema):
-    """Schema for phone number with optional label."""
-
-    number: str
-    label: str | None = None
-
-
-class AmenityDetailSchema(Schema):
-    """Schema for amenity detailed information."""
+    Websites/links live at the place level (external links), overflow
+    data on ``GeoPlace.extra``, phone numbers as ``uri.phone`` links
+    (external-link-uris) — none of them belong on this block.
+    """
 
     operating_status: str
     opening_months: dict[str, str] = Field(
@@ -149,15 +181,35 @@ class AmenityDetailSchema(Schema):
         default_factory=dict,
         description="Structured weekly hours per weekday + public holidays",
     )
-    websites: list[WebsiteSchema] = Field(default_factory=list)
-    phones: list[PhoneSchema] = Field(default_factory=list)
-    extra: dict[str, Any] = Field(default_factory=dict)
 
 
-class AmenitySchema(GeoPlaceBaseSchema):
-    """Schema for amenity places with full details."""
+class LinkSchema(pydantic.BaseModel):
+    """One typed external link on a place (external-link-uris)."""
+
+    uri: str
+    url: str
+    label: str | None = None
+    symbol: dict[str, str] | None = None
+
+
+class GeoPlaceDetailSchema(GeoPlaceBaseSchema):
+    """Unified place detail (place-detail-endpoint).
+
+    Required members: ``slug``, ``name``, ``domain`` (the type
+    discriminator clients switch on), ``location``, ``importance``.
+    Everything else is an optional member under the ``fields[places]``
+    sparse-fieldset selection; detail blocks appear as sibling members
+    named exactly after their super-root (``amenity`` now,
+    ``admin``/``natural`` later) and only for places of that type
+    with a detail row.
+    """
 
     description: str | None = None
-    detail_type: str
     review_status: str | None = None
-    amenity_detail: AmenityDetailSchema | None = None
+    # domain inherited from GeoPlaceBaseSchema (always present)
+    amenity: AmenityDetailSchema | None = None
+    links: list[LinkSchema] | None = None
+    # Required-but-nullable on the list schemas; optional members on
+    # the detail endpoint — excludable via fields[places] selection.
+    country_code: str | None = None
+    elevation: int | None = None

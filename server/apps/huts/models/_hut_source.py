@@ -34,7 +34,7 @@ class HutSource(TimeStampedModel):
 
     ReviewStatusChoices = _ReviewStatusChoices
 
-    objects: BaseManager = BaseManager()  # pyright: ignore[reportIncompatibleVariableOverride]
+    objects: BaseManager = BaseManager()
 
     source_id = models.CharField(
         blank=False,
@@ -50,7 +50,9 @@ class HutSource(TimeStampedModel):
         help_text=_("Name of the object"),
     )
     organization = models.ForeignKey(Organization, on_delete=models.RESTRICT)
-    location = models.PointField(blank=True, default=None, verbose_name=_("Location"))
+    location = models.PointField(
+        blank=True, default=None, null=True, verbose_name=_("Location")
+    )
     is_active = models.BooleanField(
         default=True,
         db_index=True,
@@ -81,7 +83,7 @@ class HutSource(TimeStampedModel):
         blank=True,
         default=dict,
     )
-    previous_object = models.ForeignKey["HutSource"](
+    previous_object = models.ForeignKey(
         "self",
         blank=True,
         null=True,
@@ -89,7 +91,7 @@ class HutSource(TimeStampedModel):
         verbose_name=_("Previous Entry"),
         help_text=_("Id to the previous object."),
     )
-    hut = models.ForeignKey["Hut"](
+    hut = models.ForeignKey(
         "Hut",
         null=True,
         blank=True,
@@ -98,7 +100,7 @@ class HutSource(TimeStampedModel):
         verbose_name=_("Hut"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = "Hut Source"
         verbose_name_plural = "Hut Sources"
         ordering = (Lower("name"), "organization__order")
@@ -134,8 +136,19 @@ class HutSource(TimeStampedModel):
                 ignore_type_in_groups=[DeepDiff.numbers, (list, tuple)],
             )
             loc_diff = ""
-            if other_hut_src.location.distance(hut_source.location) > 0.00005:
-                loc_diff = f"Location changed from '{other_hut_src.location.tuple}' to '{hut_source.location.tuple}'"
+            old_loc, new_loc = other_hut_src.location, hut_source.location
+            if old_loc is None or new_loc is None:
+                # location can be empty (coordinate-less source): None <-> Point
+                # is a location change, None <-> None is not
+                if (old_loc is None) != (new_loc is None):
+                    loc_diff = (
+                        f"Location changed from '{None if old_loc is None else old_loc.tuple}' "
+                        f"to '{None if new_loc is None else new_loc.tuple}'"
+                    )
+            elif old_loc.distance(new_loc) > 0.00005:
+                loc_diff = (
+                    f"Location changed from '{old_loc.tuple}' to '{new_loc.tuple}'"
+                )
             if diff or loc_diff:  # something changed, add a new entry:
                 diff_comment = (
                     diff.pretty()

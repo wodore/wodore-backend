@@ -11,10 +11,15 @@ places with independent per-place scores.
 See openspec change ``pin-external-images``.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from server.apps.geometries.models import GeoPlaceImageAssociation
@@ -25,6 +30,10 @@ from server.apps.organizations.models import Organization
 
 from .image_response_cache import invalidate_for_hut, invalidate_for_place
 from .providers.base import ImageResult
+
+if TYPE_CHECKING:
+    from server.apps.geometries.models import GeoPlace
+    from server.apps.huts.models import Hut
 
 logger = structlog.get_logger()
 
@@ -52,6 +61,20 @@ class PinStats:
 def _source_ident(result: ImageResult) -> str:
     """Stable dedupe key for a provider result."""
     return f"{result.provider}:{result.source_id}"[:512]
+
+
+def _aware(dt: datetime | None) -> datetime | None:
+    """Make a provider capture time timezone-aware (naive → UTC).
+
+    EXIF/capture times carry no zone info and providers may hand them
+    through unparsed (Wikimedia ``date_taken``, stale cached results).
+    Assigning a naive datetime to ``Image.capture_date`` trips Django's
+    USE_TZ RuntimeWarning, so guard the model boundary here — matching the
+    providers' own naive-means-UTC convention (``normalize_datetime``).
+    """
+    if dt is None or dt.tzinfo is not None:
+        return dt
+    return dt.replace(tzinfo=UTC)
 
 
 def _sanitize_url(url: str | None) -> str:
@@ -111,7 +134,7 @@ def _org_for(slug: str) -> Organization:
     return org
 
 
-def _merge_image_meta(image: Image, result: ImageResult) -> dict:
+def _merge_image_meta(image: Image, result: ImageResult) -> dict[str, Any]:
     """Refresh provider metadata while preserving curated keys (focal/crop)."""
     meta = dict(image.image_meta or {})
     if result.width:
@@ -122,8 +145,8 @@ def _merge_image_meta(image: Image, result: ImageResult) -> dict:
     return meta
 
 
-def _merge_image_meta_from_result(result: ImageResult) -> dict:
-    meta: dict = {"provider_score": result.score}
+def _merge_image_meta_from_result(result: ImageResult) -> dict[str, Any]:
+    meta: dict[str, Any] = {"provider_score": result.score}
     if result.width:
         meta["width"] = result.width
     if result.height:
@@ -131,7 +154,7 @@ def _merge_image_meta_from_result(result: ImageResult) -> dict:
     return meta
 
 
-def _association_for(place):
+def _association_for(place: Hut | GeoPlace):
     """Resolve (association model, place FK field name, cache invalidator)."""
     from server.apps.geometries.models import GeoPlace
     from server.apps.huts.models import Hut
@@ -143,13 +166,76 @@ def _association_for(place):
     raise TypeError(f"Unsupported place type for pinning: {type(place)!r}")
 
 
-def pin_place_images(place, results: list[ImageResult]) -> PinStats:
+def _canonical_pin(ident: str) -> Image | None:
+    """The canonical row for an ident: oldest first (``Image.Meta.ordering``;
+    also the row the dedupe migration keeps). Tolerant of legacy duplicate
+    rows — returns a row instead of raising like ``get()`` would."""
+    return Image.objects.filter(source_ident=ident).order_by("created", "id").first()
+
+
+def _get_or_create_pin(
+    ident: str,
+    result: ImageResult,
+    org: Organization,
+    license_obj: License,
+    now: datetime,
+) -> tuple[Image, bool]:
+    """Resolve the pinned ``Image`` row for ``ident`` (dupe-tolerant, race-safe).
+
+    ``source_ident`` had no unique constraint originally, so concurrent
+    syncs (request write-through vs. django-q2 refresh vs. the
+    ``geoimages_pin`` sweep) could each see "no row" and both create one —
+    and every later sync then crashed in ``get_or_create`` with
+    ``MultipleObjectsReturned`` ("get() returned more than one Image",
+    Sentry 155850205, hut cedullo). Resolution now picks the canonical
+    row (oldest first, matching ``Image.Meta.ordering`` and the dedupe
+    migration) instead of using ``get_or_create``; create races collapse
+    onto the winner via the unique constraint (``IntegrityError`` →
+    re-resolve).
+    """
+    image = _canonical_pin(ident)
+    if image is not None:
+        return image, False
+    try:
+        with transaction.atomic():
+            # Savepoint, not just style: a lost create race surfaces as an
+            # IntegrityError from this INSERT, and Postgres would otherwise
+            # keep the whole surrounding transaction aborted — the recovery
+            # lookup below would die with "current transaction is aborted"
+            # wherever a caller runs inside an outer atomic (review B-1).
+            return (
+                Image.objects.create(
+                    source_ident=ident,
+                    source_org=org,
+                    license=license_obj,
+                    author=(result.author or "")[:255],
+                    author_url=result.author_url or "",
+                    source_url=_sanitize_url(result.source_url),
+                    source_url_raw=_sanitize_url(result.url_large),
+                    caption_en=_default_caption(result.source_id or ""),
+                    capture_date=_aware(result.captured_at),
+                    provider_synced_at=now,
+                    image_meta=_merge_image_meta_from_result(result),
+                ),
+                True,
+            )
+    except IntegrityError:
+        # Lost a create race against a concurrent sync — the unique
+        # constraint already minted the winner; fall back to it (or to a
+        # legacy duplicate that appeared since our lookup).
+        image = _canonical_pin(ident)
+        if image is None:  # pragma: no cover — constraint fired spuriously
+            raise
+        return image, False
+
+
+def pin_place_images(place: Hut | GeoPlace, results: list[ImageResult]) -> PinStats:
     """Pin provider results to a place (Hut or GeoPlace).
 
     Existing pins get their mutable fields refreshed (URLs can change when a
     file is re-uploaded at the origin); association scores are only ever set
-    once — manual curation survives later syncs. Internal (``wodore``)
-    results are skipped: those images already live in our DB. The same image
+    once — manual curation survives later syncs. Internal (``wodore``) results
+    are skipped: those images already live in our DB. The same image
     can be pinned to several places; scores are per association.
     """
     assoc_model, place_field, invalidate = _association_for(place)
@@ -157,7 +243,15 @@ def pin_place_images(place, results: list[ImageResult]) -> PinStats:
     now = timezone.now()
 
     for result in results:
-        if result.provider == INTERNAL_PROVIDER_SLUG:
+        # Internal results must never be re-pinned: the Wodore provider passes
+        # existing pins/uploads through (provider = source_org slug, source_id
+        # = the row's source_ident). Re-pinning them would mint a new Image
+        # with the provider prefix stacked onto the ident
+        # ("camptocamp:camptocamp:...") and a duplicate association — every
+        # sweep doubled every visible pin (staging 2026-10).
+        if result.provider == INTERNAL_PROVIDER_SLUG or (result.extra or {}).get(
+            "internal_pin"
+        ):
             stats.skipped += 1
             continue
 
@@ -165,21 +259,7 @@ def pin_place_images(place, results: list[ImageResult]) -> PinStats:
         org = _org_for(result.provider)
         license_obj = _license_for(result.license_slug)
 
-        image, created = Image.objects.get_or_create(
-            source_ident=ident,
-            defaults={
-                "source_org": org,
-                "license": license_obj,
-                "author": result.author or "",
-                "author_url": result.author_url or "",
-                "source_url": _sanitize_url(result.source_url),
-                "source_url_raw": _sanitize_url(result.url_large),
-                "caption_en": _default_caption(result.source_id or ""),
-                "capture_date": result.captured_at,
-                "provider_synced_at": now,
-                "image_meta": _merge_image_meta_from_result(result),
-            },
-        )
+        image, created = _get_or_create_pin(ident, result, org, license_obj, now)
         if created:
             stats.created += 1
         else:
@@ -191,7 +271,7 @@ def pin_place_images(place, results: list[ImageResult]) -> PinStats:
                 image.source_url = sanitized_source
             image.source_org = org
             image.license = license_obj
-            image.capture_date = result.captured_at
+            image.capture_date = _aware(result.captured_at)
             image.provider_synced_at = now
             image.image_meta = _merge_image_meta(image, result)
             image.save()
@@ -199,7 +279,11 @@ def pin_place_images(place, results: list[ImageResult]) -> PinStats:
 
         assoc, assoc_created = assoc_model.objects.get_or_create(
             image=image,
-            defaults={"score": min(max(result.score, 0), 32767)},
+            # Curated uploads live in 90–99; provider pins stay below them
+            # (see HutImageAssociation) while remaining valid API scores.
+            defaults={
+                "score": min(max(result.score, 0), assoc_model.PROVIDER_SCORE_MAX)
+            },
             **{place_field: place},
         )
         if assoc_created:
@@ -209,7 +293,9 @@ def pin_place_images(place, results: list[ImageResult]) -> PinStats:
     if hasattr(place, "images_pinned_at"):
         place.images_pinned_at = now
         place.save(update_fields=["images_pinned_at"])
-    invalidate(place.slug)
+    # GeoPlace.slug is temporarily nullable (migration) — a degenerate None
+    # flows into the invalidator exactly as before, not skipped.
+    invalidate(place.slug)  # type: ignore  # slug: str | None (migration-nullable); None passes through unchanged
     logger.info(
         "place_images_pinned",
         place_type=type(place).__name__,
@@ -222,7 +308,7 @@ def pin_place_images(place, results: list[ImageResult]) -> PinStats:
     return stats
 
 
-def place_has_visible_pins(place) -> bool:
+def place_has_visible_pins(place: Hut | GeoPlace) -> bool:
     """Whether the place has at least one servable pinned/associated image."""
     assoc_model, place_field, _invalidator = _association_for(place)
     return (
@@ -261,7 +347,7 @@ def _pin_cache():
     return caches["persistent"]
 
 
-def place_type_of(place) -> str:
+def place_type_of(place: Hut | GeoPlace) -> str:
     """'hut' or 'geoplace' for a supported place instance."""
     from server.apps.geometries.models import GeoPlace
     from server.apps.huts.models import Hut
@@ -273,28 +359,39 @@ def place_type_of(place) -> str:
     raise TypeError(f"Unsupported place type for pinning: {type(place)!r}")
 
 
-def sync_place_images(place, *, radius: float = PIN_SYNC_RADIUS_M, check_origins=False):
+def sync_place_images(
+    place: Hut | GeoPlace,
+    *,
+    radius: float = PIN_SYNC_RADIUS_M,
+    check_origins: bool = False,
+    budget: float | None = None,
+):
     """Run the live provider pipeline for a place and pin the results.
 
     Background counterpart of the endpoints' lazy write-through: same
     provider call, same dedupe/score semantics. Provider-layer caches are
     respected (``update_cache=False``) — the TTL layering keeps upstream
     requests bounded (24 h pins ≤ 7 d wikimedia ≤ 30 d camp2camp).
+    ``budget`` (seconds) overrides the fan-out budget for this sync — the
+    request-path default trades completeness for latency, background
+    sweeps may want to wait longer (``<= 0`` disables the budget).
     """
-    import asyncio
-
-    from .providers import fetch_images_for_place
+    from .providers import fetch_images_for_place, run_async
 
     place_type = place_type_of(place)
-    results, _place_info = asyncio.run(
-        fetch_images_for_place(
-            place_slug=place.slug,
-            place_type=place_type,
-            radius=radius,
-            sources=None,
-            limit=100,
-            update_cache=False,
-        )
+    results, _place_info = run_async(
+        fetch_images_for_place,
+        place_slug=place.slug,
+        place_type=place_type,
+        radius=radius,
+        sources=None,
+        limit=100,
+        update_cache=False,
+        budget=budget,
+        # Command/background path: the calling thread may hold the sweep's
+        # server-side cursor (``queryset.iterator()``) across this call —
+        # the bridge's exit-path connection cleanup would close it.
+        release_db=False,
     )
     stats = pin_place_images(place, results)
     if check_origins:
@@ -331,7 +428,7 @@ def _place_by_slug(place_type: str, slug: str):
     raise ValueError(f"Unsupported place type: {place_type}")
 
 
-def maybe_enqueue_place_refresh(place) -> bool:
+def maybe_enqueue_place_refresh(place: Hut | GeoPlace) -> bool:
     """Enqueue a background refresh if the place's pins are stale.
 
     Never blocks or raises: the caller serves the response immediately and
@@ -375,7 +472,7 @@ def maybe_enqueue_place_refresh(place) -> bool:
     return True
 
 
-def _flag_dead_origins(place, fresh_idents: set[str]) -> int:
+def _flag_dead_origins(place: Hut | GeoPlace, fresh_idents: set[str]) -> int:
     """Move pins with dead origins (HEAD 404/410) to review — never delete.
 
     A pin missing from fresh provider results is NOT considered dead (our own
@@ -429,11 +526,11 @@ def _flag_dead_origins(place, fresh_idents: set[str]) -> int:
 WARMUP_TIMEOUT_S = 20
 
 #: First-rendered variants to pre-fetch (matches the hut page gallery/hero).
-WARMUP_VARIANTS = ("preview", "medium")
+WARMUP_VARIANTS = ("sm", "lg")
 
 
 def warmup_place_image_cache(
-    place, *, variants: tuple[str, ...] = WARMUP_VARIANTS
+    place: Hut | GeoPlace, *, variants: tuple[str, ...] = WARMUP_VARIANTS
 ) -> int:
     """Pre-fetch imagor variant URLs for a place's pins.
 
@@ -483,3 +580,11 @@ def warmup_place_image_cache(
             variants=warmed,
         )
     return warmed
+
+
+def popular_places(limit: int = 20, days: int = 30):
+    """Top places by visit sum over the window (visits app, place domain)."""
+    from server.apps.geometries.models import GeoPlace
+    from server.apps.visits.models import visit_totals
+
+    return visit_totals(GeoPlace, days=days)[:limit]

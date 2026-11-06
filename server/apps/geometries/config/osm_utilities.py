@@ -8,7 +8,6 @@ from .osm_base import CategoryMappings, OSMMapping
 
 UTILITIES = CategoryMappings(
     category="utilities",
-    detail_type="amenity",
     enabled=True,  # Enabled - essential for hikers and outdoor activities
     mappings=[
         OSMMapping(

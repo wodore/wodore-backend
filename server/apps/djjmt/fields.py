@@ -1,13 +1,14 @@
+from collections.abc import Sequence
 from copy import deepcopy
-from typing import Annotated, Any
+from typing import Any
 
 # from django.db.models import JSONField
 from django_jsonform.models.fields import JSONField
-from ninja import Query
 from pydantic import Field, create_model
 
 from django.conf import settings
-from django.db.models import TextField
+from django.db.models import Field as ModelField
+from django.db.models import Model, TextField
 from django.utils.translation import gettext_lazy as _
 
 from .utils import get_normalised_language, normalise_language_code
@@ -32,7 +33,12 @@ TranslationSchema = create_model(
 class TranslationJSONField(JSONField):
     description = _("A JSON object with translations")
 
-    def __init__(self, base_field, langs=None, **kwargs):
+    def __init__(
+        self,
+        base_field: ModelField[Any, Any],
+        langs: Sequence[tuple[str, str]] | None = None,
+        **kwargs: Any,
+    ) -> None:
         self.base_field = base_field
         # _schema = deepcopy(TRANS_SCHEMA)
         self.langs = langs or settings.LANGUAGES
@@ -61,7 +67,7 @@ class TranslationJSONField(JSONField):
         schema = {"type": "dict", "keys": keys}
         return schema
 
-    def contribute_to_class(self, cls, name, **kwargs):
+    def contribute_to_class(self, cls: type[Model], name: str, **kwargs: Any) -> None:
         """
         Attach the custom translation descritor to the
         model attribute to control access to the field values.
@@ -70,15 +76,21 @@ class TranslationJSONField(JSONField):
         _obj = TranslationJSONFieldDescriptor(field=self)
         setattr(cls, name, _obj)
 
-    def validate(self, value, model_instance):
+    def validate(self, value: Any, model_instance: Model) -> None:
         super().validate(value, model_instance)
 
 
 class TranslationJSONFieldDescriptor:
-    def __init__(self, field):
+    def __init__(self, field: TranslationJSONField) -> None:
         self.field = field
 
-    def __get__(self, instance, owner, raw=False, lang=None) -> str | dict:
+    def __get__(
+        self,
+        instance: Model | None,
+        owner: type[Model],
+        raw: bool = False,
+        lang: str | None = None,
+    ) -> "str | dict[str, str]":
         """
         Controls read access to a TranslationJSONField.
 
@@ -88,7 +100,7 @@ class TranslationJSONFieldDescriptor:
                   If the language key is missing, will return None.
         """
         if instance is None:
-            return self  # pyright: ignore[reportReturnType]  # descriptor protocol: class access
+            return self  # type: ignore  # descriptor protocol: class access
 
         field_name = self.field.attname
         data = instance.__dict__.get(field_name, {})
@@ -110,7 +122,7 @@ class TranslationJSONFieldDescriptor:
                 return val
         return val
 
-    def __set__(self, instance, value):
+    def __set__(self, instance: Model, value: Any) -> None:
         """
         Controls write access to a TranslationJSONField.
 
@@ -144,10 +156,10 @@ class TranslationJSONFieldDescriptor:
 
 
 class TranslationJSONRawFieldDescriptor:
-    def __init__(self, field_name):
+    def __init__(self, field_name: str) -> None:
         self.field_name = field_name
 
-    def __get__(self, instance, owner):
+    def __get__(self, instance: Model, owner: type[Model]) -> "str | dict[str, str]":
         """
         Return the raw value of the TranslationJSONField
         by accessing and calling the field descriptor explicitly
@@ -156,16 +168,5 @@ class TranslationJSONRawFieldDescriptor:
         descriptor = getattr(type(instance), self.field_name)
         return descriptor.__get__(instance, self, raw=True)
 
-    def __set__(self, instance, value):
+    def __set__(self, instance: Model, value: Any) -> None:
         setattr(instance, self.field_name, value)
-
-
-LanguageParam = Annotated[
-    str | None,
-    Query(
-        None,
-        description=f"Select language code: {', '.join(LANGUAGE_CODES)} or _empty_ for all.",
-        # example=settings.LANGUAGE_CODE,
-        pattern=f"({'|'.join(LANGUAGE_CODES)})",
-    ),
-]

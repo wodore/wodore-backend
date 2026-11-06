@@ -88,13 +88,14 @@ def response_key(
     lang: Any,
     limit: int,
     precision: str | None = None,
+    fallback: bool = False,
 ) -> str:
     """Cache key embedding the target's invalidation version."""
     version = get_version(endpoint, ident)
     precision_part = f":p{precision}" if precision else ""
     return (
         f"{_KEY_PREFIX}:{endpoint}:{ident}:v{version}"
-        f":r{radius:g}:s{normalize_sources(sources)}:l{lang!s}:n{limit}{precision_part}"
+        f":r{radius:g}:s{normalize_sources(sources)}:l{lang!s}:n{limit}{precision_part}:fb{int(fallback)}"
     )
 
 

@@ -1,0 +1,87 @@
+# DEV-ONLY tile cache override — warm cache for Martin's postprocessed
+# terrain output (Martin caches the upstream DEM tiles internally but NOT
+# the baked /hillshade PNGs and /contours MVTs).
+#
+# Usage (opt-in, never part of the default stack):
+#   docker compose -f docker-compose.yml \
+#     -f docker-compose.cache.yml up -d nginx-cache
+#   then point test clients at the cache port:
+#   http://localhost:8079/contours/{z}/{x}/{y}
+#   (response header X-Cache-Status: HIT = warm cache)
+#
+# The prod cluster is expected to cache at its own edge instead (see the
+# reference nginx config preserved in PR #292's lane _work notes) — this
+# file deliberately ships NO prod-path changes.
+#
+# NEVER point this proxy at tiles.maptoolkit.org sources — the Maptoolkit
+# Community License forbids proxying/caching their tiles. Terrain endpoints
+# only (AWS Terrain Tiles / swisstopo WMTS upstreams, free and open).
+services:
+  nginx-cache:
+    image: nginx:alpine
+    container_name: django-local-martin-cache
+    restart: unless-stopped
+    ports:
+      - "8079:80"
+    networks:
+      - postgresnet
+    volumes:
+      - martin-cache:/var/cache/nginx
+    configs:
+      - source: martin-cache-conf
+        target: /etc/nginx/conf.d/martin-cache.conf
+      # blank the stock default server (server_name localhost) — otherwise it
+      # wins the Host-header match and serves 404s from the html root
+      - source: martin-cache-blank
+        target: /etc/nginx/conf.d/default.conf
+    depends_on:
+      - martin
+
+volumes:
+  martin-cache:
+
+configs:
+  martin-cache-blank:
+    content: ""
+  martin-cache-conf:
+    content: |
+      # http-context only (conf.d include). Upstream is the compose martin
+      # service; keep the client's Host:port so Martin's absolute-URL
+      # rewriting in styles/TileJSONs keeps the caller-visible port.
+      proxy_cache_path /var/cache/nginx/terrain
+                       levels=1:2
+                       max_size=10g
+                       use_temp_path=off
+                       keys_zone=terrain_cache:10m;
+
+      # Fallback TTL; Martin's per-source Cache-Control governs when present
+      # (30 d on /hillshade and /contours — DEM output is immutable).
+      proxy_cache_valid 200 204 302 30d;
+      proxy_cache_valid 404 1m;
+
+      server {
+          listen 80 default_server;
+          listen [::]:80 default_server;
+
+          location ~ ^/(hillshade|contours)/ {
+              proxy_pass http://martin:3000;
+              proxy_set_header Host $$http_host;
+              proxy_set_header X-Forwarded-Host $$http_host;
+              proxy_cache terrain_cache;
+              proxy_cache_lock on;
+              proxy_cache_revalidate on;
+              proxy_cache_use_stale error timeout http_500 http_502
+                                    http_503 http_504;
+              add_header X-Cache-Status $$upstream_cache_status;
+          }
+
+          location / {
+              proxy_pass http://martin:3000;
+              proxy_set_header Host $$http_host;
+              proxy_set_header X-Forwarded-Host $$http_host;
+              proxy_set_header X-Real-IP $$remote_addr;
+              proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $$scheme;
+              proxy_redirect off;
+          }
+      }

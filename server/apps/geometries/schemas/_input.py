@@ -15,7 +15,6 @@ from pydantic import BaseModel, Field
 from server.apps.translations.schema import TranslationSchema
 
 from ..models import OperatingStatus
-from ._output import PhoneSchema  # direct sibling import: avoids package circularity
 
 
 # Enums for type safety
@@ -26,16 +25,6 @@ class ReviewStatus(str, Enum):
     REVIEW = "review"
     REWORK = "rework"
     DONE = "done"
-
-
-class DetailType(str, Enum):
-    """Detail model types."""
-
-    AMENITY = "amenity"
-    TRANSPORT = "transport"
-    ADMIN = "admin"
-    NATURAL = "natural"
-    NONE = "none"
 
 
 class UpdatePolicyEnum(str, Enum):
@@ -57,11 +46,59 @@ class DeletePolicyEnum(str, Enum):
 
 
 # Helper schemas
-class BrandInput(BaseModel):
-    """Brand information."""
+class PartyInput(BaseModel):
+    """Role-classified party association input.
 
-    slug: str  # Category slug for the brand
-    name: str | None = None  # Optional brand name if not in category
+    Resolution (OpenSpec ``party-slug-minting``): a ``slug`` references
+    an existing party (created with that slug when unknown); without a
+    slug the ``name`` resolves or mints via the dedup key. One of the
+    two is required.
+    """
+
+    slug: str | None = None  # Party slug (reference an existing party)
+    name: str | None = None  # Party name (resolves or mints by dedup key)
+    role: str  # Role category identifier (e.g., "role.brand", "role.operator")
+    review_status: str | None = None  # Review status for newly minted parties
+
+
+class PlaceTypeInput(BaseModel):
+    """Per-category association attributes on the schema path.
+
+    OpenSpec ``geoplace-capacity-and-types-via-categories`` (revised):
+    a plain identifier string keeps its old meaning (category only);
+    this richer entry additionally carries the association
+    ``classifier`` (a ``mode.*`` category identifier) and typed
+    ``extra`` attributes (schema-validated overflow — capacity moved
+    to ``GeoPlaceOperation`` via ``OperationInput``).
+    """
+
+    identifier: str  # Category identifier (e.g., "accommodation.hut")
+    classifier: str | None = None  # mode.* category identifier
+    extra: dict[str, Any] = Field(default_factory=dict)
+
+
+class OperationInput(BaseModel):
+    """Typed operating facts of one mode (task 2.1).
+
+    OpenSpec ``geoplace-kinds-operations-graph``: written to a
+    ``GeoPlaceOperation`` row per ``(place, mode)``.
+    """
+
+    mode: str  # mode.* category identifier (mode.standard / mode.reduced)
+    capacity: int | None = None  # non-negative; unknown stays empty
+    opening_hours: dict[str, Any] = Field(default_factory=dict)
+
+
+class SeasonalityInput(BaseModel):
+    """Monthly standard share (task 2.2).
+
+    ``months`` maps 1–12 (or ``Month`` values) to the standard share
+    0–100; absent months are unknown (NULL). The importer applies
+    the fuzzy mapping and the below-100-no-reduced-type →
+    ``accommodation.unknown`` rule before building this.
+    """
+
+    months: dict[int, int | None] = Field(default_factory=dict)
 
 
 class SourceInput(BaseModel):
@@ -106,15 +143,17 @@ class GeoPlaceBaseInput(BaseModel):
     country_code: str
 
     # Classification
-    place_type_identifiers: list[str]  # Category identifiers (e.g., ["shop.bakery"])
-    detail_type: DetailType = DetailType.NONE
+    place_type_identifiers: list[
+        str | PlaceTypeInput
+    ]  # Category identifiers (e.g., ["shop.bakery"]) or rich entries with association attributes
+    # domain is derived on write from the category tree
+    # (geoplace-category-tree) — no input field.
 
     # Optional fields
     description: str | TranslationSchema | None = None
     importance: int = 25
     review_status: ReviewStatus = ReviewStatus.NEW
     shape: Any | None = None  # Polygon geometry (GeoJSON or WKT)
-    parent_id: int | None = None
 
     # Data fields
     osm_tags: dict[str, Any] = Field(default_factory=dict)
@@ -131,8 +170,15 @@ class GeoPlaceBaseInput(BaseModel):
     operating_status: OperatingStatus | None = None
     opening_months: dict[str, str] = Field(default_factory=dict)
     opening_hours: dict[str, Any] = Field(default_factory=dict)
-    phones: list[PhoneSchema] = Field(default_factory=list)
-    brand: BrandInput | None = None
+    # phones retired (external-link-uris): numbers live as uri.phone
+    # external links on the place, not on the detail input
+    parties: list[PartyInput] = Field(default_factory=list)
+
+    # Typed operating facts (geoplace-kinds-operations-graph): written
+    # to GeoPlaceOperation rows per (place, mode) + place-level
+    # seasonality. Capacity no longer rides association extra.
+    operations: list[OperationInput] = Field(default_factory=list)
+    seasonality: SeasonalityInput | None = None
 
     # Admin-specific fields (flattened)
     admin_level: int | None = None
@@ -173,32 +219,9 @@ class GeoPlaceBaseInput(BaseModel):
 
 
 # Convenience aliases for specific types
-class GeoPlaceAmenityInput(GeoPlaceBaseInput):
-    """Input schema for amenity places.
-
-    This is just an alias with detail_type pre-set to AMENITY.
-    All amenity fields are in the base schema.
-    """
-
-    detail_type: DetailType = DetailType.AMENITY
-
-
-class GeoPlaceTransportInput(GeoPlaceBaseInput):
-    """Input schema for transport places.
-
-    Note: TransportDetail model not yet implemented.
-    """
-
-    detail_type: DetailType = DetailType.TRANSPORT
-
-
-class GeoPlaceAdminInput(GeoPlaceBaseInput):
-    """Input schema for admin areas."""
-
-    detail_type: DetailType = DetailType.ADMIN
-
-
-class GeoPlaceNaturalInput(GeoPlaceBaseInput):
-    """Input schema for natural features (peaks, passes, lakes, etc.)."""
-
-    detail_type: DetailType = DetailType.NATURAL
+# (domain is derived on write from the category tree — the
+# per-type presets retired with detail_type)
+GeoPlaceAmenityInput = GeoPlaceBaseInput
+GeoPlaceTransportInput = GeoPlaceBaseInput
+GeoPlaceAdminInput = GeoPlaceBaseInput
+GeoPlaceNaturalInput = GeoPlaceBaseInput

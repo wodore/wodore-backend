@@ -1,3 +1,5 @@
+from typing import Any, override
+
 from django.core.management.commands.runserver import Command as RunserverCommand
 
 
@@ -11,7 +13,8 @@ class Command(RunserverCommand):
     addr/port - ``runserver 127.0.0.1:8010`` always bound 0.0.0.0:8000.
     """
 
-    def handle(self, addrport: str | None = None, **options) -> None:
+    @override
+    def handle(self, *args: Any, addrport: str | None = None, **options: Any) -> None:
         if not addrport:
             addrport = "0.0.0.0:8000"
         super().handle(addrport=addrport, **options)

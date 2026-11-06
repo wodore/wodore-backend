@@ -1,6 +1,10 @@
 import json
+from collections.abc import Mapping
+from typing import Any, override
 
 from django import forms
+from django.core.files.uploadedfile import UploadedFile
+from django.utils.datastructures import MultiValueDict
 from django.utils.translation import gettext_lazy as _
 
 CHOICES = [
@@ -35,14 +39,17 @@ class OpenMonthlyWidget(forms.Widget):
         css = {"all": ("admin/css/open_monthly.css",)}
         js = ("admin/js/open_monthly.js",)
 
-    def get_context(self, name, value, attrs):
+    @override
+    def get_context(
+        self, name: str, value: Any, attrs: dict[str, Any] | None
+    ) -> dict[str, Any]:
         """Prepare context for rendering the widget."""
         context = super().get_context(name, value, attrs)
         if isinstance(value, str) and value.strip():
             try:
                 value = json.loads(value)  # Convert string to dict if necessary
             except json.JSONDecodeError:
-                value = {}
+                value = dict[str, Any]()
         data = value or {}
 
         context["widget"] = {
@@ -56,7 +63,13 @@ class OpenMonthlyWidget(forms.Widget):
         }
         return context
 
-    def value_from_datadict(self, data, files, name):
+    @override
+    def value_from_datadict(
+        self,
+        data: Mapping[str, Any],
+        files: MultiValueDict[str, UploadedFile[Any]],
+        name: str,
+    ) -> dict[str, Any]:
         """Retrieve and format data from form submission."""
         print("DATA from datadict:", json.dumps(data, indent=2))
         result = {"url": data.get(f"{name}_url", "")}

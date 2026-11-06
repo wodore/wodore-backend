@@ -8,7 +8,6 @@ from .osm_base import CategoryMappings, OSMMapping
 
 SPORT = CategoryMappings(
     category="sport",
-    detail_type="amenity",
     enabled=False,
     mappings=[
         OSMMapping(

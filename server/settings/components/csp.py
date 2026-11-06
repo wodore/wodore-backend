@@ -18,6 +18,10 @@ CONTENT_SECURITY_POLICY = {
             "https://tiles.openfreemap.org",
             "https://unpkg.com",
             config("MARTIN_TILE_URL", "http://localhost:8075"),
+            # Prod/staging Martin tile hosts (the frontend loads styles
+            # and tiles from these):
+            "https://tiles.wodore.com",
+            "https://tiles.stg.wodore.com",
         ),
         "default-src": ("'none'",),
         "font-src": (

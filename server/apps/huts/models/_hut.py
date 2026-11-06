@@ -1,11 +1,14 @@
 import datetime
 import typing as t
+from collections.abc import Collection
+from typing import Any, override
 
 from easydict import EasyDict
 from hut_services import (
     AnswerEnum,
     BaseService,
     HutSchema,
+    PhotosMode,
 )
 from hut_services.core.guess import guess_slug_name
 from jinja2 import Environment
@@ -23,6 +26,7 @@ from django.contrib.postgres.indexes import GinIndex
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import transaction
 from django.db.models import F, Q, Value
+from django.db.models.fetch_modes import FetchMode
 from django.db.models.functions import Concat, Lower
 from django.utils import timezone
 from django.utils.translation import get_language
@@ -52,10 +56,10 @@ from server.apps.categories.models import Category
 
 from ._hut_type import HutTypeHelper
 
-SERVICES: dict[str, BaseService] = settings.SERVICES
+SERVICES: dict[str, BaseService[Any]] = settings.SERVICES
 
 
-def primary_name(i18n_fields: dict) -> str | None:
+def primary_name(i18n_fields: dict[str, Any]) -> str | None:
     """Primary (base language) name from the translated name fields."""
     for code in ("de", "en", "fr", "it"):
         if i18n_fields.get(f"name_{code}"):
@@ -87,7 +91,7 @@ class Hut(TimeStampedModel):
     # plugin-less Pyright, which flags custom-manager overrides on every
     # Django model (mutable manager invariance — django-stubs relies on its
     # mypy plugin for this, see https://github.com/typeddjango/django-stubs).
-    objects: HutManager = HutManager()  # pyright: ignore[reportIncompatibleVariableOverride]
+    objects: HutManager = HutManager()
 
     UPDATE_SCHEMA_FIELDS = (
         "slug",
@@ -302,7 +306,7 @@ class Hut(TimeStampedModel):
     # type: ignore[assignment] below: Expressions in `ordering` (Lower) make the
     # Meta type structurally incompatible with the abstract base Meta — a known
     # django-stubs/Pyright limitation, harmless at runtime.
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Hut")
         ordering = (Lower("name_i18n"),)
         indexes = (
@@ -344,8 +348,16 @@ class Hut(TimeStampedModel):
         return self.name_i18n
 
     @classmethod
-    def from_db(cls, db, field_names, values):
-        instance = super().from_db(db, field_names, values)
+    @override
+    def from_db(
+        cls,
+        db: str | None,
+        field_names: Collection[str],
+        values: Collection[Any],
+        *,
+        fetch_mode: FetchMode | None = None,
+    ) -> "Hut":
+        instance = super().from_db(db, field_names, values, fetch_mode=fetch_mode)
 
         # save original values, when model is loaded from database,
         # in a separate attribute on the model
@@ -354,7 +366,8 @@ class Hut(TimeStampedModel):
         instance._orig_review_status = values.get("review_status")  # type: ignore
         return instance
 
-    def save(self, *args, **kwargs):
+    @override
+    def save(self, *args: Any, **kwargs: Any) -> None:
         if not self.slug:
             self.slug = self.create_unique_slug_name(self.name_i18n)
         # if updated
@@ -412,15 +425,28 @@ class Hut(TimeStampedModel):
         return prev_id_dict.get("id") if prev_id_dict else last_id
 
     @classmethod
-    def _convert_source(cls, hut_source: HutSource) -> HutSchema:
+    def _convert_source(
+        cls, hut_source: HutSource, include_photos: PhotosMode = PhotosMode.EMBEDDED
+    ) -> HutSchema:
+        """Convert a stored source via its organization's service.
+
+        Args:
+            hut_source: The stored `HutSource` row.
+            include_photos: [`PhotosMode`][hut_services.PhotosMode] - `EMBEDDED`
+                (default) only converts photos already part of the stored source
+                data and never makes extra provider requests; `ALL` fetches
+                everything; `NONE` skips photos entirely.
+        """
         org = hut_source.organization.slug
-        service: BaseService | None = SERVICES.get(org)
+        service: BaseService[Any] | None = SERVICES.get(org)
         if service is None:
             err_msg = f"No service for organization '{org}' found."
             raise NotImplementedError(err_msg)
-        return service.convert(hut_source)
+        return service.convert(hut_source, include_photos=include_photos)
 
-    def add_organization(self, hut_source, add_to_source=True):
+    def add_organization(
+        self, hut_source: HutSource, add_to_source: bool = True
+    ) -> None:
         new_org = HutOrganizationAssociation(
             hut=self,
             organization=hut_source.organization,
@@ -437,9 +463,10 @@ class Hut(TimeStampedModel):
         cls,
         hut_source: HutSource,
         review: bool = True,
+        include_photos: PhotosMode = PhotosMode.EMBEDDED,
         _review_status: "Hut.ReviewStatusChoices | None" = None,
     ) -> "Hut":
-        hut = cls._convert_source(hut_source)
+        hut = cls._convert_source(hut_source, include_photos=include_photos)
         return cls.create_from_schema(
             hut_schema=hut,
             review=review,
@@ -480,6 +507,13 @@ class Hut(TimeStampedModel):
         _name = primary_name(i18n_fields)
         if _name:
             i18n_fields["name"] = _name
+            # modeltrans' patched ``Hut(...)`` init rejects passing the base
+            # field together with its default-language virtual field
+            # ("name" + "name_de"). ``primary_name`` prefers 'de', so when a
+            # source provides German names (hhde, gipfelbuch, sac, ...) the
+            # pair is identical — drop the virtual field instead of crashing
+            # the whole hut import on the first German-only source.
+            i18n_fields.pop(f"name_{settings.LANGUAGE_CODE}", None)
         main_language = detect_main_language(
             {code: i18n_fields.get(f"name_{code}") for code in settings.LANGUAGE_CODES}
         )
@@ -594,13 +628,11 @@ class Hut(TimeStampedModel):
                 .order_by("-score")
                 .first()
             )
-            photo_score = (
-                HutImageAssociation.UPLOAD_DEFAULT_SCORE
-                if not last_img
-                else max(
-                    last_img.score or 0, HutImageAssociation.UPLOAD_DEFAULT_SCORE - 1
-                )
-                + 1
+            # Imports stack upward from UPLOAD_DEFAULT_SCORE (newest import
+            # first) and stop at SCORE_MAX — the API contract caps scores at
+            # 100, so the per-photo increments must not run past it.
+            photo_score = HutImageAssociation.import_score(
+                last_img.score if last_img else None
             )
             for photo in src_hut_photos:
                 img = Image.create_image_from_schema(
@@ -613,7 +645,7 @@ class Hut(TimeStampedModel):
                     img.save()
                     img.refresh_from_db()
                     pa = HutImageAssociation(image=img, hut=hut_db, score=photo_score)
-                    photo_score += 1
+                    photo_score = HutImageAssociation.import_score(photo_score)
                     pa.save()
                     # hut_db.image_set.add(img)
         return hut_db
@@ -624,6 +656,7 @@ class Hut(TimeStampedModel):
         hut_db: "Hut",
         hut_source: HutSource,
         review: bool = True,
+        include_photos: PhotosMode = PhotosMode.EMBEDDED,
         force_overwrite: bool = False,  # overwrite exisitng entries
         force_overwrite_include: t.Sequence[
             str
@@ -632,7 +665,7 @@ class Hut(TimeStampedModel):
         force_none: bool = False,  # force t oset value to none (overwrite is needed)
         _review_status: "Hut.ReviewStatusChoices | None" = None,
     ) -> tuple["Hut", UpdateCreateStatus]:
-        hut_schema = cls._convert_source(hut_source)
+        hut_schema = cls._convert_source(hut_source, include_photos=include_photos)
         # hut_schema = translate_hut(hut_schema)
         return cls.update_from_schema(
             hut_db=hut_db,
@@ -715,7 +748,7 @@ class Hut(TimeStampedModel):
         #    updates["photos_attribution"] = hut_schema.photos[0].attribution if hut_schema.photos else ""
         if "photos" in updates:
             del updates["photos"]
-            updates["images"] = []
+            updates["images"] = list[t.Any]()  # type: ignore  # heterogenous update payload accumulator
             for p in hut_schema.photos:
                 img = Image.create_image_from_schema(
                     p,
@@ -753,14 +786,12 @@ class Hut(TimeStampedModel):
                         .order_by("-score")
                         .first()
                     )
-                    photo_score = (
-                        HutImageAssociation.UPLOAD_DEFAULT_SCORE
-                        if not last_img
-                        else max(
-                            last_img.score or 0,
-                            HutImageAssociation.UPLOAD_DEFAULT_SCORE - 1,
-                        )
-                        + 1
+                    # Imports stack upward from UPLOAD_DEFAULT_SCORE (newest
+                    # import first) and stop at SCORE_MAX — the API contract
+                    # caps scores at 100, so the per-photo increments must
+                    # not run past it.
+                    photo_score = HutImageAssociation.import_score(
+                        last_img.score if last_img else None
                     )
                     for img in v:
                         img.save()
@@ -769,7 +800,7 @@ class Hut(TimeStampedModel):
                             image=img, hut=hut_db, defaults={"score": photo_score}
                         )
                         # pa.save()
-                        photo_score += 1
+                        photo_score = HutImageAssociation.import_score(photo_score)
                         # hut_db.image_set.add(i)
                         if created:
                             updated = UpdateCreateStatus.updated
@@ -808,7 +839,7 @@ class Hut(TimeStampedModel):
                 ):
                     old_value = getattr(hut_db, f)
                     # special comparision for dbPoint -> valus are always different because it is a class
-                    if isinstance(v, dbPoint) and v.tuple == old_value.tuple:  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
+                    if isinstance(v, dbPoint) and v.tuple == old_value.tuple:  # type: ignore[attr-defined]
                         continue
                     setattr(hut_db, f, v)
                     sp = (
@@ -849,6 +880,7 @@ class Hut(TimeStampedModel):
         hut_schema: HutSchema | None = None,
         hut_source: HutSource | None = None,
         review: bool | None = None,
+        include_photos: PhotosMode = PhotosMode.EMBEDDED,
         force_overwrite: bool = False,  # overwrite exisitng entries
         force_overwrite_include: t.Sequence[
             str
@@ -894,6 +926,7 @@ class Hut(TimeStampedModel):
                     hut_db=hut_db,
                     hut_source=hut_source,
                     review=bool(review),
+                    include_photos=include_photos,
                     force_overwrite=force_overwrite,
                     force_overwrite_include=force_overwrite_include,
                     force_overwrite_exclude=force_overwrite_exclude,
@@ -918,6 +951,7 @@ class Hut(TimeStampedModel):
                 cls.create_from_source(
                     hut_source=hut_source,
                     review=bool(review),
+                    include_photos=include_photos,
                     _review_status=_review_status_create,
                 ),
                 UpdateCreateStatus.created,
@@ -1095,8 +1129,10 @@ class Hut(TimeStampedModel):
         return results
 
     def organizations_query(
-        self, organization: str | Organization | None = None, annotate=True
-    ):
+        self,
+        organization: str | Organization | None = None,
+        annotate: bool = True,
+    ) -> models.QuerySet[Organization]:
         if isinstance(organization, Organization):
             organization = organization.slug
         org_q = self.org_set

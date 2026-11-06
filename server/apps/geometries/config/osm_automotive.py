@@ -8,7 +8,6 @@ from .osm_base import CategoryMappings, OSMMapping
 
 AUTOMOTIVE = CategoryMappings(
     category="automotive",
-    detail_type="amenity",
     enabled=True,
     mappings=[
         OSMMapping(

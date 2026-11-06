@@ -1,7 +1,8 @@
 from typing import ClassVar
 
 from django.contrib import admin
-from django.utils.safestring import mark_safe
+from django.utils.html import format_html
+from django.utils.safestring import SafeString
 from django.utils.translation import gettext_lazy as _
 
 from unfold.decorators import display
@@ -11,6 +12,7 @@ from server.apps.huts.models import Hut
 from server.apps.manager.admin import ModelAdmin
 
 from ..models._associations import OwnerContactAssociation
+from ..models._owner import Owner
 from ..models._owner_hut_proxy import OwnerHutProxy
 
 
@@ -30,11 +32,11 @@ class OwnerContactAssociationsAdmin(ModelAdmin):
     list_select_related = ("contact",)
 
     @display(boolean=True)
-    def is_active(self, obj):
+    def is_active(self, obj: OwnerContactAssociation) -> bool:
         return obj.contact.is_active
 
     @display(boolean=True)
-    def is_public(self, obj):
+    def is_public(self, obj: OwnerContactAssociation) -> bool:
         return obj.contact.is_public
 
 
@@ -57,38 +59,44 @@ class OwnerHutAssociationsAdmin(ModelAdmin):
     inlines = (HutSourceViewInline,)
     list_select_related = ("hut_type_open",)
 
-    @display(description=_("Slug"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-    def slug_small(self, obj):  # new
-        return mark_safe(f'<span class="text-gray-500">{obj.slug}</span>')
+    @display(description=_("Slug"))
+    def slug_small(self, obj: OwnerHutProxy) -> SafeString:  # new
+        return format_html('<span class="text-gray-500">{}</span>', obj.slug)
 
-    @display(description=_("Owner"), header=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-    def owner_title(self, obj):  # new
-        if obj.hut_owner:
+    @display(description=_("Owner"), header=True)
+    def owner_title(self, obj: OwnerHutProxy) -> tuple[str, str]:  # new
+        owner: Owner | None = obj.hut_owner  # FK string-ref: plugin-less inference gap
+        if owner:
             return (
-                obj.hut_owner.name_i18n,
-                mark_safe(
-                    f'<a href="{obj.hut_owner.url}" target="_blank">{obj.hut_owner.url}</a>'
+                owner.name_i18n,
+                format_html(
+                    '<a href="{}" target="_blank">{}</a>', owner.url, owner.url
                 ),
-            )  # , mark_safe(f'<img src = "{obj.type.symbol_simple.url}" width = "24"/>')
+            )  # , mark_safe(f'<img src = "{obj.type.symbol_primitive.url}" width = "24"/>')
         return ("-", "")
 
-    @display(description=_("Hut"), header=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-    def hut_title(self, obj):  # new
+    @display(description=_("Hut"), header=True)
+    def hut_title(self, obj: OwnerHutProxy) -> tuple[str, str, SafeString]:  # new
         return (
             obj.name_i18n,
             obj.hut_type_open.name_i18n,
-            mark_safe(
-                f'<img src = "{obj.hut_type_open.symbol_simple.url}" width = "24"/>'
+            format_html(
+                # latent bug kept as-is (typing ratchet must not change runtime
+                # behavior): Symbol has no `url` attribute, so this raises
+                # AttributeError whenever the column renders — models live
+                # outside this app and are out of ratchet scope.
+                '<img src = "{}" width = "24"/>',
+                obj.hut_type_open.symbol_primitive.url,  # type: ignore  # latent AttributeError: Symbol has no `url` attr (string-ref FK, models out of scope)
             ),
         )
 
     @display(
-        description=_("Status"),  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+        description=_("Status"),
         ordering="status",
         label={
             Hut.ReviewStatusChoices.review: "info",
             Hut.ReviewStatusChoices.done: "success",
         },
     )
-    def review_tag(self, obj):
+    def review_tag(self, obj: OwnerHutProxy) -> str:
         return obj.review_status

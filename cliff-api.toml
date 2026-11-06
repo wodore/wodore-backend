@@ -1,0 +1,78 @@
+# https://git-cliff.com/docs/
+# API changelog: only PRs labeled api:* , grouped by API version tags
+# (api/YYYY-MM-DD). Independent of the backend CHANGELOG.md (cliff.toml).
+# Generate with:
+#   git-cliff --config cliff-api.toml --github-token <token> -o CHANGELOG_API.md
+
+[bump]
+initial_tag = "api/2026-10-01"
+
+[remote.github]
+owner = "wodore"
+repo = "wodore-backend"
+
+[git]
+# Only API version tags structure this changelog; backend v* tags are
+# invisible here.
+tag_pattern = "^api/[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+sort_commits = "newest"
+conventional_commits = false
+filter_unconventional = false
+commit_parsers = [
+  { field = "github.pr_labels", pattern = "api:breaking", group = "<!-- 00 -->🏗️ Breaking changes" },
+  { field = "github.pr_labels", pattern = "api:added", group = "<!-- 10 -->🚀 Added (live in all versions)" },
+  { field = "github.pr_labels", pattern = "api:deprecated", group = "<!-- 20 -->⏳ Deprecated (live in all versions)" },
+  { field = "github.pr_labels", pattern = "api:fixed", group = "<!-- 30 -->🐛 Fixed (live in all versions)" },
+  { field = "github.pr_labels", pattern = ".*", skip = true },
+]
+
+# remove last added merged requests, they are added below again (with url).
+commit_preprocessors = [{ pattern = '\.?\s*\(#[0-9]+\)$', replace = "" }]
+
+[changelog]
+header = """
+<!-- Auto generated. Run 'git-cliff --config cliff-api.toml -o CHANGELOG_API.md' -->\n
+# API Changelog\n
+All notable API changes (per contract version) are documented in this file.\n
+Breaking changes create a new API version (`Api-Version` header / `api_version`
+query parameter); everything else is additive and live in all versions.\n
+"""
+body = """
+{%- macro remote_url() -%}
+  https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}
+{%- endmacro -%}
+
+{% if version -%}
+    ## API version {{ version | trim_start_matches(pat="api/") }} — {{ timestamp | date(format="%Y-%m-%d") }}
+{% else -%}
+    ## [Unreleased] — live in all versions
+{% endif -%}
+
+{% for group, commits in commits | group_by(attribute="group") %}
+    #### {{ group | striptags | trim | upper_first }}
+    {%- for commit in commits %}
+        - {{ commit.remote.pr_title | split(pat="\n") | first | upper_first | trim }}\
+            {% if commit.remote.pr_number %}\
+            {# #} ([#{{ commit.remote.pr_number }}]({{ self::remote_url() }}/pull/{{ commit.remote.pr_number }})) \
+            {%- endif -%}
+    {% endfor %}
+{% endfor %}
+{% if version -%}
+    {% if previous.version -%}
+        [API version {{ version | trim_start_matches(pat="api/") }}]: \
+            {{ self::remote_url() }}/compare/{{ previous.version }}..{{ version }}
+    {% else -%}
+        [API version {{ version | trim_start_matches(pat="api/") }}]: \
+            {{ self::remote_url() }}/releases/tag/{{ version }}
+    {% endif -%}
+{% else -%}
+    [unreleased]: {{ self::remote_url() }}/compare/{{ previous.version }}..HEAD
+{% endif -%}
+{# #}\n
+"""
+footer = """
+{%- macro remote_url() -%}
+  https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}
+{%- endmacro -%}
+"""
+trim = true

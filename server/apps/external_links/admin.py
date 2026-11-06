@@ -4,6 +4,8 @@ from typing import ClassVar
 
 from django.conf import settings
 from django.contrib import admin, messages
+from django.db.models import QuerySet
+from django.http import HttpRequest
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
@@ -13,7 +15,7 @@ from unfold.decorators import display
 from server.apps.manager.admin import ModelAdmin
 from server.apps.translations.forms import required_i18n_fields_form_factory
 
-from .models import ExternalLink, ReviewStatus
+from .models import ExternalAction, ExternalLink, ReviewStatus
 
 
 @admin.register(ExternalLink)
@@ -28,6 +30,7 @@ class ExternalLinkAdmin(ModelAdmin):
         "identifier_code",
         "label_and_url",
         "link_type",
+        "uri_kind",
         "source_logo",
         "health_status_display",
         "review_tag",
@@ -39,6 +42,7 @@ class ExternalLinkAdmin(ModelAdmin):
         "is_public",
         "is_active",
         "link_type",
+        "uri_kind",
         "source",
         "last_checked",
     ]
@@ -115,7 +119,7 @@ class ExternalLinkAdmin(ModelAdmin):
     ]
 
     @display(
-        description=_("Review"),  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+        description=_("Review"),
         label={
             ReviewStatus.NEW: "warning",
             ReviewStatus.REVIEW: "info",
@@ -127,13 +131,13 @@ class ExternalLinkAdmin(ModelAdmin):
         """Display review status as colored label."""
         return obj.review_status
 
-    @display(description=_("ID"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("ID"))
     def identifier_code(self, obj: ExternalLink) -> str:
         """Display identifier wrapped in code tag."""
         return mark_safe(f"<code>{obj.identifier}</code>")
 
-    @display(description=_("Link"), header=True)  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
-    def label_and_url(self, obj: ExternalLink) -> tuple:
+    @display(description=_("Link"), header=True)
+    def label_and_url(self, obj: ExternalLink) -> tuple[str, str]:
         """Display label and clickable URL together."""
         url = obj.url_i18n
         icon = '<span class="material-symbols-outlined" style="font-size:x-small">open_in_new</span>'
@@ -151,7 +155,7 @@ class ExternalLinkAdmin(ModelAdmin):
 
         return (obj.label_i18n, url_link)
 
-    @display(description=_("Source"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Source"))
     def source_logo(self, obj: ExternalLink) -> str:
         """Display source organization with logo icon."""
         if not obj.source:
@@ -160,12 +164,12 @@ class ExternalLinkAdmin(ModelAdmin):
         if obj.source.logo:
             return mark_safe(
                 f'<img class="inline" src="{settings.MEDIA_URL}{obj.source.logo}" '
-                f'width="24px" alt="{obj.source.name_i18n}" title="{obj.source.name_i18n}"/>'  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation
+                f'width="24px" alt="{obj.source.name_i18n}" title="{obj.source.name_i18n}"/>'
             )
 
-        return obj.source.name_i18n  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation
+        return obj.source.name_i18n
 
-    @display(description=_("Health"))  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+    @display(description=_("Health"))
     def health_status_display(self, obj: ExternalLink) -> str:
         """Display health status with color indicator."""
         if not obj.last_checked:
@@ -185,7 +189,9 @@ class ExternalLinkAdmin(ModelAdmin):
             )
 
     @admin.action(description=_("Check health of selected links"))
-    def check_health_selected(self, request, queryset):
+    def check_health_selected(
+        self, request: HttpRequest, queryset: QuerySet[ExternalLink]
+    ) -> None:
         """Admin action to check health of selected external links."""
         checked = 0
         success = 0
@@ -210,3 +216,41 @@ class ExternalLinkAdmin(ModelAdmin):
                 "failed": failed,
             },
         )
+
+
+@admin.register(ExternalAction)
+class ExternalActionAdmin(ModelAdmin):
+    """Open-in action registry admin (OpenSpec ``external-actions``).
+
+    The scoping axes (kinds/countries/user) filter; the backing link
+    (template URL + template vars) is edited inline-ish via the link
+    FK link. Saves purge the ``api:external_links`` CDN tag via the
+    ApiCdnCacheMiddleware signal (task 3.1).
+    """
+
+    list_display = (
+        "link_label",
+        "scope",
+        "owner",
+        "order",
+        "is_active",
+    )
+    list_filter = ("is_active", "user", "kinds")
+    search_fields = ("link__label", "link__url", "link__identifier")
+    autocomplete_fields = ("link",)
+    filter_horizontal = ("kinds",)
+    ordering = ("order", "pk")
+
+    @display(description=_("Action"))
+    def link_label(self, obj: ExternalAction) -> str:
+        return obj.link.label_i18n
+
+    @display(description=_("Scope"))
+    def scope(self, obj: ExternalAction) -> str:
+        countries = ", ".join(obj.countries) if obj.countries else "global"
+        kinds = ", ".join(k.identifier for k in obj.kinds.all()) or "any point"
+        return f"{kinds} · {countries}"
+
+    @display(description=_("Owner"))
+    def owner(self, obj: ExternalAction) -> str:
+        return str(obj.user) if obj.user else "public"

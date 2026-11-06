@@ -1,0 +1,71 @@
+# CAI (Club Alpino Italiano) org fixtures: unico (catalog) + prenota (booking)
+# Run: uv run python manage.py organizations -a
+- model: organizations.organization
+  pk: 17
+  fields:
+    i18n:
+      name_en: Unico Rifugi CAI
+      name_fr: Unico Rifugi CAI
+      name_it: Unico Rifugi CAI
+      fullname_en: Unico Rifugi — Club Alpino Italiano
+      fullname_fr: Unico Rifugi — Club Alpino Italiano
+      fullname_it: Unico Rifugi — Club Alpino Italiano
+      description_en: >-
+        Official CAI hut catalog (~760 structures): metadata, facilities,
+        photos and location. Booking lives on Prenota Rifugi.
+      description_fr: >-
+        Catalogue officiel des refuges du CAI (~760 structures).
+      description_it: >-
+        Catalogo ufficiale dei rifugi del CAI (~760 strutture).
+    slug: unico
+    is_active: true
+    is_public: true
+    name: Unico Rifugi
+    fullname: Unico Rifugi — Club Alpino Italiano
+    description: >-
+      Offizielle CAI-Hüttenkatalog (~760 Strukturen): Metadaten, Fotos und
+      Standorte. Buchung über Prenota Rifugi.
+    url: https://rifugi.cai.it
+    attribution: ""
+    link_hut_pattern: https://rifugi.cai.it/shelters/{{id}}
+    logo: organizations/logos/missing.png
+    color_light: "#00539b"
+    color_dark: "#8fc4ee"
+    config: {}
+    props_schema: {}
+    order: 18
+- model: organizations.organization
+  pk: 18
+  fields:
+    i18n:
+      name_en: Prenota Rifugi
+      name_fr: Prenota Rifugi
+      name_it: Prenota Rifugi
+      fullname_en: Prenota Rifugi (INERA S.r.l. for CAI)
+      fullname_fr: Prenota Rifugi (INERA S.r.l. pour le CAI)
+      fullname_it: Prenota Rifugi (INERA S.r.l. per il CAI)
+      description_en: >-
+        Online booking platform for CAI huts: availability calendars and
+        reservations (operated by INERA S.r.l. for the Club Alpino
+        Italiano).
+      description_fr: >-
+        Plateforme de réservation en ligne pour les refuges du CAI.
+      description_it: >-
+        Piattaforma di prenotazione online per i rifugi del CAI.
+    slug: prenota
+    is_active: true
+    is_public: true
+    name: Prenota Rifugi
+    fullname: Prenota Rifugi (INERA S.r.l. for CAI)
+    description: >-
+      Online-Reservationssystem für CAI-Hütten: Verfügbarkeitskalender und
+      Buchungen (betrieben von INERA S.r.l. für den Club Alpino Italiano).
+    url: https://booking.prenotarifugi.cai.it
+    attribution: ""
+    link_hut_pattern: https://booking.prenotarifugi.cai.it/dettaglio/?id={{id}}
+    logo: organizations/logos/missing.png
+    color_light: "#1a6b3c"
+    color_dark: "#a8e6c3"
+    config: {}
+    props_schema: {}
+    order: 19

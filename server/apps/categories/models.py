@@ -1,5 +1,6 @@
 import re
 from collections import defaultdict
+from typing import Any, override
 from xml.etree import ElementTree as ET
 
 from colorfield.fields import ColorField
@@ -10,15 +11,24 @@ from django_cleanup import cleanup
 from modeltrans.fields import TranslationField
 
 from django.contrib.postgres.indexes import GinIndex
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
+
+from server.core.models import TimeStampedModel
 
 from .managers import CategoryManager
 
 
 @cleanup.ignore
-class Category(ComputedFieldsModel, models.Model):
+class Category(ComputedFieldsModel, TimeStampedModel):
+    class SeoSitemapChoices(models.TextChoices):
+        """Tri-state sitemap policy: empty (None) = inherit from parent."""
+
+        include = "include", _("include in sitemap")
+        exclude = "exclude", _("exclude from sitemap")
+
     """
     Generic hierarchical category model.
 
@@ -38,8 +48,8 @@ class Category(ComputedFieldsModel, models.Model):
         "name",
         "description",
         "order",
-        "symbol_detailed",
-        "symbol_simple",
+        "symbol_color",
+        "symbol_primitive",
         "symbol_mono",
         "parent",
         "default",
@@ -71,7 +81,7 @@ class Category(ComputedFieldsModel, models.Model):
 
         Assumes parent is pre-fetched via select_related when needed.
         """
-        if self.parent_id and self.parent:  # pyright: ignore[reportAttributeAccessIssue]
+        if self.parent_id and self.parent:
             # Direct access - relies on select_related in queryset
             parent_slug = self.parent.slug
             return f"{parent_slug}.{self.slug}"
@@ -100,26 +110,26 @@ class Category(ComputedFieldsModel, models.Model):
     )
 
     # Symbol references (ForeignKeys to Symbol app)
-    symbol_detailed = models.ForeignKey(
+    symbol_color = models.ForeignKey(
         "symbols.Symbol",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="categories_detailed",
-        verbose_name=_("Symbol (Detailed)"),
-        help_text=_("Reference to detailed symbol from Symbols app"),
-        limit_choices_to={"style": "detailed"},
+        related_name="categories_color",
+        verbose_name=_("Symbol (Color)"),
+        help_text=_("Reference to color symbol from Symbols app"),
+        limit_choices_to={"style": "color"},
     )
 
-    symbol_simple = models.ForeignKey(
+    symbol_primitive = models.ForeignKey(
         "symbols.Symbol",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="categories_simple",
-        verbose_name=_("Symbol (Simple)"),
-        help_text=_("Reference to simple symbol from Symbols app"),
-        limit_choices_to={"style": "simple"},
+        related_name="categories_primitive",
+        verbose_name=_("Symbol (Primitive)"),
+        help_text=_("Reference to primitive symbol from Symbols app"),
+        limit_choices_to={"style": "primitive"},
     )
 
     symbol_mono = models.ForeignKey(
@@ -163,6 +173,37 @@ class Category(ComputedFieldsModel, models.Model):
         help_text=_("Whether this category is currently active"),
     )
 
+    # Code-coupled vocabulary (mode.*, role.*, kind roots, uri kinds)
+    # seeded from migrations: deletion is blocked (code references
+    # the slugs), presentation — names, colors, symbols — stays
+    # freely editable (OpenSpec geoplace-kinds-operations-graph).
+    is_protected = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name=_("Protected"),
+        help_text=_(
+            "Code-coupled vocabulary category — cannot be deleted; "
+            "names, colors and symbols remain editable"
+        ),
+    )
+
+    # SEO / sitemap policy for places in this category (tri-state):
+    #   "include" / "exclude" decide for this category and (via
+    #   inheritance) its children; empty (None) inherits the parent's
+    #   value. A root category with no value defaults to exclude.
+    seo_sitemap = models.CharField(
+        max_length=8,
+        choices=SeoSitemapChoices.choices,
+        null=True,
+        blank=True,
+        db_index=True,
+        verbose_name=_("SEO sitemap policy"),
+        help_text=_(
+            "Include/exclude this category's places in the sitemap; "
+            "empty inherits from the parent category (roots default to exclude)."
+        ),
+    )
+
     # Color
     color = ColorField(
         verbose_name=_("Color"),
@@ -181,7 +222,7 @@ class Category(ComputedFieldsModel, models.Model):
         ),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("Category")
         verbose_name_plural = _("Categories")
         ordering = ("parent__order", "order", "slug")
@@ -199,6 +240,21 @@ class Category(ComputedFieldsModel, models.Model):
             ),
         ]
 
+    def effective_seo_sitemap(self) -> str | None:
+        """Resolved tri-state policy: nearest ancestor's explicit value.
+
+        Returns ``None`` when neither this category nor any ancestor
+        sets a value — callers treat that as *exclude* (root default).
+        """
+        node: Category | None = self
+        seen: set[int] = set()
+        while node is not None and node.pk not in seen:
+            seen.add(node.pk)
+            if node.seo_sitemap:
+                return node.seo_sitemap
+            node = node.parent
+        return None
+
     def __str__(self) -> str:
         # Use identifier field (computed, no extra queries) and format it nicely
         return (
@@ -208,11 +264,29 @@ class Category(ComputedFieldsModel, models.Model):
             .title()
         )
 
-    def save(self, *args, **kwargs):
+    @override
+    def save(self, *args: Any, **kwargs: Any) -> None:
         """Auto-generate slug from name if not provided."""
         if not self.slug and self.name_i18n:
             self.slug = slugify(self.name_i18n)
         super().save(*args, **kwargs)
+
+    @override
+    def delete(
+        self,
+        using: Any = None,
+        keep_parents: bool = False,
+    ) -> tuple[int, dict[str, int]]:
+        """Protected vocabulary cannot be deleted (names/colors stay
+        editable) — code couples to these slugs
+        (geoplace-kinds-operations-graph task 1.2)."""
+        if getattr(self, "is_protected", False):
+            msg = (
+                f"Category '{self.slug}' is protected vocabulary and "
+                f"cannot be deleted (deactivate it instead)."
+            )
+            raise ValidationError(msg)
+        return super().delete(using=using, keep_parents=keep_parents)
 
     # Hierarchy helper methods
 
@@ -225,21 +299,23 @@ class Category(ComputedFieldsModel, models.Model):
             current = current.parent
         return ancestors
 
-    def get_descendants(self, include_self: bool = False) -> models.QuerySet:
+    def get_descendants(
+        self, include_self: bool = False
+    ) -> models.QuerySet["Category"]:
         """Get all descendants recursively."""
 
         descendants_ids = []
         if include_self:
-            descendants_ids.append(self.id)  # pyright: ignore[reportAttributeAccessIssue]
+            descendants_ids.append(self.id)
 
         to_process = [self]
         while to_process:
             current = to_process.pop(0)
-            children = list(current.children.all())  # pyright: ignore[reportAttributeAccessIssue]
+            children = list(current.children.all())
             descendants_ids.extend([c.id for c in children])
-            to_process.extend(children)
+            to_process.extend(children)  # type: ignore  # argument typing drift vs stubs
 
-        return Category.objects.filter(id__in=descendants_ids)
+        return Category.objects.filter(id__in=descendants_ids)  # type: ignore  # custom manager/queryset inference gap
 
     def get_root(self) -> "Category":
         """Get the root category of this hierarchy."""
@@ -271,7 +347,7 @@ class Category(ComputedFieldsModel, models.Model):
 
     def has_children(self) -> bool:
         """Check if this category has any children."""
-        return self.children.exists()  # pyright: ignore[reportAttributeAccessIssue]
+        return self.children.exists()
 
     def get_default_or_self(self) -> "Category":
         """Get the default child if set, otherwise return self."""
@@ -285,7 +361,7 @@ class Category(ComputedFieldsModel, models.Model):
         Returns the most common color as hex string or None if no SVG found.
         """
         # Try to get an SVG file from symbols (in order of preference)
-        symbol = self.symbol_detailed or self.symbol_simple or self.symbol_mono
+        symbol = self.symbol_color or self.symbol_primitive or self.symbol_mono
 
         if not symbol or not symbol.svg_file or not symbol.svg_file.path:
             return None
@@ -378,7 +454,7 @@ class Category(ComputedFieldsModel, models.Model):
     @cachedclassproperty
     def default_type(cls) -> "Category":
         """Returns the global 'unknown' category (parent=None, slug='unknown')."""
-        obj, _created = cls.objects.get_or_create(
+        obj, _created = cls.objects.get_or_create(  # type: ignore  # custom manager/queryset inference gap
             slug="unknown",
             parent=None,
             defaults={
@@ -401,7 +477,7 @@ class Category(ComputedFieldsModel, models.Model):
         """
         vals: dict[str, Category] = defaultdict(cls.get_default_type)
         vals.update(
-            {cat.slug: cat for cat in cls.objects.filter(parent=None, is_active=True)}
+            {cat.slug: cat for cat in cls.objects.filter(parent=None, is_active=True)}  # type: ignore  # custom manager/queryset inference gap
         )
         return vals
 
@@ -422,7 +498,7 @@ class Category(ComputedFieldsModel, models.Model):
         """
         filters = {"slug": slug, "parent": parent}
         if active_only:
-            filters["is_active"] = True
+            filters["is_active"] = True  # type: ignore  # defaults dict accepts bool at runtime
 
         try:
             return cls.objects.get(**filters)

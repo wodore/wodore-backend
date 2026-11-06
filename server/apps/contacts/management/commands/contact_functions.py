@@ -3,9 +3,9 @@ from server.core.management import CRUDCommand
 from ...models import ContactFunction
 
 
-class Command(CRUDCommand):
+class Command(CRUDCommand[ContactFunction]):
     help = "Manage contact function entries (add/update from fixture, dump)."
-    model = ContactFunction
+    model = ContactFunction  # type: ignore  # argument typing drift vs stubs
     model_names = "contactfunctions"
 
     # def __init__(self, *args, **kwargs):

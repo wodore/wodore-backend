@@ -7,7 +7,6 @@ from .osm_base import CategoryMappings, OSMMapping
 
 SERVICES = CategoryMappings(
     category="services",
-    detail_type="amenity",
     enabled=True,
     mappings=[
         OSMMapping(

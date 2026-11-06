@@ -1,13 +1,15 @@
-# type: ignore
-# TODO: add types
 import sys
 import typing as t
+from typing import Any, override
 
 import click
 from django_admin_runner import register_command
+from hut_services import PhotosMode
+from pydantic import ValidationError
 
 from django.conf import settings
 from django.core.management import call_command
+from django.core.management.base import CommandParser
 from django.db import IntegrityError
 
 from server.apps.organizations.models import Organization
@@ -20,13 +22,14 @@ from ...models import Hut, HutSource
 def init_huts_db(
     hut_sources: list[HutSource],
     review: bool = False,
+    include_photos: PhotosMode = PhotosMode.EMBEDDED,
     force_overwrite: bool = False,  # overwrite existing entries
     force_overwrite_include: t.Sequence[
         str
     ] = [],  # set a list which field which should be overwritten
     force_overwrite_exclude: t.Sequence[str] = [],  #  ... exclude
     force_none: bool = False,  # force t oset value to none (overwrite is needed)
-) -> tuple[int, int]:
+) -> tuple[int, int, int, int]:  # added, updated, nochange, failed
     added_huts = 0
     updated_huts = 0
     nochange_huts = 0
@@ -34,12 +37,21 @@ def init_huts_db(
     hut_counter = 0
     fails = []
     for hut_counter, hut_src in enumerate(hut_sources, start=1):
+        if hut_src.location is None:
+            failed_huts += 1
+            click.echo(f"  Hut {hut_counter!s: <3} '{hut_src.name}'", nl=False)
+            click.secho(
+                f"  skipped (no location — review status: {hut_src.review_status})",
+                fg="yellow",
+            )
+            continue
         _name = f"  Hut {hut_counter!s: <3} '{hut_src.name}'"
         click.echo(f"{_name: <48}", nl=False)
         try:
             db_hut, created = Hut.update_or_create(
                 hut_source=hut_src,
                 review=review,
+                include_photos=include_photos,
                 force_overwrite=force_overwrite,
                 force_overwrite_include=force_overwrite_include,
                 force_overwrite_exclude=force_overwrite_exclude,
@@ -57,15 +69,22 @@ def init_huts_db(
                 click.secho("not changed", dim=True)
             else:
                 click.secho("unknown state", fg="red")
-        except IntegrityError as e:
-            err_msg = str(e).split("\n")[0]
+        except ValidationError as e:
+            # Stale or broken stored ``source_data`` re-validated in
+            # ``BaseService.convert()`` (e.g. BACKEND-DJANGO-Q: a stored
+            # ``card.img: null``) must fail this hut only — not abort the
+            # whole import run after every other org/hut already processed.
+            err_loc = "; ".join(
+                ".".join(str(part) for part in err["loc"]) for err in e.errors()[:3]
+            )
             click.secho(
-                f" {'(' + hut_src.organization.slug + '-' + hut_src.source_id + ')':<20} E: {err_msg}",
+                f" {'(' + hut_src.organization.slug + '-' + hut_src.source_id + ')':<20}"
+                f" E: {e.title}: {err_loc}",
                 dim=True,
             )
             failed_huts += 1
             fails.append(hut_src)
-        except NotImplementedError as e:
+        except (IntegrityError, NotImplementedError) as e:
             err_msg = str(e).split("\n")[0]
             click.secho(
                 f" {'(' + hut_src.organization.slug + '-' + hut_src.source_id + ')':<20} E: {err_msg}",
@@ -83,13 +102,20 @@ def init_huts_db(
 
 
 def add_huts_function(
-    obj: "Command", offset, limit, update, force, selected_organization, **kwargs
-):
+    obj: "Command",
+    offset: int = 0,
+    limit: int = 0,
+    update: bool = False,
+    force: bool = False,
+    selected_organization: str | None = None,
+    **kwargs: Any,
+) -> None:
     force_overwrite = kwargs.get("force_overwrite", False)
     force_overwrite_include = kwargs.get("force_overwrite_include", [])
     force_overwrite_exclude = kwargs.get("force_overwrite_exclude", [])
     review = kwargs.get("review", True)
     force_none = kwargs.get("force_none", False)
+    include_photos = PhotosMode(kwargs.get("photos", PhotosMode.EMBEDDED.value))
     total_entries = HutSource.objects.all().count()
     if total_entries == 0:
         obj.stdout.write(
@@ -116,6 +142,7 @@ def add_huts_function(
     added, updated, nochange, failed = init_huts_db(
         src_huts,
         review=review,
+        include_photos=include_photos,
         force_overwrite=force_overwrite,
         force_overwrite_include=force_overwrite_include,
         force_overwrite_exclude=force_overwrite_exclude,
@@ -148,25 +175,36 @@ def add_huts_function(
 
 
 @register_command(group="Huts")
-class Command(CRUDCommand):
+class Command(CRUDCommand[Hut]):
     # help = ""
-    model = Hut
+    model = Hut  # type: ignore  # argument typing drift vs stubs
     model_names = "huts"
-    add_function = add_huts_function
+    add_function = add_huts_function  # type: ignore  # CRUDCommand handler typing drift
     use_limit_arg = True
     use_offset_arg = True
     use_update_arg = True
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
 
-    def add_arguments(self, parser):
+    @override
+    def add_arguments(self, parser: CommandParser) -> None:
         super().add_arguments(parser)
         parser.add_argument(
             "-r",
             "--no-review",
             action="store_true",
             help="Do not change to review status (to 'review' if update, to 'new' if created)",
+        )
+        parser.add_argument(
+            "-p",
+            "--photos",
+            choices=[mode.value for mode in PhotosMode],
+            default=PhotosMode.EMBEDDED.value,
+            help="Which photos to import (hut-services PhotosMode): 'none' skips photos "
+            "entirely, 'embedded' (default) only converts photos already part of the "
+            "stored source data (no extra provider requests), 'all' additionally fetches "
+            "photos that need extra requests (camptocamp, wikidata, refuges.info, doc_nz)",
         )
         parser.add_argument(
             "-s",
@@ -208,19 +246,21 @@ class Command(CRUDCommand):
             help="adds everything (huts, owners, contacts), limits and offset are not used!",
         )
 
-    def handle(
+    @override
+    def handle(  # type: ignore  # required named params before *args: signature drift vs CRUDCommand.handle (Django call_command kwargs)
         self,
         no_review: bool,
         source: str,
         overwrite: bool,
         include: str,
         exclude: str,
+        photos: str,
         set_none: bool,
         delete_all: bool,
         add_all: bool,
-        *args,
-        **options,
-    ):
+        *args: Any,
+        **options: Any,
+    ) -> None:
         force_overwrite_include = [f.strip() for f in include.split(",") if include]
         force_overwrite_exclude = [f.strip() for f in exclude.split(",") if exclude]
         if force_overwrite_exclude or force_overwrite_include:
@@ -242,6 +282,9 @@ class Command(CRUDCommand):
             # Note: Hut categories are now created via migration (0002_migrate_huttype_data)
             # No need to call the old hut_types command anymore
             limit = options.get("limit")
+            # All sources import with embedded photos (PhotosMode.EMBEDDED):
+            # photos that would need extra provider requests are enriched
+            # separately by the geoimages pin service, not by this bulk import.
             for params in [
                 {"source": "sac", "no_review": True},
                 {
@@ -278,6 +321,7 @@ class Command(CRUDCommand):
             kwargs_add={
                 "review": not no_review,
                 "selected_organization": source,
+                "photos": photos,
                 "force_overwrite": overwrite,
                 "force_overwrite_include": [
                     f.strip() for f in include.split(",") if include

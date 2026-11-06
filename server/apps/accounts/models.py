@@ -5,10 +5,18 @@ so it carries the unique constraint the default ``auth.User`` never had.
 The ``username`` field is dropped — the legacy Zitadel-synced accounts used
 numeric Zitadel IDs there, which no longer matter.
 
+Email is the identity (spec: account-management), the primary key is an
+opaque UUID v4 (no enumeration, stable ids when sanitized prod→staging
+copies re-create placeholder users with the same ids).
+
 Introduced while there is no production user base (the cheapest moment);
 existing dev/test databases are migrated in ``0001_initial`` (rows copied
-from ``auth_user``, primary keys preserved).
+from ``auth_user``, primary keys preserved) and converted to UUID keys in
+``0003_uuid_pk``.
 """
+
+import uuid
+from typing import ClassVar
 
 from django.contrib.auth.models import AbstractUser
 from django.db import models
@@ -17,14 +25,15 @@ from .managers import UserManager
 
 
 class User(AbstractUser):
-    username = None
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)  # type: ignore  # custom pk: Django idiom redeclares Model.id
+    username = None  # type: ignore  # email-only user model: username disabled (Django idiom)
     email = models.EmailField("email address", unique=True)
 
     USERNAME_FIELD = "email"
     EMAIL_FIELD = "email"
-    REQUIRED_FIELDS: list[str] = []
+    REQUIRED_FIELDS: list[str] = []  # type: ignore[assignment]  # Django idiom
 
-    objects = UserManager()
+    objects: ClassVar[UserManager] = UserManager()  # type: ignore  # @override cannot decorate class-body assignments; Django manager idiom
 
     def __str__(self) -> str:
         return self.email

@@ -16,7 +16,7 @@ The `get_geoplaces_for_tiles()` function provides dynamic tile generation with:
 - Database-level tile caching with TTL and cache versioning
 
 ### Function Location
-Latest migration: server/apps/geometries/migrations/0041_optimize_tile_performance.py
+Latest migration: server/apps/geometries/migrations/0077_tile_elevation_and_transition_identity.py
 
 ### Query Parameters
 ```json
@@ -25,12 +25,15 @@ Latest migration: server/apps/geometries/migrations/0041_optimize_tile_performan
   "cluster_max_zoom": 6,                  // Max zoom for clustering - default: 6
   "cluster_low_zoom_offset": 2,           // Extra zooms for transition - default: 2
   "importance_threshold": 50,             // Importance for early raw graduation - default: 50
-  "cluster_radius_m": 5000.0,             // Cluster radius in meters at ref zoom - default: auto
+  "cluster_radius_m": 5000.0,             // Cluster radius in meters at ref zoom - default: 5000
   "cluster_ref_zoom": 8,                  // Reference zoom for cluster_radius_m - default: 8
   "max_features": 10000,                  // Max features per tile - default: null (no limit)
   "max_label_zoom": 14,                   // Only include name above this zoom - default: 14
-  "fields": "category,color,importance,count,name,slug",  // Fields to include - default: see list
-  "cache_ttl_days": 7,                    // Cache TTL in days - default: 7
+  "fields": "color,parent_color,parent_slug,importance,count,name,slug",  // Fields to include - default: see list (elevation is opt-in via fields)
+  "categories": "hut,hotel",               // Exact category-slug filter (OR logic) - default: null
+  "categories_all": "hut,parking",         // Exact category-slug filter (AND logic) - default: null
+  "category_tree": "accommodation",        // Subtree filter: slug matched against kind, group or domain (OR) - default: null
+  "cache_ttl_days": 7,                    // Cache TTL in days - default: 7, 0 disables persistence
   "cache_version": 1                      // Bump to invalidate all cached tiles - default: 1
 }
 ```
@@ -39,6 +42,37 @@ Latest migration: server/apps/geometries/migrations/0041_optimize_tile_performan
 - **z <= cluster_max_zoom**: All POIs clustered by (category, grid_cell). Cluster radius scales with zoom.
 - **cluster_max_zoom < z <= max+offset**: Transition zone. High-importance POIs (>= threshold) shown raw, low-importance still clustered with shrinking grid.
 - **z > max+offset**: All POIs raw (no clustering).
+
+### Feature Properties
+One feature per place (its primary category — lowest tree ``order``);
+cluster features aggregate their members' primary category.
+
+- ``slug``, ``name`` (empty below ``max_label_zoom``), ``importance``
+- ``count`` — 1 for raw places, N for clusters
+- ``elevation`` — only when ``fields`` names it; individual features
+  (full-raw path and the clustered path's transition twin) only —
+  cluster features never carry it
+- flat styling/filtering props: ``category_slug``,
+  ``category_identifier``, ``category_order``, ``color``,
+  ``parent_color``, ``parent_slug``
+- the transition-zone twin (graduated individuals at
+  ``cluster_max_zoom < z <= max+offset``) carries the real ``slug``
+  and the language-resolved ``name`` (still gated by
+  ``max_label_zoom``); full-clustering-zone cluster features stay
+  anonymous (``''`` name/slug — clients resolve them via
+  ``GET /v1/geoplaces/near`` on click)
+- ``categories`` — jsonb array of ALL the place's categories (only when
+  ``fields`` names it; absent for cluster features). NOTE: there is no
+  ``category`` object property — ST_AsMVT flattens jsonb objects into
+  top-level keys (an object's ``name``/``slug``/``color`` would shadow
+  the feature's own columns), so the object was dropped from the
+  projections entirely; its data lives in the flat props above.
+- ``sources`` — jsonb array of source associations (only when ``fields``
+  names it; absent for cluster features)
+
+Note: the OSM importer links LEAF categories only — group-level or
+ domain-level filtering needs the ``category_tree`` param, not
+ ``categories``.
 
 ### Caching Behavior
 - Tiles cached in `geometries_tile_cache` table
@@ -105,7 +139,36 @@ tile = GeoPlacesForTilesView.objects.get_tile(12, 1234, 2345, {"cluster_max_zoom
   - COUNT(*) instead of COUNT(DISTINCT slug) for clusters
   - MATERIALIZED CTE hint on sampled_pois
   - martin.yaml: buffer 64→16, maxzoom 20/24→16 for all point layers
+- 2026-11-03: Restore + extend after 0068's accidental revert (migration
+  `0076_restore_clustered_geoplaces_tiles`): 0068 rebuilt the function from
+  0028's pre-clustering template for the kind_slug rename, silently dropping
+  the 0032-0041 clustering/caching. The restore re-bases on 0041 and adds:
+  - one feature per place (primary category by tree order) instead of one
+    feature per geoplace-category row
+  - flat category_slug/category_identifier/category_order/parent_slug props
+  - `categories`/`categories_all` exact filters (carried from the 0028 template)
+  - `category_tree` subtree filter (kind/group/domain ancestor match)
+  - `cluster_radius_m` default 5000 (a missing param emptied clustered tiles)
+  - `cache_ttl_days <= 0` skips cache persistence
+- 2026-11-03 (later): Shared membership + elevation + transition identity
+  (migration `0077_tile_elevation_and_transition_identity`):
+  `geoplaces_cluster_grid_size` (the grid formula, one definition) and
+  `geoplaces_cluster_membership` (visibility/category filters, primary
+  category, cell snap, hybrid split) become the shared SQL core the
+  clustered path aggregates — and the `GET /v1/geoplaces/near`
+  endpoint queries for cluster members (counts cannot drift; SYNC
+  comments at both call sites, invariant pinned in
+  `tests/apps/geometries/test_geoplaces_near.py`); `elevation` joins the
+  opt-in `fields` surface (individual features only — NULL/absent for
+  clusters and when not requested, so non-opting consumers' tiles stay
+  byte-identical); the transition-zone raw twin carries real `slug`/
+  `name` instead of `''` (identity for promoteId/popups in the hybrid
+  band — names still gated by `max_label_zoom`); the migration purges
+  `geometries_tile_cache` (the identity fix rides no query param, so
+  stale rows would survive until TTL).
 """
+
+from typing import Any
 
 from psqlextra.models import PostgresViewModel
 
@@ -114,13 +177,13 @@ from django.contrib.gis.db import models
 from django.db import connection
 
 
-class GeoPlacesForTilesViewManager(models.Manager):
+class GeoPlacesForTilesViewManager(models.Manager["GeoPlacesForTilesView"]):
     """
     Manager for GeoPlacesForTilesView with helper methods for tile generation.
     """
 
     def get_tile(
-        self, z: int, x: int, y: int, query_params: dict | None = None
+        self, z: int, x: int, y: int, query_params: dict[str, Any] | None = None
     ) -> bytes | None:
         """
         Get vector tile for given coordinates.
@@ -215,8 +278,8 @@ class GeoPlacesForTilesView(PostgresViewModel):
     # Each category has: slug, identifier, order, color, parent_slug, extra
     categories = models.JSONField(default=list)
 
-    # Detail type
-    detail_type = models.CharField(max_length=50)
+    # Kind slug (super-root identifier, e.g. map.amenity)
+    domain = models.CharField(max_length=100)
 
     # Extra data (category-specific overflow)
     extra = models.JSONField(default=dict)
@@ -224,12 +287,19 @@ class GeoPlacesForTilesView(PostgresViewModel):
     # Organization sources (array of objects with slug and source_id)
     sources = models.JSONField(default=list)
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    # Subclass psqlextra's concrete Meta (Django's documented model-
+    # inheritance pattern) so override checkers accept the inner class;
+    # ``abstract = False`` MUST be re-declared — ModelBase probes it with
+    # getattr (inheritance-aware) and the base Meta sets abstract=True.
+    # Django's Options reads Meta options from the subclass's own
+    # __dict__ only, so nothing else leaks from the base.
+    class Meta(PostgresViewModel.Meta):
+        abstract = False
         managed = False
         db_table = "geoplaces_for_tiles"
 
     # Custom manager with helper methods
-    objects = GeoPlacesForTilesViewManager()
+    objects = GeoPlacesForTilesViewManager()  # pyrefly: ignore[missing-override-decorator]  # @override cannot decorate class-body assignments; Django manager idiom
 
     class ViewMeta:
         """
@@ -240,7 +310,7 @@ class GeoPlacesForTilesView(PostgresViewModel):
         """
 
         @staticmethod
-        def query():
+        def query() -> tuple[str, list[Any]]:
             """
             Generate SQL for creating the view.
 
@@ -311,7 +381,7 @@ class GeoPlacesForTilesView(PostgresViewModel):
               gp.elevation,
               gp.country_code,
               gp.importance,
-              gp.detail_type,
+              gp.domain,
               gp.extra,
 
               -- Default language name with fallbacks (based on MODELTRANS_FALLBACK)
@@ -321,7 +391,13 @@ class GeoPlacesForTilesView(PostgresViewModel):
               {name_columns},
 
               -- Categories (JSON array with all categories for this place)
-              -- Each category has: slug, identifier, order, color, parent_slug, parent_name, extra
+              -- Each category has: slug, identifier, order, color, parent_slug,
+              -- parent_name, classifier (mode.* identifier), extra.
+              -- Capacity is NOT joined here — the model SQL must not
+              -- reference tables created by later migrations (fresh-DB
+              -- view creation in 0027+ would fail). Capacity reaches
+              -- tile consumers through the martin tile function's own
+              -- query layer (task 4.5 documented in the work doc).
               COALESCE(
                 (
                   SELECT jsonb_agg(
@@ -332,6 +408,7 @@ class GeoPlacesForTilesView(PostgresViewModel):
                       'color', cat.color,
                       'parent_slug', parent.slug,
                       'parent_name', parent.name,
+                      'classifier', clf.identifier,
                       'extra', gpc.extra
                     )
                     ORDER BY cat."order"
@@ -339,6 +416,7 @@ class GeoPlacesForTilesView(PostgresViewModel):
                   FROM geometries_geoplace_category gpc
                   LEFT JOIN categories_category cat ON gpc.category_id = cat.id
                   LEFT JOIN categories_category parent ON cat.parent_id = parent.id
+                  LEFT JOIN categories_category clf ON gpc.classifier_id = clf.id
                   WHERE gpc.geo_place_id = gp.id AND cat.id IS NOT NULL
                 ),
                 '[]'::jsonb

@@ -8,12 +8,11 @@ from .osm_base import CategoryMappings, OSMMapping
 
 TRANSPORT = CategoryMappings(
     category="transport",
-    detail_type="transport",  # Uses TransportDetail
     enabled=False,
     mappings=[
         OSMMapping(
             osm_filters=["highway=bus_stop"],
-            category_slug="transport.bus_stop",
+            category_slug="transport.bus",
             mapcomplete_theme="transit",
             priority=0,
             importance_range=(15, 25, 40),
@@ -39,7 +38,7 @@ TRANSPORT = CategoryMappings(
         ),
         OSMMapping(
             osm_filters=["railway=station"],
-            category_slug="transport.train_station",
+            category_slug="transport.rail",
             mapcomplete_theme="transit",
             priority=0,
             importance_range=(40, 55, 70),
@@ -52,14 +51,14 @@ TRANSPORT = CategoryMappings(
         ),
         OSMMapping(
             osm_filters=["railway=halt"],
-            category_slug="transport.train_station",
+            category_slug="transport.rail",
             mapcomplete_theme="transit",
             priority=1,  # Lower priority, same category as station
             importance_range=(25, 35, 50),
         ),
         OSMMapping(
             osm_filters=["aerialway=station"],
-            category_slug="transport.cable_car",
+            category_slug="transport.cablecar",
             mapcomplete_theme="transit",
             priority=0,
             importance_range=(35, 50, 65),

@@ -10,16 +10,19 @@ and usage signals. Images matching the GeoPlace's QID get a significant
 score boost.
 """
 
+from __future__ import annotations
+
 import re
 from datetime import datetime, timezone
-from typing import Any
+from types import ModuleType
+from typing import TYPE_CHECKING, Any, Protocol
 
 import structlog
 
 from django.conf import settings
 from django.contrib.gis.geos import Point
 
-from .base import ImageProvider, ImageResult
+from .base import ImageProvider, ImageResult, provider_http_timeout
 from .schemas import GeoPlaceSchema
 from .scoring import (
     calculate_age_penalty,
@@ -27,6 +30,24 @@ from .scoring import (
     score_qid_match,
     score_technical_quality,
 )
+
+if TYPE_CHECKING:
+    from httpx import AsyncClient
+
+
+class _ResponseLike(Protocol):
+    """Minimal response shape the provider reads from any client."""
+
+    def raise_for_status(self) -> Any: ...
+    def json(self) -> Any: ...
+
+
+class _AsyncClientLike(Protocol):
+    """Client surface the provider uses (test doubles; real callers pass
+    httpx.AsyncClient, accepted via the union on client params)."""
+
+    async def get(self, url: str, params: Any) -> _ResponseLike: ...
+
 
 logger = structlog.get_logger()
 
@@ -85,6 +106,23 @@ def _select_large_source(
     if str(mime).lower() == "image/tiff":
         return thumb_url if is_thumb(thumb_url) else original_url
     return original_url or thumb_url_large or thumb_url or thumb_url
+
+
+def _raise_on_mediawiki_error(data: dict[str, Any], context: str) -> None:
+    """Raise when a MediaWiki API response carries an ``error`` document.
+
+    The MediaWiki Action API reports bad parameters (e.g. non-integer
+    values for integer params like ``ggsradius``) as HTTP 200 with
+    ``{"error": {"code": "badinteger"}}`` — raise_for_status does not
+    catch that, and the strategy would silently contribute zero results.
+    Raising here lets the per-strategy handlers in :meth:`fetch` log it.
+    """
+    error = data.get("error")
+    if error:
+        raise RuntimeError(
+            f"MediaWiki API error in {context}: {error.get('code')}: "
+            f"{error.get('info', '')}".strip()
+        )
 
 
 class WikimediaCommonsProvider(ImageProvider):
@@ -267,7 +305,7 @@ class WikimediaCommonsProvider(ImageProvider):
         radius: float,
         limit: int,
         place_qids: set[str],
-        httpx,
+        httpx: ModuleType | type[Any],
     ) -> list[ImageResult]:
         """
         Fetch images via Wikidata SPARQL spatial query.
@@ -312,7 +350,9 @@ class WikimediaCommonsProvider(ImageProvider):
             "Accept": "application/json",
         }
 
-        async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+        async with httpx.AsyncClient(
+            timeout=provider_http_timeout(), headers=headers
+        ) as client:
             response = await client.get(
                 self.wikidata_endpoint, params={"query": sparql, "format": "json"}
             )
@@ -371,7 +411,7 @@ class WikimediaCommonsProvider(ImageProvider):
         lat: float,
         lon: float,
         limit: int,
-        httpx,
+        httpx: ModuleType | type[Any],
     ) -> list[ImageResult]:
         """
         Fetch images via Wikidata SPARQL using QIDs.
@@ -416,7 +456,9 @@ class WikimediaCommonsProvider(ImageProvider):
         results = []
         categories_to_fetch = set()  # Track categories we need to fetch
 
-        async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+        async with httpx.AsyncClient(
+            timeout=provider_http_timeout(), headers=headers
+        ) as client:
             response = await client.get(
                 self.wikidata_endpoint, params={"query": sparql, "format": "json"}
             )
@@ -515,7 +557,7 @@ class WikimediaCommonsProvider(ImageProvider):
         radius: float,
         limit: int,
         place_qids: set[str],
-        httpx,
+        httpx: ModuleType | type[Any],
     ) -> list[ImageResult]:
         """
         Fetch images via Commons geosearch API.
@@ -533,8 +575,11 @@ class WikimediaCommonsProvider(ImageProvider):
         # MediaWiki GeoData expects ggsradius in METERS, bounded 10–10000;
         # the endpoint's radius is meters — clamp to the API bounds instead
         # of converting (the old km value was out of range for every query,
-        # so geosearch silently returned nothing).
-        ggsradius_m = min(max(radius, 10), 10_000)
+        # so geosearch silently returned nothing). Cast to int: the endpoint
+        # radius is a pydantic float (``300.0``) and MediaWiki integer
+        # params answer HTTP 200 with ``{"error": {"code": "badinteger"}}``
+        # and zero results — silently cached as an empty provider run.
+        ggsradius_m = int(min(max(radius, 10), 10_000))
 
         params = {
             "action": "query",
@@ -555,11 +600,14 @@ class WikimediaCommonsProvider(ImageProvider):
             "User-Agent": getattr(settings, "BOT_AGENT", "WodoreBackend/1.0"),
         }
 
-        async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+        async with httpx.AsyncClient(
+            timeout=provider_http_timeout(), headers=headers
+        ) as client:
             response = await client.get(self.commons_api, params=params)
             response.raise_for_status()
 
             data = response.json()
+            _raise_on_mediawiki_error(data, "geosearch")
             pages = data.get("query", {}).get("pages", {}).values()
 
             # Extra passes at the large thumb steps (servable sources —
@@ -609,7 +657,7 @@ class WikimediaCommonsProvider(ImageProvider):
             return results
 
     async def _fetch_thumb_bucket(
-        self, client, params: dict, width: int
+        self, client: AsyncClient | _AsyncClientLike, params: dict[str, Any], width: int
     ) -> dict[str, str]:
         """Fetch servable thumburls for one bucket width, keyed by page title.
 
@@ -624,6 +672,7 @@ class WikimediaCommonsProvider(ImageProvider):
             response = await client.get(self.commons_api, params=bucket_params)
             response.raise_for_status()
             data = response.json()
+            _raise_on_mediawiki_error(data, "thumb bucket")
         except Exception as e:
             logger.warning(
                 "commons_thumb_bucket_fetch_failed", width=width, error=str(e)
@@ -638,7 +687,7 @@ class WikimediaCommonsProvider(ImageProvider):
         return thumbs
 
     async def _fetch_commons_metadata(
-        self, commons_title: str, client
+        self, commons_title: str, client: AsyncClient | _AsyncClientLike
     ) -> dict[str, Any] | None:
         """
         Fetch detailed metadata for a Commons image.
@@ -666,6 +715,7 @@ class WikimediaCommonsProvider(ImageProvider):
             response.raise_for_status()
 
             data = response.json()
+            _raise_on_mediawiki_error(data, "imageinfo")
             pages = data.get("query", {}).get("pages", {})
 
             for page_id, page_data in pages.items():
@@ -700,7 +750,7 @@ class WikimediaCommonsProvider(ImageProvider):
         lat: float,
         lon: float,
         limit: int,
-        httpx,
+        httpx: ModuleType | type[Any],
     ) -> list[ImageResult]:
         """
         Fetch images from a Wikimedia Commons category.
@@ -734,11 +784,14 @@ class WikimediaCommonsProvider(ImageProvider):
 
         results = []
 
-        async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+        async with httpx.AsyncClient(
+            timeout=provider_http_timeout(), headers=headers
+        ) as client:
             response = await client.get(self.commons_api, params=params)
             response.raise_for_status()
 
             data = response.json()
+            _raise_on_mediawiki_error(data, "categorymembers")
             members = data.get("query", {}).get("categorymembers", [])
 
             logger.debug(
@@ -807,7 +860,7 @@ class WikimediaCommonsProvider(ImageProvider):
             logger.debug("commons_category_query_complete", image_count=len(results))
             return results
 
-    def _parse_commons_api_response(self, page_data: dict) -> dict[str, Any]:
+    def _parse_commons_api_response(self, page_data: dict[str, Any]) -> dict[str, Any]:
         """
         Parse Wikimedia Commons API response into metadata dict.
 
@@ -932,7 +985,7 @@ class WikimediaCommonsProvider(ImageProvider):
 
     def _score_commons_image(
         self,
-        img_data: dict,
+        img_data: dict[str, Any],
         source_type: str,
         has_qid: bool,
         matches_place_qid: bool,
@@ -990,6 +1043,12 @@ class WikimediaCommonsProvider(ImageProvider):
                 # Try ISO 8601 format first
                 try:
                     captured_at = datetime.fromisoformat(date_taken_str)
+                    if captured_at.tzinfo is None:
+                        # EXIF times carry no zone — assume UTC (same as the
+                        # dateparser fallback below), else the aware-now
+                        # subtraction would raise and silently drop the
+                        # age penalty.
+                        captured_at = captured_at.replace(tzinfo=timezone.utc)
                 except ValueError:
                     # Try other common formats
                     import dateparser
@@ -1033,7 +1092,7 @@ class WikimediaCommonsProvider(ImageProvider):
     def _create_image_result(
         self,
         commons_title: str,
-        img_data: dict,
+        img_data: dict[str, Any],
         qid: str | None,
         score: int,
         query_lat: float,
@@ -1079,6 +1138,11 @@ class WikimediaCommonsProvider(ImageProvider):
                     # Try ISO 8601 format first
                     try:
                         captured_at = datetime.fromisoformat(date_str)
+                        if captured_at.tzinfo is None:
+                            # EXIF times carry no zone — assume UTC (same
+                            # as the dateparser fallback below) so pins get
+                            # aware capture dates.
+                            captured_at = captured_at.replace(tzinfo=timezone.utc)
                     except ValueError:
                         # Try other common formats
                         import dateparser

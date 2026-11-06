@@ -5,7 +5,7 @@ This command copies config and sprite SVG files needed by Martin from the databa
 to a target directory (typically a Kubernetes PVC mount in production).
 
 Usage:
-    # Sync default categories (transport, accommodation, spot)
+    # Sync default sprite collections (transport, accommodation, spot)
     app martin_sync --target /mnt/martin-pvc
 
     # Sync all categories
@@ -21,21 +21,98 @@ Usage:
     app martin_sync --target ./test_output --dry-run --all
 """
 
+from __future__ import annotations
+
+import re
 import shutil
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, override
 
 import yaml
 from django_admin_runner import register_command
 
 from django.conf import settings
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand, CommandError, CommandParser
+
+from server.apps.symbols.svg import sanitize_svg
+
+if TYPE_CHECKING:
+    from server.apps.categories.models import Category
+
+#: `${NAME}` / `${NAME:-default}` tokens in passthrough source headers —
+#: resolved through the env registry (DB value wins, process-env
+#: fallback) at sync time so a key stored in the EnvVar admin reaches
+#: Martin without any container-env plumbing. Unresolvable tokens stay
+#: verbatim: Martin expands them from its own process env as fallback
+#: (``:-`` defaults empty), so an unset registry row degrades to an
+#: unauthenticated upstream instead of a broken config.
+_HEADER_ENV_TOKEN_RE = re.compile(r"\$\{([A-Z][A-Z0-9_]*)(?::-[^}]*)?\}")
+
+#: Slug of the map namespace root (geometries migration 0067 seeded the
+#: display tree as ``map → super-root (amenity/admin/natural) → contract
+#: group → kind``). Sprite collections follow the served styles, not
+#: the full tree: ONE collection per contract group
+#: (``parent__parent__slug="map"`` — ``accommodation``, ``transport``, …,
+#: ``CategoryQuerySet.contract_groups``), named by its slug. Vocabulary
+#: roots (``spot``, ``mode``, ``relations``, ``role``, ``uri``, ``emoji`` …)
+#: own NO collection (owner decision: nothing outside the map tree is
+#: served as map sprites), nor do the ``map`` root and the super-roots
+#: themselves (structural domain anchors, no style-referenced icons).
+#: Icon names inside a collection are the tree path below ``map`` —
+#: ``<domain>.<group>`` for the group's own icon (its identifier),
+#: ``<domain>.<group>.<kind>`` for kinds.
+_MAP_ROOT_SLUG = "map"
+
+
+def resolve_passthrough_headers(config: dict[str, Any]) -> list[str]:
+    """Substitute `${NAME}` tokens in ``passthrough.sources.*.headers``.
+
+    Scoped to header values on purpose: every other `${…}` in the config
+    (``${DATABASE_URL}``, ``${MARTIN_SYNC_MOUNT:-…}``) keeps Martin's own
+    env expansion — the env registry is an allowlist for API keys, not a
+    general substitution engine. Returns the names actually resolved
+    (for logging); never logs values.
+    """
+    from server.apps.envvars.registry import resolve
+    from server.apps.envvars.registry import rows as registry_rows
+
+    resolved_names: list[str] = []
+    sources = (config.get("passthrough") or {}).get("sources") or {}
+    if not isinstance(sources, dict):
+        return resolved_names
+    try:
+        snapshot = registry_rows()
+    except Exception:
+        # Degraded registry (SimpleTestCase tests, early boot, cache/DB
+        # failure — same rationale as registry.resolve_setting): no
+        # substitution, tokens stay verbatim for Martin's own env
+        # expansion. Never let a registry hiccup break config generation.
+        return resolved_names
+    for source in sources.values():
+        if not isinstance(source, dict):
+            continue  # shorthand URL (string/list) — no headers
+        headers = source.get("headers")
+        if not isinstance(headers, dict):
+            continue
+        for name, value in headers.items():
+            if not isinstance(value, str) or "${" not in value:
+                continue
+            for match in _HEADER_ENV_TOKEN_RE.finditer(value):
+                resolved = resolve(match.group(1), snapshot)
+                if not resolved:
+                    continue  # unregistered/blank: leave for Martin's env expansion
+                value = value.replace(match.group(0), resolved)
+                resolved_names.append(match.group(1))
+            headers[name] = value
+    return resolved_names
 
 
 @register_command(group="Huts")
 class Command(BaseCommand):
     help = "Sync Martin tile server assets to target directory (e.g., Kubernetes PVC)"
 
-    def add_arguments(self, parser):
+    @override
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--target",
             type=str,
@@ -47,14 +124,15 @@ class Command(BaseCommand):
             "--include",
             type=str,
             default="",
-            help="Comma-separated list of parent/root category slugs to include. "
-            "If not specified, all categories are included.",
+            help="Comma-separated list of sprite collection slugs to include "
+            "(contract groups like accommodation,transport). If not "
+            "specified, all collections are included.",
         )
         parser.add_argument(
             "--category-variants",
             type=str,
             default="",
-            help="Comma-separated list of category variants to sync (e.g., detailed,simple,mono). "
+            help="Comma-separated list of category variants to sync (e.g., color,primitive,mono). "
             "Default: all available variants",
         )
         parser.add_argument(
@@ -76,7 +154,8 @@ class Command(BaseCommand):
             help="Validate files after copying (verify they exist and are readable)",
         )
 
-    def handle(self, *args, **options):
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         from server.apps.categories.models import Category
         from server.apps.symbols.models import Symbol
 
@@ -141,7 +220,7 @@ class Command(BaseCommand):
         self.stdout.write("=" * 60)
 
         # Statistics
-        stats = {
+        stats: dict[str, Any] = {
             "files_copied": 0,
             "files_updated": 0,
             "files_created": 0,
@@ -164,8 +243,16 @@ class Command(BaseCommand):
             target_path, dry_run, stats, include_list, variants, Category
         )
 
-        # 2. Copy style files
-        self._sync_styles(target_path, dry_run, stats)
+        # 1b. Copy static sprites (basemap sprites like wd-maps: peak,
+        # station markers, rings — referenced root-relative by the
+        # backend-served basemap styles, so Martin must serve them too).
+        self._sync_static_sprites(target_path, dry_run, stats)
+
+        # 2. Copy font files (TTF for Martin glyph serving)
+        # (Styles are no longer synced: the backend serves them from the
+        # basemaps registry at /v1/map/styles/<slug>.json — MapLibre styles
+        # live in the database now, Martin serves tiles/sprites/fonts only.)
+        self._sync_fonts(target_path, dry_run, stats)
 
         # 3. Generate and copy martin.yaml config with sprite paths
         self._sync_config(target_path, dry_run, stats, merge_file_path)
@@ -184,13 +271,22 @@ class Command(BaseCommand):
         self._print_summary(stats, dry_run)
 
     def _cleanup_old_sprites(
-        self, target_path, dry_run, stats, include_list, variants, Category
-    ):
+        self,
+        target_path: Path,
+        dry_run: bool,
+        stats: dict[str, Any],
+        include_list: list[str] | None,
+        variants: list[str],
+        Category: type[Category],
+    ) -> None:
         """
         Remove old sprite files that are no longer in the database.
 
-        This handles cases where category identifiers change (e.g., from slug to identifier)
-        or when categories/symbols are deleted.
+        This handles cases where sprite files outlive their categories:
+        restructured collections (e.g. the map super-root restructure,
+        when contract-group sprites must move out of a collapsed
+        ``map/`` directory), renamed identifiers or deleted
+        categories/symbols.
 
         Only removes files in the sprite directories, never touches config or styles.
         """
@@ -205,47 +301,34 @@ class Command(BaseCommand):
             )
             return
 
-        # Get root categories to check (same filtering as sync)
-        root_categories = Category.objects.filter(
-            is_active=True, parent=None
-        ).select_related("symbol_detailed", "symbol_simple", "symbol_mono")
+        # Get sprite collections (same filtering as sync) — the walk
+        # that defines the expected file set below.
+        collections = self._sprite_collections(Category, include_list)
 
-        # Filter by include_list if specified
-        if include_list is not None:
-            root_categories = [
-                cat for cat in root_categories if cat.slug in include_list
-            ]
-
-        if not root_categories:
-            self.stdout.write("  ⚠ No root categories found, skipping cleanup")
+        if not collections:
+            self.stdout.write("  ⚠ No sprite collections found, skipping cleanup")
             return
 
         # Build set of expected file paths (what should exist after sync)
         expected_files = set()
 
-        for root_category in root_categories:
-            # Add root category files
-            for variant in variants:
-                symbol_field = f"symbol_{variant}"
-                symbol = getattr(root_category, symbol_field, None)
-                if symbol and symbol.svg_file:
-                    filename = f"{root_category.identifier}.svg"
-                    expected_files.add(Path(root_category.slug) / variant / filename)
+        for collection, children in collections:
+            # Collection's own icon (<domain>.<group>) + kind icons
+            # (<domain>.<group>.<kind>) — same naming as the sync.
+            members: list[tuple[Category, str]] = [
+                (collection, f"{collection.identifier}.svg")
+            ]
+            members += [
+                (child, f"{collection.identifier}.{child.slug}.svg")
+                for child in children
+            ]
 
-            # Add child category files
-            children = Category.objects.filter(
-                is_active=True, parent=root_category
-            ).select_related("symbol_detailed", "symbol_simple", "symbol_mono")
-
-            for child in children:
+            for category, filename in members:
                 for variant in variants:
                     symbol_field = f"symbol_{variant}"
-                    symbol = getattr(child, symbol_field, None)
+                    symbol = getattr(category, symbol_field, None)
                     if symbol and symbol.svg_file:
-                        filename = f"{child.identifier}.svg"
-                        expected_files.add(
-                            Path(root_category.slug) / variant / filename
-                        )
+                        expected_files.add(Path(collection.slug) / variant / filename)
 
         # Find and remove old files
         files_deleted_count = 0
@@ -293,45 +376,105 @@ class Command(BaseCommand):
         else:
             self.stdout.write("  ✓ No old files to remove")
 
-    def _sync_styles(self, target_path, dry_run, stats):
-        """Copy MapLibre style JSON files."""
-        self.stdout.write("\n[2/3] Syncing style files...")
+    def _sync_static_sprites(
+        self, target_path: Path, dry_run: bool, stats: dict[str, Any]
+    ) -> None:
+        """Copy static sprite SVG files (basemap sprites like wd-maps).
 
-        # Source: tile_server/styles/ in Git repo
-        source_dir = Path(settings.BASE_DIR) / "tile_server" / "styles"
+        ``tile_server/sprites/<name>/`` directories are sprite collections
+        authored in the repo (peak/station/ring markers referenced by the
+        backend-served basemap styles). They are copied verbatim into the
+        martin_sync target and registered in ``sprite_dirs`` so the
+        generated martin.yaml serves them (``/sprite/<name>``).
+
+        Their flat layout (SVGs directly in the collection dir, no variant
+        subdirectories) keeps them outside ``_cleanup_old_sprites``, which
+        only prunes files inside variant dirs.
+        """
+        self.stdout.write("\n[1b] Syncing static sprites...")
+
+        source_dir = Path(settings.BASE_DIR) / "tile_server" / "sprites"
 
         if not source_dir.exists():
             self.stdout.write(
-                self.style.WARNING(f"  ⚠ Styles directory not found: {source_dir}")
+                self.style.WARNING(
+                    f"  ⚠ Static sprites directory not found: {source_dir}"
+                )
             )
             return
 
-        # Target: <target>/styles/
-        target_dir = target_path / "styles"
+        # Ensure sprite_dirs is initialized in stats
+        if "sprite_dirs" not in stats:
+            stats["sprite_dirs"] = list[str]()
 
-        # Find all JSON style files
-        style_files = list(source_dir.glob("*.json"))
+        for sprite_category_dir in sorted(source_dir.iterdir()):
+            if not sprite_category_dir.is_dir():
+                continue
 
-        if not style_files:
+            category_name = sprite_category_dir.name
+            target_dir = target_path / "sprites" / category_name
+
+            # Register in sprite_dirs for martin.yaml config
+            if category_name not in stats["sprite_dirs"]:
+                stats["sprite_dirs"].append(category_name)
+
+            svg_files = list(sprite_category_dir.glob("*.svg"))
+            self.stdout.write(f"  {category_name}: {len(svg_files)} SVG(s)")
+
+            for svg_file in sorted(svg_files):
+                target_file = target_dir / svg_file.name
+                self._copy_file(
+                    svg_file,
+                    target_file,
+                    target_dir,
+                    dry_run,
+                    stats,
+                    label=f"static-sprite: {category_name}/{svg_file.stem}",
+                )
+
+    def _sync_fonts(
+        self, target_path: Path, dry_run: bool, stats: dict[str, Any]
+    ) -> None:
+        """Copy TTF font files for Martin glyph serving."""
+        self.stdout.write("\n[2b] Syncing font files...")
+
+        source_dir = Path(settings.BASE_DIR) / "tile_server" / "fonts"
+
+        if not source_dir.exists():
             self.stdout.write(
-                self.style.WARNING(f"  ⚠ No style files found in {source_dir}")
+                self.style.WARNING(f"  ⚠ Fonts directory not found: {source_dir}")
             )
             return
 
-        self.stdout.write(f"  Found {len(style_files)} style file(s)")
+        target_dir = target_path / "fonts"
+        font_files = list(source_dir.glob("*.ttf")) + list(source_dir.glob("*.otf"))
 
-        for style_file in sorted(style_files):
-            target_file = target_dir / style_file.name
+        if not font_files:
+            self.stdout.write(
+                self.style.WARNING(f"  ⚠ No font files found in {source_dir}")
+            )
+            return
+
+        self.stdout.write(f"  Found {len(font_files)} font file(s)")
+
+        for font_file in sorted(font_files):
+            target_file = target_dir / font_file.name
             self._copy_file(
-                style_file,
+                font_file,
                 target_file,
                 target_dir,
                 dry_run,
                 stats,
-                label=f"style: {style_file.stem}",
+                label=f"font: {font_file.stem}",
             )
 
-    def _sync_config(self, target_path, dry_run, stats, merge_file_path=""):
+    def _sync_config(
+        self,
+        target_path: Path,
+        dry_run: bool,
+        stats: dict[str, Any],
+        merge_file_path: str = "",
+    ) -> None:
         """Generate and copy martin.yaml config file with sprite paths."""
         self.stdout.write("\n[3/3] Generating config file...")
 
@@ -369,7 +512,9 @@ class Command(BaseCommand):
 
                     if merge_config:
                         # Deep merge the configs
-                        def deep_merge(base, override):
+                        def deep_merge(
+                            base: dict[str, Any], override: dict[str, Any]
+                        ) -> dict[str, Any]:
                             """Recursively merge override dict into base dict."""
                             result = base.copy()
                             for key, value in override.items():
@@ -394,6 +539,20 @@ class Command(BaseCommand):
                         )
                     )
                     stats["errors"] += 1
+
+        # Resolve `${NAME}` tokens in passthrough source headers through
+        # the env registry (DB value wins, process-env fallback) — an API
+        # key stored in the EnvVar admin reaches the GENERATED (gitignored)
+        # config without container-env plumbing; Martin's own env expansion
+        # stays the fallback for unresolvable tokens.
+        resolved_env = resolve_passthrough_headers(config)
+        if resolved_env:
+            names = ", ".join(sorted(set(resolved_env)))
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"  ✓ Resolved passthrough header env tokens: {names}"
+                )
+            )
 
         # Generate sprite paths based on synced directories
         sprite_dirs = stats.get("sprite_dirs", [])
@@ -421,9 +580,7 @@ class Command(BaseCommand):
                 "  No sprite directories synced, paths field removed from config"
             )
 
-        # Configure styles path
-        config["styles"] = {"paths": "${MARTIN_SYNC_MOUNT:-/martin_sync}/styles"}
-        self.stdout.write("  Configured styles path")
+        self.stdout.write("  No styles path configured (styles served by the API)")
 
         # Target: <target>/config/martin.yaml
         target_dir = target_path / "config"
@@ -467,30 +624,81 @@ class Command(BaseCommand):
             self.stdout.write(f"  → {target_file}")
             stats["files_copied"] += 1
 
+    def _sprite_collections(
+        self,
+        category_model: type[Category],
+        include_list: list[str] | None,
+    ) -> list[tuple[Category, list[Category]]]:
+        """Resolve sprite collections (contract groups) with their children.
+
+        Exactly the shape the served styles address
+        (``/sprite/accommodation,availability``, ``/sprite/transport`` —
+        basemaps ``seed_lib``): every contract group under a super-root
+        (``parent__parent__slug="map"``) with its direct children (the
+        kinds). Vocabulary roots (``spot``, ``mode``, ``relations``, …)
+        own no collection — nothing outside the map tree is served as
+        map sprites. Icon names are derived from the live tree path
+        (see :meth:`_sync_sprites`) so a group moving between domains
+        renames its icons without a martin_sync change.
+        """
+        queryset = category_model.objects.filter(is_active=True)
+
+        collections: list[Category] = list(
+            queryset.filter(parent__parent__slug=_MAP_ROOT_SLUG).select_related(
+                "parent", "symbol_color", "symbol_primitive", "symbol_mono"
+            )
+        )
+
+        if include_list is not None:
+            collections = [cat for cat in collections if cat.slug in include_list]
+
+        return [
+            (
+                category,
+                list(
+                    queryset.filter(parent=category).select_related(
+                        "symbol_color", "symbol_primitive", "symbol_mono"
+                    )
+                ),
+            )
+            for category in collections
+        ]
+
     def _sync_sprites(
-        self, target_path, dry_run, stats, include_list, variants, Category
-    ):
-        """Copy sprite SVG files from database (Category -> Symbol -> svg_file)."""
+        self,
+        target_path: Path,
+        dry_run: bool,
+        stats: dict[str, Any],
+        include_list: list[str] | None,
+        variants: list[str],
+        Category: type[Category],
+    ) -> None:
+        """Copy sprite SVG files from database (Category -> Symbol -> svg_file).
+
+        One sprite collection per :meth:`_sprite_collections` entry:
+        ``sprites/<group_slug>/<variant>/<icon>.svg``. Icon names are
+        the category's tree path below ``map``, derived from the live
+        tree at sync time:
+
+        * the group's own icon — its identifier ``<domain>.<group>``
+          (e.g. ``transport.transport``);
+        * kinds — ``<domain>.<group>.<kind>`` (e.g.
+          ``transport.transport.rail``;
+          ``amenity.accommodation.hut``). Kinds' 2-segment identifiers
+          (``transport.rail``) gain the domain prefix so a
+          future group move between super-roots renames consistently.
+        """
         self.stdout.write("\n[1/3] Syncing sprites from database...")
 
-        # Get root categories (no parent)
-        root_categories = Category.objects.filter(
-            is_active=True, parent=None
-        ).select_related("symbol_detailed", "symbol_simple", "symbol_mono")
+        collections = self._sprite_collections(Category, include_list)
 
-        # Filter by include_list if specified
-        if include_list is not None:
-            root_categories = [
-                cat for cat in root_categories if cat.slug in include_list
-            ]
-
-        if not root_categories:
+        if not collections:
             self.stdout.write(
-                self.style.WARNING("  ⚠ No root categories found to sync")
+                self.style.WARNING("  ⚠ No sprite collections found to sync")
             )
             return
 
-        self.stdout.write(f"  Found {len(root_categories)} root categories")
+        self.stdout.write(f"  Found {len(collections)} sprite collections")
 
         # Target: <target>/sprites/
         target_base_dir = target_path / "sprites"
@@ -498,76 +706,79 @@ class Command(BaseCommand):
         # Track sprite directories for config generation
         sprite_dirs = []
 
-        # Process each root category
-        for root_category in root_categories:
-            self.stdout.write(f"\n  Processing root category: {root_category.slug}")
+        # Process each collection
+        for collection, children in collections:
+            self.stdout.write(f"\n  Processing sprite collection: {collection.slug}")
 
-            # Track files copied for this category
+            # Track files copied for this collection
             files_before = stats["files_copied"]
 
-            # Sync the root category itself
+            # The collection's own icon — its identifier (<domain>.<group>)
             self._sync_category_sprites(
-                root_category,
+                collection,
                 target_base_dir,
                 variants,
                 dry_run,
                 stats,
-                parent_slug=root_category.slug,
+                collection_slug=collection.slug,
+                filename=f"{collection.identifier}.svg",
             )
 
-            # Get all children of this root category
-            children = Category.objects.filter(
-                is_active=True, parent=root_category
-            ).select_related("symbol_detailed", "symbol_simple", "symbol_mono")
-
-            if children.exists():
-                self.stdout.write(f"    Found {children.count()} children")
-                for child in children:
-                    self._sync_category_sprites(
-                        child,
-                        target_base_dir,
-                        variants,
-                        dry_run,
-                        stats,
-                        parent_slug=root_category.slug,
-                    )
+            for child in children:
+                self._sync_category_sprites(
+                    child,
+                    target_base_dir,
+                    variants,
+                    dry_run,
+                    stats,
+                    collection_slug=collection.slug,
+                    filename=f"{collection.identifier}.{child.slug}.svg",
+                )
 
             # Only track this sprite directory if we actually copied files
             files_after = stats["files_copied"]
-            files_copied_for_category = files_after - files_before
-            if files_copied_for_category > 0:
-                sprite_dirs.append(root_category.slug)
+            files_copied_for_collection = files_after - files_before
+            if files_copied_for_collection > 0:
+                sprite_dirs.append(collection.slug)
                 self.stdout.write(
-                    f"    ✓ Added {root_category.slug} to sprite config ({files_copied_for_category} files)"
+                    f"    ✓ Added {collection.slug} to sprite config "
+                    f"({files_copied_for_collection} files)"
                 )
             else:
                 self.stdout.write(
-                    f"    ⚠ No sprites found for {root_category.slug}, skipping from config"
+                    f"    ⚠ No sprites found for {collection.slug}, "
+                    "skipping from config"
                 )
 
         # Store sprite directories for config generation
         stats["sprite_dirs"] = sprite_dirs
 
     def _sync_category_sprites(
-        self, category, target_base_dir, variants, dry_run, stats, parent_slug
-    ):
+        self,
+        category: Category,
+        target_base_dir: Path,
+        variants: list[str],
+        dry_run: bool,
+        stats: dict[str, Any],
+        collection_slug: str,
+        filename: str,
+    ) -> None:
         """
         Sync all style variants for a single category.
 
-        Structure:
-        - Root category: {parent_slug}/{variant}/{identifier}.svg
-        - Child category: {parent_slug}/{variant}/{identifier}.svg
+        Structure (names come from the caller — the tree-path naming
+        documented in ``_sync_sprites``):
+        - Group's own icon: {collection_slug}/{variant}/{domain}.{group}.svg
+        - Kind: {collection_slug}/{variant}/{domain}.{group}.{kind}.svg
 
         Args:
             category: Category instance to sync
             target_base_dir: Base sprites directory (e.g., ./martin_sync/sprites/)
-            styles: List of styles to sync
-            parent_slug: Root category slug (used as sprite collection name)
+            variants: List of style variants to sync
+            collection_slug: Sprite collection directory name
+            filename: Sprite file name within the variant directory
         """
         stats["categories_processed"] += 1
-
-        # Filename uses the category's identifier (e.g., "accommodation.hut")
-        filename = f"{category.identifier}.svg"
 
         # Track if we copied any files for this category
         copied_any = False
@@ -609,8 +820,8 @@ class Command(BaseCommand):
                 )
                 continue
 
-            # Build target path: {parent_slug}/{variant}/{slug}.svg
-            target_dir = target_base_dir / parent_slug / variant
+            # Build target path: {collection_slug}/{variant}/{filename}
+            target_dir = target_base_dir / collection_slug / variant
             target_file = target_dir / filename
 
             # Copy file
@@ -621,6 +832,7 @@ class Command(BaseCommand):
                 dry_run,
                 stats,
                 label=f"{category.slug} ({variant})",
+                sanitize=True,
             )
             copied_any = True
 
@@ -628,9 +840,23 @@ class Command(BaseCommand):
             stats["categories_skipped"] += 1
 
     def _copy_file(
-        self, source_file, target_file, target_dir, dry_run, stats, label=None
-    ):
-        """Copy a single file from source to target."""
+        self,
+        source_file: Path,
+        target_file: Path,
+        target_dir: Path,
+        dry_run: bool,
+        stats: dict[str, Any],
+        label: str | None = None,
+        sanitize: bool = False,
+    ) -> None:
+        """Copy a single file from source to target.
+
+        ``sanitize`` runs SVG bytes through
+        :func:`server.apps.symbols.svg.sanitize_svg` before comparing /
+        writing — sprite SVGs must parse under Martin's strict XML parser
+        (the staging ``NoRootNode`` incident: ``ns0:`` prefixes, missing
+        root ``xmlns``). Every other file kind copies verbatim.
+        """
         indent = "  "
 
         # Use label if provided, otherwise use filename
@@ -670,6 +896,8 @@ class Command(BaseCommand):
         try:
             existed = target_file.exists()
             file_changed = True
+            # SVG sprite bytes go through the sanitizer (None = verbatim copy)
+            content = sanitize_svg(source_file.read_bytes()) if sanitize else None
 
             # Check if file changed by comparing content
             if existed:
@@ -677,14 +905,20 @@ class Command(BaseCommand):
 
                 # Copy to temp location for comparison
                 temp_target = target_file.parent / f".tmp_{target_file.name}"
-                shutil.copy2(source_file, temp_target)
+                if content is None:
+                    shutil.copy2(source_file, temp_target)
+                else:
+                    temp_target.write_bytes(content)
                 file_changed = not filecmp.cmp(temp_target, target_file, shallow=False)
                 if file_changed:
                     shutil.move(temp_target, target_file)
                 else:
                     temp_target.unlink()
             else:
-                shutil.copy2(source_file, target_file)
+                if content is None:
+                    shutil.copy2(source_file, target_file)
+                else:
+                    target_file.write_bytes(content)
 
             if file_changed:
                 if existed:
@@ -708,7 +942,7 @@ class Command(BaseCommand):
             )
             stats["errors"] += 1
 
-    def _write_marker_file(self, target_path, stats):
+    def _write_marker_file(self, target_path: Path, stats: dict[str, Any]) -> None:
         """Write a marker file with timestamp - only updated if changes were made."""
         from datetime import datetime, timezone
 
@@ -719,11 +953,23 @@ class Command(BaseCommand):
             or stats["config_changed"]
         )
 
+        def _write_marker(text: str) -> None:
+            """Best-effort marker write — an unwritable target must not
+            fail an otherwise successful sync."""
+            try:
+                with open(marker_file, "w") as f:
+                    f.write(text)
+            except OSError as e:
+                self.stderr.write(
+                    self.style.WARNING(
+                        f"  ⚠ Failed to write marker file {marker_file}: {e}"
+                    )
+                )
+
         if changes_made:
             # Write timestamp - changes detected
             timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-            with open(marker_file, "w") as f:
-                f.write(f"Last modified: {timestamp}\n")
+            _write_marker(f"Last modified: {timestamp}\n")
             self.stdout.write(f"\n✓ Updated marker file: {marker_file}")
         else:
             # Don't update marker file - no changes
@@ -732,11 +978,10 @@ class Command(BaseCommand):
             else:
                 # First run with no changes - create marker anyway
                 timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-                with open(marker_file, "w") as f:
-                    f.write(f"Last modified: {timestamp}\n")
+                _write_marker(f"Last modified: {timestamp}\n")
                 self.stdout.write(f"\n✓ Created marker file: {marker_file}")
 
-    def _validate_files(self, target_path, stats):
+    def _validate_files(self, target_path: Path, stats: dict[str, Any]) -> None:
         """Validate that all files were copied successfully."""
         validation_errors = 0
 
@@ -782,7 +1027,7 @@ class Command(BaseCommand):
         else:
             self.stdout.write(self.style.SUCCESS("\n✓ Validation successful"))
 
-    def _print_summary(self, stats, dry_run):
+    def _print_summary(self, stats: dict[str, Any], dry_run: bool) -> None:
         """Print summary statistics."""
         self.stdout.write("\n" + "=" * 60)
         self.stdout.write("Summary:")
@@ -841,9 +1086,27 @@ class Command(BaseCommand):
                         "Next steps:\n"
                         "  Local: docker-compose restart martin\n"
                         "  Kubernetes: kubectl rollout restart deployment martin\n"
-                        "  Verify: curl http://martin-service:3000/catalog"
+                        "  Verify: curl http://martin-service:3000/catalog\n\n"
+                        "  Asset versions: an immediate martin_asset_watch\n"
+                        "  observation was enqueued — it publishes the new\n"
+                        "  sprite/font hashes once Martin serves the new\n"
+                        "  bytes (after the restart); the recurring q2\n"
+                        "  schedule is the backstop."
                     )
                 )
+                # Content-gated publication: enqueue an observation now;
+                # it only publishes when Martin's served bytes actually
+                # changed (i.e. after the restart above).
+                try:
+                    from django_q.tasks import async_task
+
+                    async_task("server.apps.basemaps.tile_assets.run_martin_watcher")
+                except Exception as exc:  # enqueue is best-effort
+                    self.stdout.write(
+                        self.style.WARNING(
+                            f"  ⚠ Could not enqueue martin_asset_watch: {exc}"
+                        )
+                    )
             else:
                 self.stdout.write(
                     self.style.SUCCESS(

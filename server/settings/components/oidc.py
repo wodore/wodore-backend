@@ -23,7 +23,7 @@ rehearsed in staging; the later flip is an env change
 
 import json
 import logging
-import re
+from typing import Any
 from urllib.parse import urlparse
 
 import requests
@@ -56,6 +56,13 @@ ZITADEL_RP_ENABLED = AUTH_PROVIDER == "zitadel"  # Zitadel RP surface
 ZITADEL_ROLLBACK_ENABLED = config(
     "ZITADEL_ROLLBACK_ENABLED", cast=bool, default=not _IS_DEV_OR_TEST
 )
+
+# NOTE: the async-safe SessionRefresh replacement lives in
+# server/middleware/oidc.py (AsyncSafeSessionRefresh). It cannot be
+# defined here: importing mozilla_django_oidc.middleware from a settings
+# component triggers AppRegistryNotReady (models are imported); MIDDLEWARE
+# entries are string paths resolved lazily at handler init, after apps
+# are ready.
 if AUTH_PROVIDER == "none":
     ZITADEL_ROLLBACK_ENABLED = False
 
@@ -73,7 +80,7 @@ LOCAL_AUTH_REDIRECT_URIS = config("LOCAL_AUTH_REDIRECT_URIS", "")
 
 # Committed dev-only RSA key (JWK). Only ever the fallback in dev/test -
 # ``AUTH_PROVIDER=builtin`` outside dev/test requires a real key.
-_DEV_PRIVATE_JWK: dict = {
+_DEV_PRIVATE_JWK: dict[str, str] = {
     "kty": "RSA",
     "kid": "wodore-local-dev-1",
     "alg": "RS256",
@@ -89,7 +96,7 @@ _DEV_PRIVATE_JWK: dict = {
 }
 
 
-def _resolve_provider_jwk() -> dict:
+def _resolve_provider_jwk() -> dict[str, Any]:
     raw = config("LOCAL_AUTH_PRIVATE_KEY_JWK", "")
     if raw:
         try:
@@ -114,17 +121,19 @@ def _resolve_provider_jwk() -> dict:
     )
 
 
-OIDC_PROVIDER_PRIVATE_JWK: dict = _resolve_provider_jwk() if OIDC_ENABLED else {}
+OIDC_PROVIDER_PRIVATE_JWK: dict[str, Any] = (
+    _resolve_provider_jwk() if OIDC_ENABLED else {}
+)
 
 
-def _jwk_to_pem(jwk: dict) -> str:
+def _jwk_to_pem(jwk: dict[str, Any]) -> str:
     key = JsonWebKey.import_key(jwk, {"kty": "RSA"})
-    pem = key.as_pem(is_private=True)  # pyright: ignore[reportAttributeAccessIssue]  # authlib Key stubs lack as_pem
+    pem = key.as_pem(is_private=True)  # type: ignore  # authlib Key stubs lack as_pem
     return pem.decode() if isinstance(pem, bytes) else str(pem)
 
 
 if OIDC_ENABLED:
-    OAUTH2_PROVIDER: dict = {
+    OAUTH2_PROVIDER: dict[str, Any] = {
         "OIDC_ENABLED": True,
         "OIDC_RSA_PRIVATE_KEY": _jwk_to_pem(OIDC_PROVIDER_PRIVATE_JWK),
         "OAUTH2_VALIDATOR_CLASS": (
@@ -165,7 +174,7 @@ OIDC_ISSUER_INTERNAL_URL = config("OIDC_ISSUER_INTERNAL_URL", "")
 OIDC_OP_DISCOVERY_ENDPOINT = ZITADEL_OP_BASE_URL + "/.well-known/openid-configuration"
 
 
-def discover_oidc(discovery_url: str, internal_url: str = "") -> dict | None:
+def discover_oidc(discovery_url: str, internal_url: str = "") -> dict[str, Any] | None:
     """Fetch the provider's OIDC discovery document (endpoint URLs)."""
     headers: dict[str, str] = {}
     actual_url = discovery_url
@@ -208,7 +217,7 @@ def discover_oidc(discovery_url: str, internal_url: str = "") -> dict | None:
     }
 
 
-def _load_zitadel_private_key() -> dict:
+def _load_zitadel_private_key() -> dict[str, Any]:
     raw = config("ZITADEL_API_PRIVATE_KEY_JSON", None)
     if not raw:
         return {}
@@ -230,11 +239,16 @@ ZITADEL_API_PRIVATE_KEY = _load_zitadel_private_key()
 OIDC_RENEW_ID_TOKEN_EXPIRY_SECONDS = 60 * 60 * 24  # 24 hours
 OIDC_STORE_ACCESS_TOKEN = True
 OIDC_STORE_ID_TOKEN = True
-OIDC_EXEMPT_URLS = [
-    re.compile(r"^/v\d+/.*"),  # Exempt all API routes (any version)
-    "/static/",
-    "/media/",
-]
+# SessionRefresh scope is decided per resolved VIEW by the middleware
+# itself (see server/middleware/oidc.py): admin views (AdminSite tags)
+# and access-mixin CBVs (LoginRequiredMixin & friends) are renewed;
+# everything else - public pages, bearer-token API routes, self-gated
+# views that redirect to the login themselves (staging demos) - is out
+# of scope. This list is only an explicit escape hatch to suppress the
+# renewal on particular paths (regexes); the mozilla
+# authenticate/callback/logout routes are always exempt upstream
+# (that is also the redirect-loop protection).
+OIDC_EXEMPT_URLS: list[str] = []
 
 discovery_info = None
 if ZITADEL_RP_ENABLED:

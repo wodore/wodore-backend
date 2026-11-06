@@ -159,6 +159,28 @@ def release(
         )
         c.run(f"bump2version --allow-dirty --new-version {new_version} patch")
 
+        # Freeze the API version (unreleased -> real date) BEFORE the
+        # api_release step regenerates CHANGELOG_API.md and the CI
+        # tags api/<version> — the tag must never be 'unreleased'.
+        try:
+            api_freeze(c)
+        except Exception as exc:
+            error(f"API freeze step failed: {exc!r}")
+            raise
+
+        # CI (.github/workflows/new-api-version.yml) cuts the api/<version>
+        # tag when the docker build that ships it succeeds — every API
+        # release is an app release, but not vice versa. This local step
+        # regenerates CHANGELOG_API.md (idempotent) so it lands in the
+        # release commit; tagging here is only a fallback if CI missed.
+        try:
+            api_release(c)
+        except Exception as exc:
+            error(
+                f"API release step failed: {exc!r}. Run 'inv api-release' "
+                "manually before pushing the release."
+            )
+
         # only prepend new tag -- this way it is possible to edit it.
         # cl = c.run(f"git-cliff --bump {'--prepend CHANGELOG.md' if dry else '-o'}", hide=True).stdout.strip().split("\n")
     if new_tag:
@@ -171,6 +193,102 @@ def release(
             c.run(f"git push origin '{new_tag}'")
     else:
         warning("Did not update to new version tag.")
+
+
+@task
+def api_freeze(c: Ctx):
+    """Assign the real date to the 'unreleased' API version.
+
+    Called by 'inv release' — replaces 'unreleased' with today's date
+    in registry.py, renames the snapshot file, and regenerates it.
+    No-op if the current version is already a date (not 'unreleased').
+    """
+    from datetime import UTC, datetime
+
+    from server.apps.apiversions.registry import UNRELEASED, current_version
+
+    version = current_version()
+    if version != UNRELEASED:
+        info(f"API version already frozen: {version}")
+        return
+
+    real_date = datetime.now(tz=UTC).date().isoformat()
+    header(f"Freezing API version: {UNRELEASED!r} -> {real_date!r}")
+
+    # 1. Rename in registry.py
+    registry_path = Path("server/apps/apiversions/registry.py")
+    src = registry_path.read_text()
+    src = src.replace(f'version="{UNRELEASED}"', f'version="{real_date}"')
+    src = src.replace(f"version={UNRELEASED}", f'version="{real_date}"')
+    registry_path.write_text(src)
+
+    # 2. Rename the snapshot file
+    old_snapshot = Path(f"server/apps/apiversions/openapi/{UNRELEASED}.json")
+    new_snapshot = Path(f"server/apps/apiversions/openapi/{real_date}.json")
+    if old_snapshot.exists():
+        old_snapshot.rename(new_snapshot)
+
+    # 3. Regenerate the snapshot against the frozen version
+    c.run(
+        "infisical run --env=dev --path /backend --log-level warn -- "
+        "app api_snapshot --force",
+        hide=True,
+    )
+
+    success(f"API version frozen: {UNRELEASED!r} -> {real_date!r}")
+    info(f"Snapshot: server/apps/apiversions/openapi/{real_date}.json")
+
+
+@task(
+    help={
+        "tag": "Create and push the api/<version> tag (default: yes)",
+        "changelog": "Regenerate CHANGELOG_API.md with git-cliff (default: yes)",
+    }
+)
+def api_release(c: Ctx, tag: bool = True, changelog: bool = True):
+    """Release artifacts for the current API contract version.
+
+    The snapshot itself is committed in the breaking PR (CI enforces
+    presence); CI (new-api-version.yml) tags api/<version> when the docker
+    build shipping it succeeds. This task regenerates CHANGELOG_API.md
+    (idempotent — run by 'inv release', or standalone as a fallback that
+    also creates the tag if CI missed it).
+    """
+    from server.apps.apiversions.registry import current_version
+
+    version = current_version()
+    header(f"API release for version '{version}'")
+
+    snapshot = f"server/apps/apiversions/openapi/{version}.json"
+    if not Path(snapshot).exists():
+        error(
+            f"Snapshot {snapshot} missing — run 'app api_snapshot' and "
+            "commit it first (CI would fail too)."
+        )
+    success(f"Snapshot present: {snapshot}")
+
+    if tag:
+        existing = c.run(f"git tag -l 'api/{version}'", hide=True).stdout.strip()
+        if existing:
+            info(f"Tag 'api/{version}' already exists — skipping.")
+        else:
+            c.run(f"git tag 'api/{version}'")
+            c.run(f"git push origin 'api/{version}'")
+            success(f"Tagged and pushed 'api/{version}'.")
+
+    if changelog:
+        c.run("git-cliff --config cliff-api.toml -o CHANGELOG_API.md")
+        changed = c.run(
+            "git status --porcelain CHANGELOG_API.md", hide=True
+        ).stdout.strip()
+        if changed:
+            success("Regenerated 'CHANGELOG_API.md' (changed).")
+            info(
+                "Check the entries and run: git commit -am "
+                f'"API changelog for api/{version}"'
+            )
+        else:
+            info("'CHANGELOG_API.md' already up to date.")
 
 
 @task(help={"next": "Show next version"})

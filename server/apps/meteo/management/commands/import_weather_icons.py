@@ -1,11 +1,12 @@
 import json
 from pathlib import Path
+from typing import Any, override
 
 from django_admin_runner import register_command
 
 from django.conf import settings
 from django.core.files import File
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandParser
 
 from server.apps.categories.models import Category
 from server.apps.licenses.models import License
@@ -22,7 +23,8 @@ from server.apps.symbols.models import Symbol
 class Command(BaseCommand):
     help = "Import weather icons and WMO codes from assets directory"
 
-    def add_arguments(self, parser):
+    @override
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--dry-run",
             action="store_true",
@@ -50,7 +52,8 @@ class Command(BaseCommand):
             help="Force reupload of symbols even if they already exist",
         )
 
-    def handle(self, *args, **options):
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         dry_run = options.get("dry_run", False)
         skip_symbols = options.get("skip_symbols", False)
         skip_codes = options.get("skip_codes", False)
@@ -118,7 +121,14 @@ class Command(BaseCommand):
         )
         self.stdout.write("=" * 60)
 
-    def _import_symbols(self, base_path, styles, dry_run, stats, force=False):
+    def _import_symbols(
+        self,
+        base_path: Path,
+        styles: list[str],
+        dry_run: bool,
+        stats: dict[str, Any],
+        force: bool = False,
+    ) -> None:
         """Import weather icon symbols from assets/weather-icons/symbols/"""
         # Get or create license
         license = self._get_or_create_license(dry_run)
@@ -207,7 +217,9 @@ class Command(BaseCommand):
                     stats["symbols_created"] += 1
                     self.stdout.write(f"  → Would create {slug} ({style})")
 
-    def _import_wmo_codes(self, base_path, style, dry_run, stats):
+    def _import_wmo_codes(
+        self, base_path: Path, style: str, dry_run: bool, stats: dict[str, Any]
+    ) -> None:
         """Import WMO weather codes for a specific style collection"""
         # Get language configuration from settings
         main_language = settings.LANGUAGE_CODE
@@ -244,7 +256,7 @@ class Command(BaseCommand):
 
         # Load WMO descriptions with translations
         descriptions_file = base_path / "wmo_descriptions.json"
-        wmo_descriptions = {}
+        wmo_descriptions: dict[str, Any] = {}
         if descriptions_file.exists():
             with open(descriptions_file, "r") as f:
                 wmo_descriptions = json.load(f)
@@ -257,7 +269,7 @@ class Command(BaseCommand):
 
         # Load category mapping
         category_mapping_file = base_path / "wmo_category_mapping.json"
-        category_mapping = {}
+        category_mapping: dict[str, Any] = {}
         if category_mapping_file.exists():
             with open(category_mapping_file, "r") as f:
                 category_mapping = json.load(f)
@@ -359,15 +371,15 @@ class Command(BaseCommand):
 
     def _create_or_update_weathercode(
         self,
-        code,
-        descriptions_day,
-        descriptions_night,
-        main_language,
-        other_languages,
-        category,
-        dry_run,
-        stats,
-    ):
+        code: Any,
+        descriptions_day: dict[str, str],
+        descriptions_night: dict[str, str],
+        main_language: str,
+        other_languages: list[str],
+        category: Category | None,
+        dry_run: bool,
+        stats: dict[str, Any],
+    ) -> WeatherCode | None:
         """Create or update universal WeatherCode"""
         main_desc_day = descriptions_day.get(main_language, "")
         main_desc_night = descriptions_night.get(main_language, "")
@@ -453,16 +465,16 @@ class Command(BaseCommand):
 
     def _create_or_update_code_symbol(
         self,
-        weather_code_obj,
-        collection,
-        symbol_day,
-        symbol_night,
-        code,
-        day_icon,
-        night_icon,
-        dry_run,
-        stats,
-    ):
+        weather_code_obj: WeatherCode | None,
+        collection: WeatherCodeSymbolCollection | None,
+        symbol_day: Symbol | None,
+        symbol_night: Symbol | None,
+        code: Any,
+        day_icon: Any,
+        night_icon: Any,
+        dry_run: bool,
+        stats: dict[str, Any],
+    ) -> None:
         """Create or update WeatherCodeSymbol linking code to symbols in collection"""
         if dry_run:
             msg = f"  → Would link WMO {code} to day:{day_icon}, night:{night_icon}"
@@ -508,7 +520,13 @@ class Command(BaseCommand):
                 msg = f"  ✗ Failed to link WMO {code}: {e}"
                 self.stderr.write(self.style.ERROR(msg))
 
-    def _get_or_create_collection(self, organization, style, dry_run, stats):
+    def _get_or_create_collection(
+        self,
+        organization: Organization | None,
+        style: str,
+        dry_run: bool,
+        stats: dict[str, Any],
+    ) -> WeatherCodeSymbolCollection | None:
         """Get or create WeatherCodeSymbolCollection for this style"""
         slug = f"weather-icons-{style}"
 
@@ -534,7 +552,12 @@ class Command(BaseCommand):
             )
             return None
 
-    def _verify_coverage(self, collection, style, stats):
+    def _verify_coverage(
+        self,
+        collection: WeatherCodeSymbolCollection | None,
+        style: str,
+        stats: dict[str, Any],
+    ) -> None:
         """Verify all forecast codes (0-3, 45-99) are covered in the collection"""
         forecast_codes = set(range(4)) | set(range(45, 100))
 
@@ -559,7 +582,7 @@ class Command(BaseCommand):
         else:
             self.stdout.write(self.style.SUCCESS("  ✓ All forecast codes covered!"))
 
-    def _get_or_create_license(self, dry_run):
+    def _get_or_create_license(self, dry_run: bool) -> License | None:
         """Get or create MIT license for weather icons"""
         license = License.objects.filter(slug="mit").first()
         if not license and not dry_run:
@@ -576,7 +599,7 @@ class Command(BaseCommand):
             self.stdout.write("Would create MIT license")
         return license
 
-    def _get_or_create_organization(self, dry_run):
+    def _get_or_create_organization(self, dry_run: bool) -> Organization | None:
         """Get or create Weather Icons organization"""
         org = Organization.objects.filter(slug="weather-icons").first()
         if not org and not dry_run:
@@ -594,7 +617,7 @@ class Command(BaseCommand):
             self.stdout.write("Would create Weather Icons organization")
         return org
 
-    def _get_or_create_meteo_categories(self, dry_run):
+    def _get_or_create_meteo_categories(self, dry_run: bool) -> Category | None:
         """Get or create weather categories under meteo parent"""
         # Get or create meteo parent category
         meteo_parent = Category.objects.filter(slug="meteo", parent=None).first()

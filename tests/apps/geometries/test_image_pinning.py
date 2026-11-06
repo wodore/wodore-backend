@@ -1,26 +1,33 @@
 """Tests for pinning external provider results (spec: external-image-pinning).
-
 Covers the pin service (dedupe across syncs, score semantics, internal-result
 skipping, metadata merge) and the endpoint fast path / lazy write-through.
 """
 
+from datetime import UTC, datetime
+from typing import Any
+
 import pytest
-from ninja.testing import TestClient
+from _pytest.recwarn import WarningsChecker
+
+from tests.helpers import PrefixedClient as TestClient
 
 from django.contrib.gis.geos import Point
+from django.db import IntegrityError, transaction
+from django.utils import timezone
 
 from server.apps.geometries import image_response_cache as irc
-from server.apps.geometries.api_images import router
+from server.apps.geometries.models import GeoPlace
 from server.apps.geometries.pinning import pin_place_images, place_has_visible_pins
 from server.apps.geometries.providers.base import ImageResult
 from server.apps.huts.models import Hut, HutImageAssociation
 from server.apps.images.models import Image
+from server.apps.licenses.models import License
 
 pytestmark = pytest.mark.django_db
 
 
 @pytest.fixture(autouse=True)
-def _isolated_cache(monkeypatch):
+def _isolated_cache(monkeypatch: pytest.MonkeyPatch):
     """Private locmem response cache per test (no database cache leakage)."""
     from uuid import uuid4
 
@@ -35,6 +42,7 @@ def _result(
     source_id: str = "File:Test.jpg",
     score: int = 80,
     url: str = "https://upload.wikimedia.org/wikipedia/commons/thumb/Test_1920.jpg",
+    extra: dict[str, Any] | None = None,
 ) -> ImageResult:
     return ImageResult(
         provider=provider,
@@ -52,11 +60,12 @@ def _result(
         width=1920,
         height=1080,
         score=score,
+        extra=extra,
     )
 
 
 @pytest.fixture
-def hut(seed_data):
+def hut(seed_data: dict[str, int]):
     hut = Hut.objects.filter(is_active=True, is_public=True).first()
     assert hut is not None
     # Start from a clean, unpinned state.
@@ -66,8 +75,92 @@ def hut(seed_data):
     return hut
 
 
+SOURCE_IDENT_CONSTRAINT = "images_image_source_ident_unique"
+
+
+class TestDuplicateSourceIdents:
+    """Legacy twin Image rows must not crash pin syncs.
+
+    ``source_ident`` had no unique constraint (until images migration 0034),
+    so concurrent syncs — request write-through vs. django-q2 refresh vs. the
+    ``geoimages_pin`` sweep — could mint twins, and every later sync then
+    raised ``MultipleObjectsReturned`` in ``get_or_create`` ("get() returned
+    more than one Image -- it returned 2!", Sentry 155850205, hut cedullo).
+    The runtime resolves the canonical (oldest) row (covered end-to-end in
+    tests/apps/images/test_source_ident_dedupe_migration.py against the
+    pre-0033 schema); the partial unique constraint blocks new twins.
+    """
+
+    @pytest.fixture
+    def license_obj(self):
+        return License.objects.get_or_create(
+            slug="cc-by-sa-4-0", defaults={"no_publication": False}
+        )[0]
+
+    def test_constraint_blocks_new_twins(self, license_obj: License):
+        Image.objects.create(
+            source_ident="wikicommons:File:Dupe.jpg", license=license_obj
+        )
+        with pytest.raises(IntegrityError), transaction.atomic():
+            Image.objects.create(
+                source_ident="wikicommons:File:Dupe.jpg", license=license_obj
+            )
+
+    def test_identless_uploads_stay_unconstrained(self, license_obj: License):
+        """Uploads without a source ident legitimately repeat ""/NULL."""
+        Image.objects.create(source_ident="", license=license_obj)
+        Image.objects.create(source_ident="", license=license_obj)
+        Image.objects.create(source_ident=None, license=license_obj)
+
+    def test_lost_create_race_falls_back_to_existing_row(
+        self, hut: Hut, monkeypatch: pytest.MonkeyPatch
+    ):
+        """Two syncs race, both lookups miss, both INSERT — the loser's
+        IntegrityError must collapse onto the winner's row.
+
+        Real database race, not a monkeypatched exception: the INSERT trips
+        the actual unique index while an outer transaction is open, so this
+        also pins the savepoint in ``_get_or_create_pin`` — without it,
+        Postgres keeps the transaction aborted and the recovery SELECT
+        dies with "current transaction is aborted" (review B-1)."""
+        from django.db import transaction
+
+        from server.apps.geometries import pinning
+
+        pin_place_images(hut, [_result(score=80)])  # the race's winner
+        winner = Image.objects.get(source_ident="wikicommons:File:Test.jpg")
+
+        lookups = []
+
+        def racing_canonical(ident: str):
+            # Simulate the loser's view: the first lookup misses (the
+            # winner's INSERT isn't visible yet), the recovery lookup hits.
+            lookups.append(ident)
+            if len(lookups) == 1:
+                return None
+            return (
+                pinning.Image.objects.filter(source_ident=ident)
+                .order_by("created", "id")
+                .first()
+            )
+
+        monkeypatch.setattr(pinning, "_canonical_pin", racing_canonical)
+
+        with transaction.atomic():  # request-like context: no autocommit
+            image, created = pinning._get_or_create_pin(
+                "wikicommons:File:Test.jpg",
+                _result(score=99),
+                pinning._org_for("wikicommons"),
+                pinning._license_for("cc-by-sa-4-0"),
+                timezone.now(),
+            )
+
+        assert created is False
+        assert image.pk == winner.pk  # re-resolved onto the race's winner
+
+
 class TestPinService:
-    def test_creates_image_and_association(self, hut):
+    def test_creates_image_and_association(self, hut: Hut):
         stats = pin_place_images(
             hut, [_result(score=80), _result(source_id="File:Other.jpg", score=60)]
         )
@@ -83,7 +176,7 @@ class TestPinService:
         hut.refresh_from_db()
         assert hut.images_pinned_at is not None
 
-    def test_resync_updates_instead_of_duplicating(self, hut):
+    def test_resync_updates_instead_of_duplicating(self, hut: Hut):
         pin_place_images(hut, [_result()])
         new_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/Test_3840.jpg"
         stats = pin_place_images(hut, [_result(url=new_url, score=90)])
@@ -96,7 +189,7 @@ class TestPinService:
         assert image.source_url_raw == new_url
         assert image.image_meta["provider_score"] == 90
 
-    def test_manual_score_survives_sync(self, hut):
+    def test_manual_score_survives_sync(self, hut: Hut):
         pin_place_images(hut, [_result(score=80)])
         assoc = HutImageAssociation.objects.get(
             hut=hut, image__source_ident="wikicommons:File:Test.jpg"
@@ -107,7 +200,7 @@ class TestPinService:
         assoc.refresh_from_db()
         assert assoc.score == 1  # never overwritten
 
-    def test_internal_results_skipped(self, hut):
+    def test_internal_results_skipped(self, hut: Hut):
         stats = pin_place_images(
             hut, [_result(provider="wodore", source_id="some-uuid")]
         )
@@ -115,7 +208,69 @@ class TestPinService:
         assert stats.created == 0
         assert not HutImageAssociation.objects.filter(hut=hut).exists()
 
-    def test_meta_merge_preserves_curated_focal(self, hut):
+    def test_internal_pin_passthrough_skipped(self, hut: Hut):
+        """Provider passthroughs of existing pins must not be re-pinned.
+
+        WodoreProvider reports pins with provider = source_org slug and
+        source_id = the row's source_ident; re-pinning minted a new Image
+        with the provider prefix stacked onto the ident and a duplicate
+        association — every sync doubled every visible pin (staging 2026-10).
+        """
+        pin_place_images(
+            hut, [_result(provider="camptocamp", source_id="waypoint_1_a.jpg")]
+        )
+        passthrough = _result(
+            provider="camptocamp",
+            source_id="camptocamp:waypoint_1_a.jpg",
+            extra={"internal_pin": True},
+        )
+        stats = pin_place_images(hut, [passthrough])
+        assert stats.skipped == 1
+        assert stats.created == 0
+        assert not Image.objects.filter(
+            source_ident="camptocamp:camptocamp:waypoint_1_a.jpg"
+        ).exists()
+        assert HutImageAssociation.objects.filter(hut=hut).count() == 1
+
+    def test_internal_pin_passthrough_skipped_for_geoplaces(self):
+        """Same guard on the GeoPlace path — pins stay single there too."""
+        from tests.factories.geometries import GeoPlaceFactory
+
+        from server.apps.geometries.models import GeoPlaceImageAssociation
+
+        place = GeoPlaceFactory(slug="pin-dupe-place")
+        pin_place_images(
+            place,
+            [_result(provider="camptocamp", source_id="waypoint_2_b.jpg")],
+        )
+        passthrough = _result(
+            provider="camptocamp",
+            source_id="camptocamp:waypoint_2_b.jpg",
+            extra={"internal_pin": True},
+        )
+        stats = pin_place_images(place, [passthrough])
+        assert stats.skipped == 1
+        assert GeoPlaceImageAssociation.objects.filter(geo_place=place).count() == 1
+        assert not Image.objects.filter(
+            source_ident="camptocamp:camptocamp:waypoint_2_b.jpg"
+        ).exists()
+
+    def test_provider_scores_clamped_to_pin_band(self, hut: Hut):
+        """Provider pins stay ≤ 89 — curated uploads own 90–99, and the
+        image endpoints validate scores against the API contract (0–100)."""
+        pin_place_images(
+            hut, [_result(score=95), _result(source_id="File:Mid.jpg", score=50)]
+        )
+        strong = HutImageAssociation.objects.get(
+            hut=hut, image__source_ident="wikicommons:File:Test.jpg"
+        )
+        mid = HutImageAssociation.objects.get(
+            hut=hut, image__source_ident="wikicommons:File:Mid.jpg"
+        )
+        assert strong.score == 89
+        assert mid.score == 50
+
+    def test_meta_merge_preserves_curated_focal(self, hut: Hut):
         pin_place_images(hut, [_result()])
         image = Image.objects.get(source_ident="wikicommons:File:Test.jpg")
         image.image_meta["focal"] = {"x1": 0.1, "y1": 0.1, "x2": 0.5, "y2": 0.5}
@@ -130,7 +285,7 @@ class _FetchStub:
     def __init__(self):
         self.calls = 0
 
-    async def __call__(self, **kwargs):
+    async def __call__(self, **kwargs: Any):
         self.calls += 1
         results = [
             _result(score=80),
@@ -143,20 +298,26 @@ class _FetchStub:
 class TestPinsEndpoint:
     @pytest.fixture
     def client(self):
-        return TestClient(router)
+        return TestClient("/v1/geo/images")
 
     @pytest.fixture
-    def fetch(self, monkeypatch):
+    def fetch(self, monkeypatch: pytest.MonkeyPatch):
         from server.apps.geometries import api_images
 
         stub = _FetchStub()
         monkeypatch.setattr(api_images, "fetch_images_for_place", stub)
         return stub
 
-    def test_fast_path_never_calls_providers(self, client, hut, fetch, monkeypatch):
+    def test_fast_path_never_calls_providers(
+        self,
+        client: TestClient,
+        hut: Hut,
+        fetch: _FetchStub,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
         from server.apps.geometries import api_images
 
-        def _boom(**kwargs):
+        def _boom(**kwargs: Any):
             raise AssertionError("live path must not run when pins exist")
 
         monkeypatch.setattr(api_images, "fetch_images_for_place", _boom)
@@ -177,9 +338,11 @@ class TestPinsEndpoint:
             ).score
             for f in response.json()["features"]
         ]
-        assert scores == sorted(scores, reverse=True)
+        assert scores == sorted(scores, reverse=True)  # type: ignore  # optional pks sorted in test
 
-    def test_lazy_pins_on_first_visit(self, client, hut, fetch):
+    def test_lazy_pins_on_first_visit(
+        self, client: TestClient, hut: Hut, fetch: _FetchStub
+    ):
         assert not place_has_visible_pins(hut)
         first = client.get(f"/hut/{hut.slug}?radius=50&lang=en&limit=10")
         assert first.status_code == 200
@@ -189,12 +352,13 @@ class TestPinsEndpoint:
         assert place_has_visible_pins(hut)
         hut.refresh_from_db()
         assert hut.images_pinned_at is not None
-
         second = client.get(f"/hut/{hut.slug}?radius=50&lang=en&limit=10")
         assert second.status_code == 200
         assert fetch.calls == 1  # second request served without the live path
 
-    def test_update_cache_forces_repin(self, client, hut, fetch):
+    def test_update_cache_forces_repin(
+        self, client: TestClient, hut: Hut, fetch: _FetchStub
+    ):
         client.get(f"/hut/{hut.slug}?radius=50&lang=en&limit=10")
         assert fetch.calls == 1
         client.get(f"/hut/{hut.slug}?radius=50&lang=en&limit=10&update_cache=true")
@@ -202,7 +366,9 @@ class TestPinsEndpoint:
         # And the pins are still there (refreshed, not duplicated).
         assert Image.objects.filter(provider_synced_at__isnull=False).count() == 2
 
-    def test_sources_bypasses_pin_path(self, client, hut, fetch):
+    def test_sources_bypasses_pin_path(
+        self, client: TestClient, hut: Hut, fetch: _FetchStub
+    ):
         pin_place_images(hut, [_result()])
         response = client.get(
             f"/hut/{hut.slug}?radius=50&lang=en&limit=10&sources=wikicommons"
@@ -210,7 +376,7 @@ class TestPinsEndpoint:
         assert response.status_code == 200
         assert fetch.calls == 1  # explicit provider selection goes live
 
-    def test_hidden_pin_excluded(self, client, hut, fetch):
+    def test_hidden_pin_excluded(self, client: TestClient, hut: Hut, fetch: _FetchStub):
         pin_place_images(
             hut, [_result(score=80), _result(source_id="File:Hidden.jpg", score=70)]
         )
@@ -227,7 +393,7 @@ class TestPinsEndpoint:
 class TestPinGeoplace:
     """The pin service is place-generic (huts and geoplaces share it)."""
 
-    def test_pins_geoplace(self, seed_data):
+    def test_pins_geoplace(self, seed_data: dict[str, int]):
         from server.apps.geometries.models import GeoPlace, GeoPlaceImageAssociation
 
         place = GeoPlace.objects.filter(is_active=True, is_public=True).first()
@@ -242,7 +408,9 @@ class TestPinGeoplace:
         assert place.images_pinned_at is not None
         assert place_has_visible_pins(place)
 
-    def test_same_image_two_places_independent_scores(self, hut, seed_data):
+    def test_same_image_two_places_independent_scores(
+        self, hut: Hut, seed_data: dict[str, int]
+    ):
         from server.apps.geometries.models import GeoPlace
 
         place = GeoPlace.objects.filter(is_active=True, is_public=True).first()
@@ -262,7 +430,9 @@ class TestPinGeoplace:
         place_assoc = GeoPlaceImageAssociation.objects.get(
             geo_place=place, image__source_ident="wikicommons:File:Test.jpg"
         )
-        assert hut_assoc.score == 90
+        # Provider scores above the pin band clamp to 89 — curated uploads
+        # (90–99) always outrank pins (see HutImageAssociation).
+        assert hut_assoc.score == 89
         assert place_assoc.score == 40  # per-place curation
 
 
@@ -271,10 +441,10 @@ class TestPlaceEndpointPins:
 
     @pytest.fixture
     def client(self):
-        return TestClient(router)
+        return TestClient("/v1/geo/images")
 
     @pytest.fixture
-    def place(self, seed_data):
+    def place(self, seed_data: dict[str, int]):
         from server.apps.geometries.models import GeoPlace, GeoPlaceImageAssociation
 
         place = GeoPlace.objects.filter(is_active=True, is_public=True).first()
@@ -285,28 +455,35 @@ class TestPlaceEndpointPins:
         return place
 
     @pytest.fixture
-    def fetch(self, monkeypatch):
+    def fetch(self, monkeypatch: pytest.MonkeyPatch):
         from server.apps.geometries import api_images
 
         stub = _FetchStub()
         monkeypatch.setattr(api_images, "fetch_images_for_place", stub)
         return stub
 
-    def test_lazy_pins_on_first_visit(self, client, place, fetch):
+    def test_lazy_pins_on_first_visit(
+        self, client: TestClient, place: GeoPlace, fetch: _FetchStub
+    ):
         response = client.get(f"/place/{place.slug}?radius=50&lang=en&limit=10")
         assert response.status_code == 200
         assert fetch.calls == 1
         assert place_has_visible_pins(place)
         assert Image.objects.filter(provider_synced_at__isnull=False).count() == 2
-
         second = client.get(f"/place/{place.slug}?radius=50&lang=en&limit=9")
         assert second.status_code == 200
         assert fetch.calls == 1  # pins fast path, no live pipeline
 
-    def test_fast_path_serves_pins_by_score(self, client, place, fetch, monkeypatch):
+    def test_fast_path_serves_pins_by_score(
+        self,
+        client: TestClient,
+        place: GeoPlace,
+        fetch: _FetchStub,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
         from server.apps.geometries import api_images
 
-        def _boom(**kwargs):
+        def _boom(**kwargs: Any):
             raise AssertionError("live path must not run when pins exist")
 
         monkeypatch.setattr(api_images, "fetch_images_for_place", _boom)
@@ -318,11 +495,138 @@ class TestPlaceEndpointPins:
         source_ids = [f["properties"]["source_id"] for f in response.json()["features"]]
         assert source_ids[0] == "wikicommons:File:Test.jpg"  # highest score first
 
-    def test_update_cache_forces_repin(self, client, place, fetch):
+    def test_update_cache_forces_repin(
+        self, client: TestClient, place: GeoPlace, fetch: _FetchStub
+    ):
         client.get(f"/place/{place.slug}?radius=50&lang=en&limit=10")
         assert fetch.calls == 1
         client.get(f"/place/{place.slug}?radius=50&lang=en&limit=10&update_cache=true")
         assert fetch.calls == 2
+
+
+class TestServeTimeDedup:
+    """Phash-marked near-duplicates (``image_meta.duplicate_of``) are
+    dropped at serve time — but only while their primary is served too."""
+
+    @pytest.fixture
+    def client(self):
+        return TestClient("/v1/geo/images")
+
+    @pytest.fixture(autouse=True)
+    def _no_q2(self, monkeypatch: pytest.MonkeyPatch):
+        """The visit path enqueues background tasks; keep tests deterministic."""
+
+        def _noop(*args: Any, **kwargs: Any) -> None:
+            return None
+
+        monkeypatch.setattr("django_q.tasks.async_task", _noop)
+
+    def _marked_twin(
+        self, place: Hut | GeoPlace, primary_ident: str = "wikicommons:File:Test.jpg"
+    ):
+        """Pin a primary + weaker twin, mark the twin like assess_place_pins."""
+        twin_ident = "wikicommons:File:Duplicate.jpg"
+        pin_place_images(
+            place,
+            [
+                _result(score=80),
+                _result(source_id="File:Duplicate.jpg", score=70),
+            ],
+        )
+        twin = Image.objects.get(source_ident=twin_ident)
+        meta = dict(twin.image_meta)
+        meta["duplicate_of"] = primary_ident
+        twin.image_meta = meta
+        twin.save(update_fields=["image_meta"])
+        return twin
+
+    def test_hut_marked_duplicate_filtered(self, client: TestClient, hut: Hut):
+        self._marked_twin(hut)
+        response = client.get(f"/hut/{hut.slug}?radius=50&lang=en&limit=10")
+        assert response.status_code == 200
+        source_ids = [f["properties"]["source_id"] for f in response.json()["features"]]
+        assert "wikicommons:File:Test.jpg" in source_ids
+        assert "wikicommons:File:Duplicate.jpg" not in source_ids
+
+    def test_place_marked_duplicate_filtered(
+        self, client: TestClient, seed_data: dict[str, int]
+    ):
+        from server.apps.geometries.models import (
+            GeoPlace,
+            GeoPlaceImageAssociation,
+        )
+
+        place = GeoPlace.objects.filter(is_active=True, is_public=True).first()
+        assert place is not None
+        GeoPlaceImageAssociation.objects.filter(geo_place=place).delete()
+        self._marked_twin(place)
+        response = client.get(f"/place/{place.slug}?radius=50&lang=en&limit=10")
+        assert response.status_code == 200
+        source_ids = [f["properties"]["source_id"] for f in response.json()["features"]]
+        assert "wikicommons:File:Duplicate.jpg" not in source_ids
+        assert "wikicommons:File:Test.jpg" in source_ids
+
+    def test_orphaned_marker_keeps_image(self, client: TestClient, hut: Hut):
+        """Primary gone (curator unpinned it) → the twin must stay visible."""
+        self._marked_twin(hut)
+        HutImageAssociation.objects.filter(
+            hut=hut, image__source_ident="wikicommons:File:Test.jpg"
+        ).delete()
+        response = client.get(f"/hut/{hut.slug}?radius=50&lang=en&limit=10")
+        assert response.status_code == 200
+        source_ids = [f["properties"]["source_id"] for f in response.json()["features"]]
+        assert "wikicommons:File:Duplicate.jpg" in source_ids
+
+    def test_unmarked_pins_untouched(self, client: TestClient, hut: Hut):
+        """Without the assessment marker both pins serve (status quo)."""
+        pin_place_images(
+            hut, [_result(score=80), _result(source_id="File:Other.jpg", score=70)]
+        )
+        response = client.get(f"/hut/{hut.slug}?radius=50&lang=en&limit=10")
+        assert response.status_code == 200
+        source_ids = [f["properties"]["source_id"] for f in response.json()["features"]]
+        assert len(source_ids) == 2
+
+
+class TestCaptureDateAwareness:
+    """Providers may hand through naive capture times (EXIF carries no
+    zone) — the pin boundary must store timezone-aware values, else Django
+    warns and stores an ambiguously-interpreted datetime."""
+
+    def test_naive_capture_time_pinned_aware(self, hut: Hut, recwarn: WarningsChecker):
+        result = _result()
+        result.captured_at = datetime(2019, 6, 1, 11, 1, 41)  # noqa: DTZ001 — naive, like Commons
+        stats = pin_place_images(hut, [result])
+        assert stats.created == 1
+        assert not [w for w in recwarn if "naive datetime" in str(w.message)]
+        image = Image.objects.get(source_ident="wikicommons:File:Test.jpg")
+        assert image.capture_date is not None
+        assert timezone.is_aware(image.capture_date)
+
+    def test_naive_capture_time_refresh_stays_aware(self, hut: Hut):
+        result = _result()
+        result.captured_at = datetime(2019, 6, 1, 11, 1, 41)  # noqa: DTZ001
+        pin_place_images(hut, [result])
+        result.captured_at = datetime(2020, 7, 2, 12, 2, 42)  # noqa: DTZ001
+        stats = pin_place_images(hut, [result])
+        assert stats.updated == 1
+        image = Image.objects.get(source_ident="wikicommons:File:Test.jpg")
+        assert image.capture_date is not None
+        assert timezone.is_aware(image.capture_date)
+        assert image.capture_date.year == 2020
+
+    def test_aware_capture_time_untouched(self, hut: Hut):
+        aware = datetime(2019, 6, 1, 11, 1, 41, tzinfo=UTC)
+        result = _result()
+        result.captured_at = aware
+        pin_place_images(hut, [result])
+        image = Image.objects.get(source_ident="wikicommons:File:Test.jpg")
+        assert image.capture_date == aware
+
+    def test_missing_capture_time_stays_none(self, hut: Hut):
+        pin_place_images(hut, [_result()])
+        image = Image.objects.get(source_ident="wikicommons:File:Test.jpg")
+        assert image.capture_date is None
 
 
 class TestUrlSanitization:
@@ -362,7 +666,7 @@ class TestUrlSanitization:
         assert _sanitize_url(None) == ""
         assert _sanitize_url("") == ""
 
-    def test_pinned_urls_are_sanitized(self, hut):
+    def test_pinned_urls_are_sanitized(self, hut: Hut):
         raw_result = _result(
             source_id="File:Trail signs.jpg",
             url=(
@@ -386,14 +690,14 @@ class TestUrlSanitization:
 
 
 class TestDefaultCaption:
-    def test_caption_cleaned_from_source_id(self, hut):
+    def test_caption_cleaned_from_source_id(self, hut: Hut):
         pin_place_images(hut, [_result(source_id="File:Trail signs near X.jpg")])
         image = Image.objects.get(
             source_ident="wikicommons:File:Trail signs near X.jpg"
         )
-        assert image.caption_en == "Trail signs near X"
+        assert image.caption_en == "Trail signs near X"  # type: ignore[attr-defined]  # modeltrans-generated
 
-    def test_caption_optional(self, seed_data):
+    def test_caption_optional(self, seed_data: dict[str, int]):
         from server.apps.images.models import Image, License
 
         license_obj, _ = License.objects.get_or_create(

@@ -7,7 +7,6 @@ from .osm_base import CategoryMappings, OSMMapping
 
 HEALTH_AND_EMERGENCY = CategoryMappings(
     category="health_and_emergency",
-    detail_type="amenity",
     mappings=[
         # Emergency services (highest priority)
         OSMMapping(

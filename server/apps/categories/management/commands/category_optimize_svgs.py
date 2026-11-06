@@ -1,11 +1,12 @@
 import subprocess
 from argparse import ArgumentTypeError
 from pathlib import Path
+from typing import Any, override
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandParser
 
 
-def int_or_str_size(value):
+def int_or_str_size(value: str | int) -> tuple[int, int]:
     """Parse size argument - can be integer (for square) or 'WxH' format."""
     if isinstance(value, int):
         return value, value
@@ -33,7 +34,8 @@ def int_or_str_size(value):
 class Command(BaseCommand):
     help = "Optimize and resize SVG assets from assets_src to assets using svgo"
 
-    def add_arguments(self, parser):
+    @override
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "assets_src",
             nargs="?",
@@ -77,7 +79,9 @@ class Command(BaseCommand):
         except (subprocess.TimeoutExpired, FileNotFoundError):
             return False
 
-    def update_config_size(self, config_path, target_width, target_height):
+    def update_config_size(
+        self, config_path: Path, target_width: int, target_height: int
+    ) -> None:
         """Update the svgo config file with the target size."""
         try:
             with open(config_path, "r") as f:
@@ -95,7 +99,9 @@ class Command(BaseCommand):
         except OSError:
             return
 
-    def optimize_directory(self, source_dir, output_dir, config_path):
+    def optimize_directory(
+        self, source_dir: Path, output_dir: Path, config_path: Path
+    ) -> bool:
         """Optimize all SVG files in a directory using svgo."""
         try:
             cmd = [
@@ -132,13 +138,14 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(f"Error running svgo: {e}"))
             return False
 
-    def get_dir_stats(self, directory):
+    def get_dir_stats(self, directory: Path) -> tuple[int, int]:
         """Get statistics about SVG files in directory."""
         svg_files = list(directory.rglob("*.svg"))
         total_size = sum(f.stat().st_size for f in svg_files)
         return len(svg_files), total_size
 
-    def handle(self, *args, **options):
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         """Execute the command."""
         # Check if svgo is installed
         if not self.check_svgo_installed():

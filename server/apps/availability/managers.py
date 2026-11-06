@@ -1,17 +1,35 @@
 import datetime
+from typing import TYPE_CHECKING, Any
 
 from django.db import models
 from django.utils import timezone
 
 from server.core.managers import BaseManager
 
+if TYPE_CHECKING:
+    from server.apps.huts.models import Hut
+
+    from .models import (
+        GeoPlaceAvailability,
+        GeoPlaceAvailabilityHistory,
+        HutAvailability,
+        HutAvailabilityHistory,
+    )
+
 
 class AvailabilityStatusManager(BaseManager):
     """Custom manager for AvailabilityStatus"""
 
 
-class HutAvailabilityManager(BaseManager):
-    """Custom manager for HutAvailability with priority-based query methods"""
+class _PriorityNeedingUpdateMixin(models.Manager[Any]):
+    """Priority-based ``needing_update()`` shared by the hut and place
+    availability managers.
+
+    One implementation on purpose: during the dual-write window both tables
+    must derive identical update priorities, and a duplicated rule set would
+    be a drift bug waiting to happen. Removed with the hut manager in
+    Phase E of the geoplace-availability change.
+    """
 
     def needing_update(
         self,
@@ -20,25 +38,15 @@ class HutAvailabilityManager(BaseManager):
         low_priority_minutes: int | None = None,
         inactive_priority_minutes: int | None = None,
         next_days: int | None = None,
-    ) -> models.QuerySet:
+    ) -> "models.QuerySet[Any]":
         """
-        Return huts that need updating based on priority rules.
+        Return availability rows that need updating based on priority rules.
 
         Priority levels based on occupancy_status:
         - High: 'high' and 'full' status (check every 30 min default)
         - Medium: 'medium' status (check every 3 hours default)
         - Low: 'low' and 'empty' status (check daily default)
         - Inactive: 'unknown' status (check weekly default)
-
-        Args:
-            high_priority_minutes: Minutes between checks for high/full occupancy (default from settings)
-            medium_priority_minutes: Minutes between checks for medium occupancy (default from settings)
-            low_priority_minutes: Minutes between checks for low/empty occupancy (default from settings)
-            inactive_priority_minutes: Minutes between checks for unknown status (default from settings)
-            next_days: Number of days in the future to consider (default from settings)
-
-        Returns:
-            QuerySet of HutAvailability records needing updates
         """
         from django.conf import settings
 
@@ -109,11 +117,14 @@ class HutAvailabilityManager(BaseManager):
             occupancy_status="unknown",
         )
 
-        # Combine and return distinct huts
-        # Note: We get distinct hut IDs to avoid fetching same hut multiple times
+        # Combine and return distinct rows
         return (
             high_priority | medium_priority | low_priority | inactive_priority
         ).distinct()
+
+
+class HutAvailabilityManager(_PriorityNeedingUpdateMixin, BaseManager):
+    """Custom manager for HutAvailability with priority-based query methods"""
 
     def for_date_range(
         self,
@@ -121,7 +132,7 @@ class HutAvailabilityManager(BaseManager):
         date_from: datetime.date | None = None,
         date_to: datetime.date | None = None,
         days: int | None = None,
-    ) -> models.QuerySet:
+    ) -> "models.QuerySet[HutAvailability]":
         """
         Optimized query for date range views (map and detail).
 
@@ -161,7 +172,7 @@ class HutAvailabilityManager(BaseManager):
         low_priority_minutes: int | None = None,
         inactive_priority_minutes: int | None = None,
         next_days: int | None = None,
-    ) -> models.QuerySet:
+    ) -> "models.QuerySet[Hut]":
         """
         Get distinct Hut objects that need updating.
 
@@ -245,7 +256,7 @@ class HutAvailabilityHistoryManager(BaseManager):
         hut_id: int,
         target_date: datetime.date,
         days_before: int = 30,
-    ) -> models.QuerySet:
+    ) -> "models.QuerySet[HutAvailabilityHistory]":
         """
         Get historical trend data for a specific date.
         Shows how availability for target_date evolved over time.
@@ -259,5 +270,178 @@ class HutAvailabilityHistoryManager(BaseManager):
                 first_checked__gte=lookback_date,
             )
             .select_related("hut")
+            .order_by("first_checked")
+        )
+
+
+class GeoPlaceAvailabilityStatusManager(BaseManager):
+    """Custom manager for GeoPlaceAvailabilityStatus"""
+
+
+class GeoPlaceAvailabilityManager(_PriorityNeedingUpdateMixin, BaseManager):
+    """Custom manager for GeoPlaceAvailability (place-level port).
+
+    ``needing_update()`` comes from the shared priority mixin so hut and
+    place tables always derive identical update priorities. The hut-keyed
+    discovery (``get_huts_needing_update``) stays hut-side until the Phase C
+    write-path retarget of the geoplace-availability change.
+    """
+
+    def for_date_range(
+        self,
+        place_id: int | None = None,
+        date_from: datetime.date | None = None,
+        date_to: datetime.date | None = None,
+        days: int | None = None,
+    ) -> "models.QuerySet[GeoPlaceAvailability]":
+        """
+        Optimized query for date range views (map and detail).
+
+        Args:
+            place_id: If provided, filter to specific place (detail view)
+            date_from: Start date (defaults to today)
+            date_to: End date (optional if days is provided)
+            days: Number of days from date_from (defaults to 14)
+
+        Either date_to or days must be provided. If both are None, defaults to 14 days.
+        If both are provided, date_to takes precedence.
+        """
+        if date_from is None:
+            date_from = timezone.now().date()
+
+        if date_to is None:
+            if days is None:
+                days = 14
+            date_to = date_from + datetime.timedelta(days=days)
+
+        qs = self.filter(
+            availability_date__gte=date_from,
+            availability_date__lt=date_to,
+        )
+
+        if place_id is not None:
+            qs = qs.filter(geo_place_id=place_id)
+
+        return qs.select_related(
+            "geo_place", "source_organization", "hut_type"
+        ).order_by("geo_place", "availability_date")
+
+    def get_huts_needing_update(
+        self,
+        high_priority_minutes: int | None = None,
+        medium_priority_minutes: int | None = None,
+        low_priority_minutes: int | None = None,
+        inactive_priority_minutes: int | None = None,
+        next_days: int | None = None,
+    ) -> "models.QuerySet[Hut]":
+        """
+        Hut discovery driven by the place tables (Phase C of the
+        geoplace-availability change; replaces the hut-side
+        ``get_huts_needing_update`` at the reader cutover).
+
+        Returns huts that either:
+        1. Have place availability rows needing updates (priority rules,
+           shared with the hut side via the mixin)
+        2. Have a GeoPlaceAvailabilityStatus needing recheck (even if they
+           previously returned empty)
+        3. Have ``availability_source_ref`` but no place status yet — new
+           huts AND unmatched huts (no place association). Unmatched huts
+           are fetched and logged as unmatched by the dual-write (design
+           D5) — intentional, not an error.
+        """
+        from django.conf import settings
+        from django.db.models import Exists, OuterRef, Subquery
+
+        from server.apps.geometries.models import GeoPlaceSourceAssociation
+        from server.apps.huts.models import Hut
+
+        from .models import GeoPlaceAvailabilityStatus
+        from .place_link import WODORE_ORG_SLUG
+
+        settings_dict = getattr(settings, "AVAILABILITY_UPDATE_SETTINGS", {})
+        if inactive_priority_minutes is None:
+            inactive_priority_minutes = settings_dict.get(
+                "INACTIVE_PRIORITY_MINUTES", 10080
+            )
+        now = timezone.now()
+        inactive_threshold = now - datetime.timedelta(minutes=inactive_priority_minutes)
+
+        # 1. Places with availability rows that need updates
+        needing_places = (
+            self.needing_update(
+                high_priority_minutes=high_priority_minutes,
+                medium_priority_minutes=medium_priority_minutes,
+                low_priority_minutes=low_priority_minutes,
+                inactive_priority_minutes=inactive_priority_minutes,
+                next_days=next_days,
+            )
+            .values_list("geo_place_id", flat=True)
+            .distinct()
+        )
+
+        # 2. Places whose status needs rechecking
+        recheck_places = GeoPlaceAvailabilityStatus.objects.filter(
+            last_checked__lt=inactive_threshold
+        ).values_list("geo_place_id", flat=True)
+
+        stale_slugs = GeoPlaceSourceAssociation.objects.filter(
+            organization__slug=WODORE_ORG_SLUG,
+            geo_place_id__in=needing_places.union(recheck_places),
+        ).values_list("source_id", flat=True)
+
+        # This hut's place, expressed as a direct reverse join
+        # (``OuterRef`` does not chain through nested subqueries — it must
+        # resolve against the outer Hut query in one hop).
+        hut_place_join = models.Q(
+            geo_place__source_associations__organization__slug=WODORE_ORG_SLUG,
+            geo_place__source_associations__source_id=OuterRef("slug"),
+        )
+
+        # 3. Huts with a source but no status for their place — for
+        # unmatched huts the join matches nothing, so they are included
+        never_checked = ~Exists(
+            GeoPlaceAvailabilityStatus.objects.filter(hut_place_join)
+        )
+
+        failures = GeoPlaceAvailabilityStatus.objects.filter(hut_place_join).values(
+            "consecutive_failures"
+        )[:1]
+        last_checked = GeoPlaceAvailabilityStatus.objects.filter(hut_place_join).values(
+            "last_checked"
+        )[:1]
+
+        return (
+            Hut.objects.filter(availability_source_ref__isnull=False)
+            .filter(models.Q(slug__in=stale_slugs) | never_checked)
+            .annotate(
+                place_failures=Subquery(failures),
+                place_last_checked=Subquery(last_checked),
+            )
+            .order_by("-place_failures", "place_last_checked")
+        )
+
+
+class GeoPlaceAvailabilityHistoryManager(BaseManager):
+    """Custom manager for GeoPlaceAvailabilityHistory"""
+
+    def for_trend(
+        self,
+        place_id: int,
+        target_date: datetime.date,
+        days_before: int = 30,
+    ) -> "models.QuerySet[GeoPlaceAvailabilityHistory]":
+        """
+        Get historical trend data for a specific date.
+        Shows how availability for target_date evolved over time.
+        """
+        lookback_date = timezone.now().date() - datetime.timedelta(days=days_before)
+
+        return (
+            self.filter(
+                geo_place_id=place_id,
+                availability_date=target_date,
+                first_checked__gte=lookback_date,
+            )
+            .select_related("geo_place")
             .order_by("first_checked")
         )

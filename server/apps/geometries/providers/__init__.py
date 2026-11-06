@@ -12,6 +12,7 @@ from .base import (
     fetch_images_from_providers,
     post_process_images,
     provider_registry,
+    run_async,
 )
 from .camptocamp import CamptocampProvider
 from .mapillary import MapillaryProvider
@@ -36,6 +37,7 @@ __all__ = [
     "fetch_images_from_providers",
     "post_process_images",
     "provider_registry",
+    "run_async",
 ]
 
 # Note: WikidataProvider replaced by WikimediaCommonsProvider (more comprehensive)

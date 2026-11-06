@@ -1,0 +1,13 @@
+{
+  "$schema": "https://raw.githubusercontent.com/apmantza/pi-lens/master/docs/schema/pi-lens-config-v1.json",
+  "lsp": {
+    "disabledServers": ["python-jedi"],
+    "serverOverrides": {
+      "python": {
+        "name": "Pyrefly",
+        "command": ["uv", "run", "--no-sync", "pyrefly", "lsp"],
+        "covers": ["mypy", "pyright"]
+      }
+    }
+  }
+}

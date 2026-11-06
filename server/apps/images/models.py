@@ -8,6 +8,7 @@ import requests
 from colorfield.fields import ColorField
 from hut_services import LicenseSchema, PhotoSchema, TranslationSchema
 from PIL import Image as PILImage
+from pydantic_string_url import HttpUrl
 
 from model_utils.fields import (
     MonitorField,
@@ -32,6 +33,7 @@ from server.apps.organizations.models import Organization
 from server.apps.utils.fields import MonitorFields
 from server.core.managers import BaseMutlilingualManager
 from server.core.models import TimeStampedModel
+from server.core.storage import hashed_media_storage
 
 # from .forms import CustomImageField
 User = get_user_model()
@@ -46,6 +48,7 @@ class _ReviewStatusChoices(models.TextChoices):
 
 class ImageTag(TimeStampedModel):
     i18n = TranslationField(fields=("name",))
+    name_i18n: str
     objects = BaseMutlilingualManager()
 
     slug = models.SlugField(
@@ -73,14 +76,20 @@ class Image(TimeStampedModel):
     # add size field
     # add long caption or something ..
     i18n = TranslationField(fields=("caption",))
+    caption_i18n: str
     objects = BaseMutlilingualManager()
     ReviewStatusChoices = _ReviewStatusChoices
 
     # TODO: TAGS!!
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)  # type: ignore  # custom pk: Django idiom redeclares Model.id
 
     image = MetaImageField(
+        # Content-hashed storage: media is immutable-cached, a URL must
+        # never change content (server.core.storage) — covers admin
+        # re-downloads under upstream filenames; the uuid4 upload path
+        # is already unique-per-upload and merely dedupes now.
+        storage=hashed_media_storage,
         upload_to="images/",
         meta_field="image_meta",
         blank=True,
@@ -104,7 +113,7 @@ class Image(TimeStampedModel):
         max_length=255, default="", blank=True, null=True, verbose_name=_("Author")
     )
     author_url = models.URLField(
-        blank=True, max_length=500, null=True, default="", verbose_name=_("Author URL")
+        blank=True, max_length=1000, null=True, default="", verbose_name=_("Author URL")
     )
     caption = models.TextField(
         max_length=400,
@@ -163,11 +172,11 @@ class Image(TimeStampedModel):
         related_name="image_uploaded_set",
     )
     source_url = models.URLField(
-        blank=True, max_length=500, null=True, default="", verbose_name=_("Source URL")
+        blank=True, max_length=1000, null=True, default="", verbose_name=_("Source URL")
     )
     source_url_raw = models.URLField(
         blank=True,
-        max_length=500,
+        max_length=1000,
         null=True,
         default="",
         verbose_name=_("Source URL to raw image"),
@@ -199,6 +208,37 @@ class Image(TimeStampedModel):
         verbose_name=_("Provider Synced At"),
         help_text=_("Last refresh from the external provider."),
     )
+    phash = models.CharField(
+        max_length=16,
+        blank=True,
+        null=True,
+        db_index=True,
+        verbose_name=_("Perceptual Hash"),
+        help_text=_(
+            "64-bit dHash (hex) of the cached thumbnail — near-duplicates "
+            "sit within a small Hamming distance."
+        ),
+    )
+    thumbhash = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        verbose_name=_("ThumbHash"),
+        help_text=_(
+            "Compact placeholder encoding (~30 chars, computed by imagor) served "
+            "response so clients can render instant placeholders."
+        ),
+    )
+    quality_score = models.PositiveSmallIntegerField(
+        blank=True,
+        null=True,
+        db_index=True,
+        verbose_name=_("Quality Score"),
+        help_text=_(
+            "Technical image quality 0–100 (blur, exposure, contrast, "
+            "resolution) — computed, not curated."
+        ),
+    )
 
     class Meta:
         verbose_name = _("Image")
@@ -208,6 +248,18 @@ class Image(TimeStampedModel):
             models.CheckConstraint(
                 name="%(app_label)s_%(class)s_review_status_valid",
                 condition=models.Q(review_status__in=_ReviewStatusChoices.values),
+            ),
+            # Pins dedupe by source_ident ("<provider>:<source_id>",
+            # server.apps.geometries.pinning). Partial: uploads/imports without
+            # a source ident keep ""/NULL and stay unconstrained. Closes the
+            # create race between the request-path write-through, the django-q2
+            # refresh and the geoimages_pin sweeps, whose twins made every
+            # later get_or_create raise MultipleObjectsReturned (Sentry
+            # 155850205, hut cedullo).
+            models.UniqueConstraint(
+                name="%(app_label)s_%(class)s_source_ident_unique",
+                fields=["source_ident"],
+                condition=models.Q(source_ident__gt=""),
             ),
         )
 
@@ -227,8 +279,11 @@ class Image(TimeStampedModel):
                 focal_str = None
                 crop_start = None
                 crop_stop = None
+            # Pinned external images have no local file — fall back to the raw
+            # source URL so admin thumbnails work for pins too.
+            source = self.image if self.image else self.source_url_raw
             img = (
-                ImagorImage(self.image)
+                ImagorImage(source)  # type: ignore  # imagor wrapper typing
                 .transform(
                     size=f"{width}x{height}",
                     focal=focal_str,
@@ -299,9 +354,19 @@ class Image(TimeStampedModel):
                 else ""
             )
 
-        if cls.objects.filter(source_ident=source_ident).exists():
-            logging.info("Image already exists, skipping...")
-            return cls.objects.get(source_ident=source_ident)
+        if source_ident:
+            # Tolerant of legacy duplicate rows (source_ident had no unique
+            # constraint — see migration 0033): resolve the canonical row
+            # instead of crashing on twins; an empty ident must NOT dedupe
+            # (it matched every ident-less upload ever made).
+            existing = (
+                cls.objects.filter(source_ident=source_ident)
+                .order_by("created", "id")
+                .first()
+            )
+            if existing is not None:
+                logging.info("Image already exists, skipping...")
+                return existing
 
         headers = {"User-Agent": settings.BOT_AGENT}
         # Download the image from the raw_url
@@ -313,8 +378,8 @@ class Image(TimeStampedModel):
             if e.response.status_code == 404:
                 if "-originale" in photo_schema.raw_url:
                     # fix wrong url for refuges.info images
-                    photo_schema.raw_url = photo_schema.raw_url.replace(
-                        "-originale", "-reduite"
+                    photo_schema.raw_url = HttpUrl(
+                        str(photo_schema.raw_url).replace("-originale", "-reduite")
                     )
                     return cls.create_image_from_schema(
                         photo_schema,
@@ -379,8 +444,16 @@ class Image(TimeStampedModel):
             # could not get image type
             return None
         else:
-            msg = f"Unsupported image type: {image_format}"
-            raise ValueError(msg)
+            # Unknown-but-identified formats (BMP, GIF, TIFF, ...): a hut
+            # page only needs to ship one odd photo to abort a whole import
+            # run — skip the photo instead (same semantics as the
+            # unidentified-content branch above).
+            logging.warning(
+                "Unsupported image type %s from %s. Skipping this one.",
+                image_format,
+                photo_schema.raw_url,
+            )
+            return None
 
         image_uuid = uuid.uuid4()
         image_file = ContentFile(
@@ -406,7 +479,7 @@ class Image(TimeStampedModel):
             source_org_slug = source_org_slug[:50]
             source_org = Organization.objects.get_or_create(
                 slug=source_org_slug,
-                defaults={"name_en": photo_schema.source.name[:100]},
+                defaults={"name_en": photo_schema.source.name[:100]},  # type: ignore  # dynamic attr: plugin-less inference gap
             )[0]
             if not Organization.objects.filter(slug=source_org_slug).exists():
                 img_review_status = Image.ReviewStatusChoices.pending
@@ -491,9 +564,9 @@ class Image(TimeStampedModel):
                 review_comment += f"- Missing caption, use '{default_caption}' from file path instead.\n"
                 img_review_status = Image.ReviewStatusChoices.pending
             if source_org_slug == "refuges":
-                image.caption_fr = default_caption.strip().strip('"')
+                image.caption_fr = default_caption.strip().strip('"')  # type: ignore  # dynamic attr: plugin-less inference gap
             else:
-                image.caption_de = default_caption.strip().strip('"')
+                image.caption_de = default_caption.strip().strip('"')  # type: ignore  # dynamic attr: plugin-less inference gap
         if photo_schema.comment:
             review_comment += f"\n---\nSource Comment:\n\n{photo_schema.comment}\n"
         review_comment += f"\n---\nSource Data:\n\n```json\n{photo_schema.model_dump_json(indent=2)}\n```"
@@ -505,5 +578,5 @@ class Image(TimeStampedModel):
             logging.info("Image added successfully!")
             return image
         except IntegrityError as e:
-            logging.error("Error adding image %s: %s", image.caption_de, e)
+            logging.error("Error adding image %s: %s", image.caption_de, e)  # type: ignore  # dynamic attr: plugin-less inference gap
             return None

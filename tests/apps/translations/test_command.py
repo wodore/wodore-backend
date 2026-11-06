@@ -1,5 +1,7 @@
 """Tests for the `update_translations` management command."""
 
+from typing import Any
+
 import pytest
 
 from tests.apps.translations.conftest import FakeTranslationClient
@@ -22,11 +24,13 @@ EMPTY_API_SETTINGS = dict(
 )
 
 
-def patch_client(monkeypatch, fake):
+def patch_client(monkeypatch: pytest.MonkeyPatch, fake: Any):
     monkeypatch.setattr(f"{COMMAND_MODULE}.TranslationClient", lambda: fake)
 
 
-def test_command_translates_single_hut(monkeypatch, capsys):
+def test_command_translates_single_hut(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
     hut = HutFactory(name="Bergghütte")
     fake = FakeTranslationClient()
     patch_client(monkeypatch, fake)
@@ -42,7 +46,7 @@ def test_command_translates_single_hut(monkeypatch, capsys):
     assert "1 instance(s) processed" in output
 
 
-def test_command_respects_languages_filter(monkeypatch):
+def test_command_respects_languages_filter(monkeypatch: pytest.MonkeyPatch):
     hut = HutFactory(name="Bergghütte")
     fake = FakeTranslationClient()
     patch_client(monkeypatch, fake)
@@ -55,7 +59,7 @@ def test_command_respects_languages_filter(monkeypatch):
     assert fake.calls[0]["target_langs"] == ["fr"]
 
 
-def test_command_dry_run_without_config(capsys):
+def test_command_dry_run_without_config(capsys: pytest.CaptureFixture[str]):
     hut = HutFactory(name="Bergghütte")
     with override_settings(**EMPTY_API_SETTINGS):
         call_command("update_translations", "--hut", hut.slug, "--dry-run")
@@ -93,7 +97,7 @@ def test_command_unknown_slug_raises():
         call_command("update_translations", "--hut", "does-not-exist")
 
 
-def test_command_limit_processes_subset(monkeypatch):
+def test_command_limit_processes_subset(monkeypatch: pytest.MonkeyPatch):
     HutFactory.create_batch(3, name="Hütte")
     fake = FakeTranslationClient()
     patch_client(monkeypatch, fake)
@@ -108,18 +112,20 @@ def test_command_limit_processes_subset(monkeypatch):
 ASSESS_MODULE = "server.apps.translations.management.commands.assess_descriptions"
 
 
-def patch_assess_client(monkeypatch, fake):
+def patch_assess_client(monkeypatch: pytest.MonkeyPatch, fake: Any):
     monkeypatch.setattr(f"{ASSESS_MODULE}.TranslationClient", lambda: fake)
 
 
-def _done_hut(**kwargs):
+def _done_hut(**kwargs: Any):
     hut = HutFactory(**kwargs)
     Hut.objects.filter(pk=hut.pk).update(review_status="done")
     hut.refresh_from_db()
     return hut
 
 
-def test_assess_command_moves_done_hut_to_rework(monkeypatch, capsys):
+def test_assess_command_moves_done_hut_to_rework(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
     hut = _done_hut(name="Redaktionshütte", description="Kurzer Text.")
     fake = FakeTranslationClient(assess_result={"score": 4, "summary": "Too thin."})
     patch_assess_client(monkeypatch, fake)
@@ -135,7 +141,7 @@ def test_assess_command_moves_done_hut_to_rework(monkeypatch, capsys):
     assert "rework" in output
 
 
-def test_assess_command_keeps_queued_huts(monkeypatch):
+def test_assess_command_keeps_queued_huts(monkeypatch: pytest.MonkeyPatch):
     hut = HutFactory(name="Wartehütte", description="Text.")  # default: review
     fake = FakeTranslationClient(assess_result={"score": 3, "summary": "Bad."})
     patch_assess_client(monkeypatch, fake)
@@ -147,7 +153,7 @@ def test_assess_command_keeps_queued_huts(monkeypatch):
     assert hut.review_status == "review"  # untouched
 
 
-def test_assess_command_defaults_to_unscored(monkeypatch):
+def test_assess_command_defaults_to_unscored(monkeypatch: pytest.MonkeyPatch):
     scored = _done_hut(name="Fertig3", description="Text.")
     Hut.objects.filter(pk=scored.pk).update(description_quality=8)
     fresh = _done_hut(name="Neu3", description="Anderer Text.")
@@ -161,7 +167,7 @@ def test_assess_command_defaults_to_unscored(monkeypatch):
     assert fresh.description_quality == 7
 
 
-def test_assess_command_rescore(monkeypatch):
+def test_assess_command_rescore(monkeypatch: pytest.MonkeyPatch):
     hut = _done_hut(name="Rescorehütte", description="Text.")
     Hut.objects.filter(pk=hut.pk).update(description_quality=3)
     fake = FakeTranslationClient()
@@ -173,7 +179,7 @@ def test_assess_command_rescore(monkeypatch):
     assert hut.description_quality == 7
 
 
-def test_assess_command_rework_below_override(monkeypatch):
+def test_assess_command_rework_below_override(monkeypatch: pytest.MonkeyPatch):
     hut = _done_hut(name="Grenzfallhütte", description="Text.")
     fake = FakeTranslationClient(assess_result={"score": 7, "summary": "Gut."})
     patch_assess_client(monkeypatch, fake)
@@ -184,7 +190,7 @@ def test_assess_command_rework_below_override(monkeypatch):
     assert hut.review_status == "rework"
 
 
-def test_assess_command_limit(monkeypatch):
+def test_assess_command_limit(monkeypatch: pytest.MonkeyPatch):
     # Explicit slugs (not --all): the session seed data adds huts to the
     # test DB, and --all processes them first.
     hut_a = HutFactory(name="Limithütte A", description="Text.")
@@ -222,7 +228,9 @@ def test_assess_command_unconfigured():
             call_command("assess_descriptions", "--hut", hut.slug)
 
 
-def test_assess_command_geoplace_selector(monkeypatch, capsys):
+def test_assess_command_geoplace_selector(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
     from tests.factories.geometries import GeoPlaceFactory
 
     from server.apps.geometries.models import GeoPlace

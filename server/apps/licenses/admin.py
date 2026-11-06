@@ -3,11 +3,12 @@ from typing import ClassVar
 from django.contrib import admin
 
 # Models
-from django.utils.safestring import mark_safe
+from django.utils.safestring import SafeString, mark_safe
 from django.utils.translation import gettext_lazy as _
 
 from unfold.contrib.filters.admin import (
     AutocompleteSelectMultipleFilter,
+    BooleanRadioFilter,
     ChoicesCheckboxFilter,
 )
 from unfold.decorators import display
@@ -32,8 +33,8 @@ class LicenseAdmin(ModelAdmin):
     """Admin panel example for ``BlogPost`` model."""
 
     form = required_i18n_fields_form_factory("name", "fullname")
-    fieldsets = LicenseAdminFieldsets
-    view_on_site = True  # type: ignore[misc]  # pyright: ignore[reportIncompatiblePropertyOverride, reportAssignmentType]  # Django admin idiom
+    fieldsets = LicenseAdminFieldsets  # type: ignore  # admin fieldsets/list_filter typing drift (lazy gettext)
+    view_on_site = True  # type: ignore[misc]
     list_filter_submit = True  # Add submit button for filters
     autocomplete_fields = ("category",)
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
@@ -51,12 +52,25 @@ class LicenseAdmin(ModelAdmin):
         "order_small",
     )
     list_display_links = ("slug", "name_i18n")
+    list_editable = (
+        "is_active",
+        "attribution_required",
+        "no_commercial",
+        "no_modifying",
+        "share_alike",
+        "no_publication",
+    )
     list_filter = (
         (
             "review_status",
             ChoicesCheckboxFilter,
         ),  # Filter by review status with checkboxes
-        "is_active",
+        ("is_active", BooleanRadioFilter),
+        ("attribution_required", BooleanRadioFilter),
+        ("no_commercial", BooleanRadioFilter),
+        ("no_modifying", BooleanRadioFilter),
+        ("share_alike", BooleanRadioFilter),
+        ("no_publication", BooleanRadioFilter),
         ("category", AutocompleteSelectMultipleFilter),
     )
     search_fields = ("slug", "name_i18n", "fullname_i18n", "review_comment")
@@ -70,7 +84,7 @@ class LicenseAdmin(ModelAdmin):
     )
 
     @display(
-        description=_("Review"),  # pyright: ignore[reportArgumentType]  # _StrPromise vs str: unfold stub gap
+        description=_("Review"),
         label={
             ReviewStatus.NEW: "warning",
             ReviewStatus.REVIEW: "info",
@@ -112,5 +126,5 @@ class LicenseAdmin(ModelAdmin):
     #    return (obj.name_i18n, obj.fullname_i18n, self.logo_thumb(obj))
 
     @display(description="#", ordering=None)
-    def order_small(self, obj):
+    def order_small(self, obj: License) -> SafeString:
         return mark_safe(f"<small>{obj.order}</small>")

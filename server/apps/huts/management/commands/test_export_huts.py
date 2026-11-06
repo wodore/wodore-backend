@@ -1,6 +1,8 @@
+from typing import Any, override
+
 import yaml
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandParser
 
 from server.apps.huts.models import Hut
 
@@ -8,7 +10,8 @@ from server.apps.huts.models import Hut
 class Command(BaseCommand):
     help = "Export hut records as YAML seed files for test data"
 
-    def add_arguments(self, parser):
+    @override
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--limit",
             type=int,
@@ -35,7 +38,8 @@ class Command(BaseCommand):
             help="Include inactive huts in the export",
         )
 
-    def handle(self, *args, **options):
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         qs = Hut.objects.select_related(
             "hut_type_open", "hut_type_closed", "hut_owner"
         ).prefetch_related("contact_set__function", "org_set")

@@ -9,12 +9,16 @@ grant, JWKS and the end-session compatibility view.
 import base64
 import hashlib
 import secrets
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 import pytest
+from pytest_django.fixtures import SettingsWrapper
+from pytest_django.plugin import DjangoDbBlocker
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
+from django.test import Client
 
 pytestmark = pytest.mark.django_db
 
@@ -53,14 +57,14 @@ def _query_params(url: str) -> dict[str, str]:
 
 
 @pytest.fixture(scope="module")
-def local_users(django_db_setup, django_db_blocker):
+def local_users(django_db_setup: None, django_db_blocker: DjangoDbBlocker):
     with django_db_blocker.unblock():
         call_command("local_auth_users")
     yield
 
 
 @pytest.fixture
-def logged_in_client(client, local_users):
+def logged_in_client(client: Client, local_users: None):
     """Django test client with an authenticated admin session."""
     admin = get_user_model().objects.get(email="admin@local.test")
     client.force_login(admin)
@@ -68,7 +72,7 @@ def logged_in_client(client, local_users):
 
 
 class TestDiscovery:
-    def test_frontend_compatible_discovery(self, client, local_users):
+    def test_frontend_compatible_discovery(self, client: Client, local_users: None):
         response = client.get("/oauth/local/.well-known/openid-configuration")
         assert response.status_code == 200
         doc = response.json()
@@ -85,7 +89,7 @@ class TestDiscovery:
         # The legacy Zitadel roles scope must stay acceptable.
         assert "urn:zitadel:iam:org:projects:roles" in doc.get("scopes_supported", [])
 
-    def test_jwks_publishes_provider_key(self, client, local_users):
+    def test_jwks_publishes_provider_key(self, client: Client, local_users: None):
         response = client.get("/oauth/local/.well-known/jwks.json")
         assert response.status_code == 200
         keys = response.json()["keys"]
@@ -93,7 +97,9 @@ class TestDiscovery:
 
 
 class TestAuthorizationCodeFlow:
-    def test_unauthenticated_authorize_redirects_to_login(self, client, local_users):
+    def test_unauthenticated_authorize_redirects_to_login(
+        self, client: Client, local_users: None
+    ):
         _, challenge = _pkce()
         response = client.get("/oauth/local/authorize/", _authorize_params(challenge))
         assert response.status_code == 302
@@ -102,7 +108,7 @@ class TestAuthorizationCodeFlow:
         # The authorize request is preserved for the post-login redirect.
         assert "next=" in location
 
-    def test_full_pkce_flow(self, logged_in_client, local_users):
+    def test_full_pkce_flow(self, logged_in_client: Client, local_users: None):
         client = logged_in_client
         verifier, challenge = _pkce()
         response = client.get("/oauth/local/authorize/", _authorize_params(challenge))
@@ -139,7 +145,7 @@ class TestAuthorizationCodeFlow:
         assert set(claims["roles"]) == {"group:admin", "group:editor"}
         assert "picture" in claims
 
-    def test_code_is_single_use(self, logged_in_client, local_users):
+    def test_code_is_single_use(self, logged_in_client: Client, local_users: None):
         client = logged_in_client
         verifier, challenge = _pkce()
         response = client.get("/oauth/local/authorize/", _authorize_params(challenge))
@@ -156,7 +162,7 @@ class TestAuthorizationCodeFlow:
         assert again.status_code == 400
         assert again.json()["error"] == "invalid_grant"
 
-    def test_wrong_verifier_rejected(self, logged_in_client, local_users):
+    def test_wrong_verifier_rejected(self, logged_in_client: Client, local_users: None):
         client = logged_in_client
         _, challenge = _pkce()
         response = client.get("/oauth/local/authorize/", _authorize_params(challenge))
@@ -174,7 +180,7 @@ class TestAuthorizationCodeFlow:
         assert response.status_code == 400
         assert response.json()["error"] == "invalid_grant"
 
-    def test_missing_pkce_rejected(self, logged_in_client, local_users):
+    def test_missing_pkce_rejected(self, logged_in_client: Client, local_users: None):
         client = logged_in_client
         params = _authorize_params("")
         params.pop("code_challenge")
@@ -185,7 +191,9 @@ class TestAuthorizationCodeFlow:
         if response.status_code == 302:
             assert "error" in _query_params(response["Location"])
 
-    def test_redirect_uri_mismatch_rejected(self, logged_in_client, local_users):
+    def test_redirect_uri_mismatch_rejected(
+        self, logged_in_client: Client, local_users: None
+    ):
         client = logged_in_client
         _, challenge = _pkce()
         params = _authorize_params(
@@ -200,7 +208,7 @@ class TestAuthorizationCodeFlow:
 
 class TestRefreshRotation:
     @pytest.fixture
-    def tokens(self, logged_in_client, local_users):
+    def tokens(self, logged_in_client: Client, local_users: None):
         client = logged_in_client
         verifier, challenge = _pkce()
         response = client.get("/oauth/local/authorize/", _authorize_params(challenge))
@@ -218,7 +226,7 @@ class TestRefreshRotation:
         assert response.status_code == 200
         return response.json()
 
-    def test_refresh_rotates(self, logged_in_client, tokens):
+    def test_refresh_rotates(self, logged_in_client: Client, tokens: dict[str, Any]):
         response = logged_in_client.post(
             "/oauth/local/token/",
             data={
@@ -233,7 +241,9 @@ class TestRefreshRotation:
         assert new["refresh_token"]
         assert new["refresh_token"] != tokens["refresh_token"]
 
-    def test_replayed_refresh_token_rejected(self, logged_in_client, tokens):
+    def test_replayed_refresh_token_rejected(
+        self, logged_in_client: Client, tokens: dict[str, Any]
+    ):
         first = logged_in_client.post(
             "/oauth/local/token/",
             data={
@@ -256,7 +266,7 @@ class TestRefreshRotation:
 
 
 class TestPasswordGrant:
-    def test_valid_credentials(self, client, local_users):
+    def test_valid_credentials(self, client: Client, local_users: None):
         response = client.post(
             "/oauth/local/token/",
             data={
@@ -272,11 +282,11 @@ class TestPasswordGrant:
 
 
 class TestUserinfo:
-    def test_requires_bearer(self, client, local_users):
+    def test_requires_bearer(self, client: Client, local_users: None):
         response = client.get("/oauth/local/userinfo/")
         assert response.status_code == 401
 
-    def test_rejects_garbage_token(self, client, local_users):
+    def test_rejects_garbage_token(self, client: Client, local_users: None):
         response = client.get(
             "/oauth/local/userinfo/",
             headers={"Authorization": "Bearer not-a-token"},
@@ -297,11 +307,11 @@ class TestLoginMethods:
         AccessAttempt.objects.all().delete()
         yield
 
-    def test_login_page_renders(self, client, local_users):
+    def test_login_page_renders(self, client: Client, local_users: None):
         response = client.get("/accounts/login/")
         assert response.status_code == 200
 
-    def test_login_form_post_logs_in(self, client, local_users):
+    def test_login_form_post_logs_in(self, client: Client, local_users: None):
         """Drives the real allauth login form (GET + POST with credentials) -
         guards against configuration errors that only surface on POST
         (e.g. malformed ACCOUNT_RATE_LIMITS raising ValueError)."""
@@ -319,7 +329,7 @@ class TestLoginMethods:
         user = get_user_model().objects.get(email="admin@local.test")
         assert user.is_authenticated
 
-    def test_account_overview_page(self, client, local_users):
+    def test_account_overview_page(self, client: Client, local_users: None):
         from django.contrib.auth import get_user_model
 
         client.force_login(get_user_model().objects.get(email="admin@local.test"))
@@ -328,20 +338,20 @@ class TestLoginMethods:
         assert b"admin@local.test" in response.content
         assert b"/accounts/2fa/" in response.content
 
-    def test_login_form_rejects_wrong_password(self, client, local_users):
+    def test_login_form_rejects_wrong_password(self, client: Client, local_users: None):
         response = client.post(
             "/accounts/login/",
             data={"login": "admin@local.test", "password": "wrong"},
         )
         assert response.status_code == 200  # form re-rendered with errors
 
-    def test_email_only_identifier(self, settings):
+    def test_email_only_identifier(self, settings: SettingsWrapper):
         assert settings.ACCOUNT_LOGIN_METHODS == {"email"}
 
-    def test_one_time_code_login_enabled(self, settings):
+    def test_one_time_code_login_enabled(self, settings: SettingsWrapper):
         assert settings.ACCOUNT_LOGIN_BY_CODE_ENABLED is True
 
-    def test_passkey_and_totp_mfa_enabled(self, settings):
+    def test_passkey_and_totp_mfa_enabled(self, settings: SettingsWrapper):
         assert settings.MFA_PASSKEY_LOGIN_ENABLED is True
         assert set(settings.MFA_SUPPORTED_TYPES) == {
             "totp",
@@ -354,7 +364,7 @@ class TestLoginRedirects:
     """Deep links requiring login land back at the original page - not the
     admin index (the admin sends /admin/login/?next=<original path>)."""
 
-    def test_admin_deep_link_roundtrip(self, client, local_users):
+    def test_admin_deep_link_roundtrip(self, client: Client, local_users: None):
         from django.urls import reverse
 
         deep_link = reverse("admin:accounts_user_changelist")
@@ -378,7 +388,7 @@ class TestLoginRedirects:
         assert response.status_code == 302
         assert response["Location"] == deep_link
 
-    def test_account_deep_link_roundtrip(self, client, local_users):
+    def test_account_deep_link_roundtrip(self, client: Client, local_users: None):
         target = "/accounts/2fa/"
         response = client.get(target)
         assert response.status_code == 302
@@ -392,14 +402,14 @@ class TestLoginRedirects:
         assert response.status_code == 302
         assert response["Location"] == target
 
-    def test_admin_login_bridge_rejects_open_redirects(self, client):
+    def test_admin_login_bridge_rejects_open_redirects(self, client: Client):
         response = client.get("/admin/login/", {"next": "https://evil.example/phish"})
         assert response.status_code == 302
         # Un-safe targets fall back to the admin, never an external host.
         assert "evil.example" not in response["Location"]
         assert "next=/admin/" in response["Location"]
 
-    def test_zitadel_rp_urls_mounted(self, settings):
+    def test_zitadel_rp_urls_mounted(self, settings: SettingsWrapper):
         """The Zitadel RP surface (AUTH_PROVIDER=zitadel, the production
         default) must mount /oidc/ routes and forward the admin login to
         the RP authenticate view - guarding against urlconf regressions."""
@@ -430,7 +440,7 @@ class TestLoginRedirects:
 
 
 class TestEndSession:
-    def test_end_session_logs_out(self, logged_in_client, local_users):
+    def test_end_session_logs_out(self, logged_in_client: Client, local_users: None):
         response = logged_in_client.get(
             "/oauth/local/end_session",
             {"post_logout_redirect_uri": "http://testserver/"},

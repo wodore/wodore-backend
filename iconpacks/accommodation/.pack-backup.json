@@ -1,0 +1,638 @@
+{
+  "schema": 2,
+  "name": "accommodation",
+  "version": "0.1.0",
+  "provenance": {
+    "created_by": "user",
+    "source": "wodore-backend PR #314"
+  },
+  "spec": {
+    "viewBox": "0 0 24 24",
+    "live_area": {
+      "padding": 0
+    },
+    "allowed_elements": [
+      "path",
+      "circle",
+      "rect",
+      "line",
+      "polyline",
+      "polygon",
+      "ellipse"
+    ]
+  },
+  "styles": {
+    "mono-filled": {
+      "extends": "mono-filled",
+      "label": "Mono filled",
+      "size": 24,
+      "min_gap": 1,
+      "max_nodes": 48,
+      "palette": ["#000000"],
+      "style_words": [
+        "solid silhouette",
+        "single color fill",
+        "no strokes. Shoud work as map symbols. Basic  monoton version of the color-flat variant."
+      ],
+      "avoid": ["internal outlines", "gradients"],
+      "recraft_style_id": "c762a802-e56a-4761-a926-87948cdd652b",
+      "recraft_style_hash": "68fdffddd2da081d"
+    },
+    "color-flat": {
+      "extends": "color-flat",
+      "label": "Color flat",
+      "size": 24,
+      "min_gap": 0,
+      "max_nodes": 1600,
+      "palette": [
+        "#007664",
+        "#0092e3",
+        "#009ee8",
+        "#00a3a3",
+        "#00b0f9",
+        "#018871",
+        "#01db89",
+        "#027ec4",
+        "#0378b7",
+        "#04a37a",
+        "#05d898",
+        "#067bbf",
+        "#068fea",
+        "#07a8f5",
+        "#0bec9e",
+        "#0c557a",
+        "#0d344b",
+        "#0f709e",
+        "#11a699",
+        "#12a5bc",
+        "#156b72",
+        "#176560",
+        "#1a3d3c",
+        "#1bacee",
+        "#1c1c1c",
+        "#1d4f55",
+        "#1e3638",
+        "#1e8790",
+        "#20283a",
+        "#224e3b",
+        "#22534f",
+        "#2597d1",
+        "#265c54",
+        "#2673bf",
+        "#29626b",
+        "#296554",
+        "#2c69fe",
+        "#2d1c41",
+        "#2d2e32",
+        "#2dc4b7",
+        "#318178",
+        "#3268d3",
+        "#333a3f",
+        "#346751",
+        "#352043",
+        "#408860",
+        "#473687",
+        "#48365d",
+        "#4fa7a2",
+        "#575757",
+        "#614877",
+        "#617187",
+        "#68c5c1",
+        "#68c6f7",
+        "#694d41",
+        "#6e6d6d",
+        "#74574c",
+        "#796256",
+        "#80543c",
+        "#83ddfc",
+        "#846a15",
+        "#84a8a9",
+        "#8a4b1b",
+        "#8b8b8b",
+        "#8c8b8a",
+        "#8d654c",
+        "#8e6d5e",
+        "#8f6243",
+        "#8fd6b7",
+        "#927f76",
+        "#945e2d",
+        "#946749",
+        "#959595",
+        "#999898",
+        "#99cfd2",
+        "#9a9a9a",
+        "#9dd9d2",
+        "#9fc0d4",
+        "#a0a0a1",
+        "#a0c49a",
+        "#a0c972",
+        "#abcff2",
+        "#b7b6b6",
+        "#bd9a78",
+        "#bfab25",
+        "#c3731f",
+        "#c3c2c2",
+        "#c6c6c5",
+        "#ca9533",
+        "#cecdcd",
+        "#d39f35",
+        "#d3d2d1",
+        "#d3d2d2",
+        "#d5d5d5",
+        "#d7d7d6",
+        "#d89b3a",
+        "#d99a3a",
+        "#e1b35d",
+        "#e1e0df",
+        "#e8c563",
+        "#e8e8e7",
+        "#eaebeb",
+        "#ed954e",
+        "#eea42a",
+        "#f15e2b",
+        "#f23433",
+        "#f2f7f4",
+        "#f3cb82",
+        "#f4bc5c",
+        "#f6ad3b",
+        "#f6bd49",
+        "#f9b13f",
+        "#f9b84c",
+        "#fa3458",
+        "#faaf46",
+        "#fabb47",
+        "#fac564",
+        "#feb434",
+        "#feb533",
+        "#fec058",
+        "#ffc064",
+        "#ffd663",
+        "#ffffff"
+      ],
+      "style_words": [
+        "flat fills",
+        "tile-shaped regions, no outlines",
+        "modern rounded corners"
+      ],
+      "avoid": ["gradients", "strokes"]
+    }
+  },
+  "icons": {
+    "accommodation": {
+      "brief": "Generic accommodation: any place offering overnight lodging, independent of its specific type",
+      "variants": {
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r005",
+            "variant": "c1"
+          },
+          "content_hash": "5848a27b61bdef799ad9024327d473ff5c2aadbf89a0a1f50f2fb3d08682688d"
+        },
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r006",
+            "variant": "r7"
+          },
+          "content_hash": "afea501fafc10770a4094e6c546bc54239631cbb177e2afeaaa78af8c012074d"
+        },
+        "primitive": {
+          "link": "hut#primitive"
+        }
+      },
+      "main_color": "#346751",
+      "colors": ["#265c54", "#f4bc5c", "#296554", "#fabb47"]
+    },
+    "alp": {
+      "brief": "An alp — a working mountain farm offering overnight accommodation, often serving its own farm products; not open year-round",
+      "variants": {
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r005",
+            "variant": "c1"
+          },
+          "content_hash": "d4053e4c01b0d884259341b5d7e1e3f360bb2c3eb8d8c1a816bff0f140622d96"
+        },
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r006",
+            "variant": "r7"
+          },
+          "content_hash": "646a75ceadfe948e20883cb5dc00e887d79b8bce1ada753b9094783997fcd792"
+        },
+        "primitive": {
+          "link": "hut#primitive"
+        }
+      },
+      "main_color": "#346751",
+      "colors": ["#22534f", "#f6bd49", "#d29a2c", "#265c54", "#f4bc5c"]
+    },
+    "bhotel": {
+      "brief": "A basic hotel — simple, non-luxurious, affordable lodging, usually a mountain hotel; often with a dormitory (Massenlager) besides private rooms",
+      "variants": {
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r005",
+            "variant": "c1"
+          },
+          "content_hash": "a129ca2c46dfb58dbe02ea16c0ef27f675a5d6d1a74639092dd5b260d23ab221"
+        },
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r006",
+            "variant": "g1"
+          },
+          "content_hash": "455fb65bc216fcd839d9ca184672ae445eb7ad80e02ff7ea4f1e6a83d0241080"
+        },
+        "primitive": {
+          "link": "hotel#primitive"
+        }
+      },
+      "main_color": "#2673bf",
+      "colors": ["#0177be", "#6cbde9", "#14a6db", "#bbd5e8", "#eaebeb"]
+    },
+    "bivouac": {
+      "brief": "A bivouac (Biwak) — a small, fixed, remote metal shelter capsule sleeping only a few; unlocked, free, first-come first-served; an overnight base for climbs and ski tours, often high up with a hard approach",
+      "variants": {
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r005",
+            "variant": "s1"
+          },
+          "content_hash": "96476fae13b7ef815665801f223cbb85373ed8c6d60eb05d90a3cc821e7ae41b"
+        },
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r006",
+            "variant": "g1"
+          },
+          "content_hash": "acf430117bc4bcbab272b7a07be9e0af7463fe24136768985be06fd067e12044"
+        },
+        "primitive": {
+          "link": "hut#primitive"
+        }
+      },
+      "main_color": "#abcff2",
+      "colors": ["#ffffff", "#6cbde9", "#e3e2e1", "#bbd5e8", "#c6c6c5"]
+    },
+    "campgr": {
+      "brief": "A wild camp (Biwakplatz) — open terrain where sleeping out is possible for a night, with no infrastructure and no built shelter",
+      "variants": {
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r005",
+            "variant": "c1"
+          },
+          "content_hash": "b74138af9ff64f68dad306fa08186f3c7b1f603e1f64c6f6c72d2e1f2db2f290"
+        },
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r006",
+            "variant": "r2"
+          },
+          "content_hash": "ccff360eda9359cb86bc62f4dd16b1617fe3f1cdfd70b87c2bdb771ba7b67bb9"
+        },
+        "primitive": {
+          "link": "camping#primitive"
+        }
+      },
+      "main_color": "#8fd6b7",
+      "colors": ["#a0c49a", "#296554"]
+    },
+    "camping": {
+      "brief": "A campground (Campingplatz) — a managed campsite with infrastructure: pitches for tents and basic facilities",
+      "variants": {
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r005",
+            "variant": "c1"
+          },
+          "content_hash": "bdc887c0c0e319d0b1c643241dbe5c39585bf89565fe91925f2806f83091204c"
+        },
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r006",
+            "variant": "r3"
+          },
+          "content_hash": "f4753788c0a06aa2a7b4679efc47dc3f8eb503f380975394d2ac7fbf77c5b243"
+        },
+        "primitive": {
+          "style": "mono-primitive",
+          "status": "todo"
+        }
+      },
+      "main_color": "#bfab25",
+      "colors": ["#f4bc5c", "#e1b35d", "#265c54", "#fabb47", "#d39f35"]
+    },
+    "closed": {
+      "brief": "A closed accommodation — shut and unusable, offering no emergency shelter; typically out of season",
+      "variants": {
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r005",
+            "variant": "c1"
+          },
+          "content_hash": "1b7e13d49c3ab5fd74a6c89ae90f09dd9dd11378dc98cf7d33d95ea29cbe6a54"
+        },
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r006",
+            "variant": "r4"
+          },
+          "content_hash": "2b654b2694c9326fe663b113e7b321f32225c430267bd25a7dc0f85a56072764"
+        },
+        "primitive": {
+          "style": "mono-primitive",
+          "status": "approved",
+          "chosen": {
+            "run": "r007",
+            "variant": "v0"
+          },
+          "content_hash": "2e7efd05cfee807342fba19290d8f52309ce8ff178ad44b009c05c8ad487b1aa"
+        }
+      },
+      "main_color": "#bf211e",
+      "colors": ["#e23740", "#9a9a9a", "#615d6b", "#265c54", "#64666c"]
+    },
+    "hostel": {
+      "brief": "A hostel (Jugendherberge) — budget lodging built around shared dormitories and communal spaces; includes youth hostels and gîtes",
+      "variants": {
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r005",
+            "variant": "c1"
+          },
+          "content_hash": "9638116d0633a5722b44bc3f838f4a04f9464936959b8f0ea00135750f4184ae"
+        },
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r006",
+            "variant": "c1"
+          },
+          "content_hash": "8088a371e95005857be08fe42b11be2aa1cef7c7c94cff766802c84cae60c5c4"
+        },
+        "primitive": {
+          "link": "hotel#primitive"
+        }
+      },
+      "main_color": "#2673bf",
+      "colors": ["#14a6db", "#88c0c6", "#eaebeb", "#027ec4", "#296554"]
+    },
+    "hotel": {
+      "brief": "A hotel — lodging with private rooms, service and comfort",
+      "variants": {
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r005",
+            "variant": "c1"
+          },
+          "content_hash": "7e64c7f7c1ba498febc471208b29f5f3e424ad935441c72fcdaef3640eb4308e"
+        },
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r006",
+            "variant": "r7"
+          },
+          "content_hash": "ad3319c7a9b45e560e208ad6b38c9f84290016542de27936677cdfa40a4c315a"
+        },
+        "primitive": {
+          "style": "mono-primitive",
+          "status": "todo"
+        }
+      },
+      "main_color": "#2673bf",
+      "colors": ["#027ec4", "#2597d1", "#2d2e32", "#fabb47", "#68c6f7"]
+    },
+    "hut": {
+      "brief": "A staffed mountain hut (Hütte, Cabane, Rifugio) — warden-run lodging with dormitory beds and cooked meals; may be unstaffed off-season.",
+      "main_color": "#346751",
+      "variants": {
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r005",
+            "variant": "c1"
+          },
+          "content_hash": "9d98eec4ce83ce36e95cc27199339b1801fa1fc5979cefbfa9210a3874790f6b"
+        },
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r006",
+            "variant": "r7"
+          },
+          "content_hash": "876dfbe248aa62a0fbc12ac3c6d81a4b7876b0b6862ae3e7d76955c031be534c"
+        },
+        "primitive": {
+          "style": "mono-primitive",
+          "status": "todo"
+        }
+      },
+      "colors": ["#775b44", "#22534f", "#f6bd49", "#e3e2e1", "#265c54"]
+    },
+    "selfhut": {
+      "brief": "A self-catering hut (unbewartete Hütte) — unstaffed but usually well equipped, with beds and a kitchen for guests' own provisions; often smaller than a staffed hut",
+      "variants": {
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r005",
+            "variant": "c1"
+          },
+          "content_hash": "249899ec18d9d14382491702b0e7e4c3d79c0d9d7a932798927e95132886048f"
+        },
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r006",
+            "variant": "r8"
+          },
+          "content_hash": "867ecf640662155cd6886e7eff4c10287a7b02ff3939182e52b9f0a97ae21ea8"
+        },
+        "primitive": {
+          "link": "hut#primitive"
+        }
+      },
+      "main_color": "#408c6b",
+      "colors": ["#318178", "#7e614d", "#f4bc5c", "#7a593a", "#694b31"]
+    },
+    "shelter": {
+      "brief": "A basic weather shelter (einfacher Unterstand) — a simple roofed refuge from the elements, without much infrastructure",
+      "variants": {
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r005",
+            "variant": "s1"
+          },
+          "content_hash": "44b65d22381c1bbba4655af872a7a2f22ffbe8652a4beb501b52d8007885ac1d"
+        },
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r006",
+            "variant": "v0"
+          },
+          "content_hash": "528d287d0a93bb7e4721daf8d62cf3f93c5ffb8d54b18bdc143146c8d94495bc"
+        },
+        "primitive": {
+          "link": "camping#primitive"
+        }
+      },
+      "main_color": "#7d5a3c",
+      "colors": ["#775b44", "#99c6a7", "#478965", "#ffffff", "#7a593a"]
+    },
+    "special": {
+      "brief": "A special overnight accommodation — a distinctive lodging that fits no other category",
+      "variants": {
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r005",
+            "variant": "c1"
+          },
+          "content_hash": "2a3d706d3d97939b0f66cb1e14594b337cad127ac0c1065bb82b12db0c678378"
+        },
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r006",
+            "variant": "r8"
+          },
+          "content_hash": "8b75f807c453aadf38e5891e12f75c0329e7f2fbf6ee710919734daf4f25f2b9"
+        },
+        "primitive": {
+          "style": "mono-primitive",
+          "status": "approved",
+          "chosen": {
+            "run": "r007",
+            "variant": "p2"
+          },
+          "content_hash": "fcd81badc90d85f7d44e590f4cb9a87138186e4a29daa0c47bca1104c1253ee2"
+        }
+      },
+      "main_color": "#9dd9d2",
+      "colors": ["#12a5bc", "#145a6f", "#f6bd49", "#12688b", "#f4bc5c"]
+    },
+    "unknown": {
+      "brief": "An accommodation whose specific type could not be determined",
+      "variants": {
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r005",
+            "variant": "c1"
+          },
+          "content_hash": "72401d0d0dc8fb420fa180e339a25c3bd27b69ee0a7bd7ff81009c7c39a1c3f4"
+        },
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r006",
+            "variant": "r8"
+          },
+          "content_hash": "e600fb2de6237576c87b9838ad150f3e48ec9d3b74feb64a780844d8b556755e"
+        },
+        "primitive": {
+          "style": "mono-primitive",
+          "status": "todo"
+        }
+      },
+      "main_color": "#575757",
+      "colors": ["#8c8b8a", "#e3e2e1", "#12a5bc", "#eaebeb", "#c6c6c5"]
+    },
+    "restaurant": {
+      "brief": "A restaurant (Restaurant/Gaststätte) — serves meals but offers no overnight accommodation",
+      "variants": {
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r005",
+            "variant": "c1"
+          },
+          "content_hash": "2ff315616300c91adeb154f4507ba7b988994e3f08dfd31792d6f7794b25e316"
+        },
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r006",
+            "variant": "s1"
+          },
+          "content_hash": "31233cc7b92a8fcbbb44bbe51bf4143ec2a7c499b1d7f186ee0fbae1da672039"
+        },
+        "primitive": {
+          "link": "hotel#primitive"
+        }
+      },
+      "main_color": "#3f9da2",
+      "colors": ["#4fa7a2", "#fabb47", "#99cfd2", "#e1e0df"]
+    }
+  },
+  "rev": 154,
+  "note": "Shape clusters and color families are two separate axes. Shape anchors: hut (hut family: accommodation, alp, selfhut, bivouac), hotel (building family: bhotel, hostel, restaurant), camping (tent family: campgr) — match the anchor's mass and corner habit. Color families: forest greens = hut family, glacier blues = building family, meadow gold = camping, wood = shelter, mid turquoise = restaurant, glacier-blue ice = bivouac, forest-ice = campgr (wild overnight family — pale mains glow on dark), gray = unknown, red = closed only.",
+  "rules": [],
+  "recraft": {
+    "model": "recraftv4_vector",
+    "n": 4,
+    "style_ids": {
+      "color-flat": "e1ff2162-b11e-4738-aa76-5555aada0fbf"
+    }
+  },
+  "feedback": [
+    {
+      "id": "d0daf985",
+      "scope": "pack",
+      "text": "r007 primitives: 3 candidates per standalone icon — v0 = existing marker (currentColor-normalized, was white-halo stroke -> currentColor), p1 = dominant-mass trace of the approved mono (<=10 pts), p2 = hand-built geometric (pentagon house / portrait rect / tent triangle / square / circle / diamond). All fill=currentColor per user rule — same for all applied mono files (verified render-identical).",
+      "author": "agent",
+      "round": "cli",
+      "created": "2026-10-30T23:59:56Z"
+    }
+  ]
+}

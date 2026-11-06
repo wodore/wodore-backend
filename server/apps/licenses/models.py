@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Any, override
 
 from modeltrans.fields import TranslationField
 
@@ -22,11 +23,26 @@ validate_lic_slug = RegexValidator(
 )
 
 
+class LicenseSlugField(models.SlugField[str, str]):
+    """SlugField that also allows dots (e.g. ``cc-by-4.0``).
+
+    Validators passed via ``validators=`` run *in addition to* the field's
+    ``default_validators`` (Django's ``validate_slug``, which rejects dots),
+    so the permissive regex must replace the defaults, not supplement them.
+    """
+
+    default_validators = [validate_lic_slug]
+
+
 class License(TimeStampedModel):
     i18n = TranslationField(fields=("name", "fullname", "description", "url"))
+    name_i18n: str
+    fullname_i18n: str
+    description_i18n: str
+    url_i18n: str
     objects = BaseMutlilingualManager()
 
-    slug = models.SlugField(unique=True, validators=[validate_lic_slug])
+    slug = LicenseSlugField(unique=True)
     name = models.CharField(
         max_length=40, default="", blank=True, null=True, verbose_name=_("Shortname")
     )
@@ -79,7 +95,7 @@ class License(TimeStampedModel):
         help_text=_("Review comments or notes"),
     )
 
-    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+    class Meta:
         verbose_name = _("License")
         ordering = ("order", "name_i18n")
         indexes = (GinIndex(fields=["i18n"]),)
@@ -91,7 +107,7 @@ class License(TimeStampedModel):
         ]
 
     def __str__(self) -> str:
-        return f"{self.name_i18n} - {self.fullname_i18n}"  # pyright: ignore[reportAttributeAccessIssue]  # modeltranslation
+        return f"{self.name_i18n} - {self.fullname_i18n}"
 
     @classmethod
     @lru_cache(50)
@@ -136,7 +152,8 @@ class License(TimeStampedModel):
             return 0
         return highest_order.get("order", 0) + 10
 
-    def save(self, *args, **kwargs):
+    @override
+    def save(self, *args: Any, **kwargs: Any) -> None:
         if self.order == 0 or self.order is None:
             self.order = License.get_next_order_number()
         super().save(*args, **kwargs)

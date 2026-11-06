@@ -19,6 +19,7 @@ import urllib.error
 import urllib.request
 import zipfile
 from datetime import date
+from typing import Any, override
 
 from django_admin_runner import register_command
 
@@ -37,6 +38,7 @@ class Command(BaseCommand):
     BASE_URL = "https://download.geonames.org/export/dump/"
     ALTNAMES_URL = "https://download.geonames.org/export/dump/alternatenames/"
 
+    @override
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "-c",
@@ -68,7 +70,8 @@ class Command(BaseCommand):
             help="Skip importing alternate names (faster for testing)",
         )
 
-    def handle(self, *args, **options) -> None:
+    @override
+    def handle(self, *args: Any, **options: Any) -> None:
         countries = expand_countries(options["countries"])
         drop = options["drop"]
         drop_all = options["drop_all"]
@@ -227,7 +230,7 @@ class Command(BaseCommand):
         with csv_file as f:
             reader = csv.reader(f, delimiter="\t")
 
-            batch = []
+            batch: list[dict[str, Any]] = []
             batch_size = 1000
 
             for row in reader:
@@ -267,7 +270,7 @@ class Command(BaseCommand):
 
         return created_count, updated_count
 
-    def _parse_row(self, row: list[str]) -> dict | None:
+    def _parse_row(self, row: list[str]) -> dict[str, Any] | None:
         """Parse a row from GeoNames data file."""
         if len(row) < 19:
             return None
@@ -341,7 +344,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(f"Error parsing row: {e}"))
             return None
 
-    def _save_batch(self, batch: list[dict]) -> tuple[int, int]:
+    def _save_batch(self, batch: list[dict[str, Any]]) -> tuple[int, int]:
         """Save a batch of place data using efficient bulk operations."""
         from ...models import Feature
 
@@ -496,7 +499,7 @@ class Command(BaseCommand):
         allowed_languages = set(settings.LANGUAGE_CODES)
 
         # Collect alternate name records
-        altname_records = []
+        altname_records: list[dict[str, Any]] = []
 
         try:
             csv_file = open(filepath, "r", encoding="utf-8")
@@ -567,8 +570,8 @@ class Command(BaseCommand):
         )
 
         # Separate into create and update batches
-        to_create = []
-        to_update = []
+        to_create: list[dict[str, Any]] = []
+        to_update: list[dict[str, Any]] = []
 
         for record in valid_records:
             if record["alternatename_id"] in existing_altname_ids:

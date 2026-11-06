@@ -7,7 +7,7 @@ carries the same roles claims (legacy Zitadel-shaped map + plain ``roles``
 list), built from Django groups.
 """
 
-from typing import Any
+from typing import Any, override
 
 from oauth2_provider.oauth2_validators import OAuth2Validator
 
@@ -21,6 +21,7 @@ class ProviderOAuth2Validator(OAuth2Validator):
     # provider behavior the frontend relies on (roles on every token).
     oidc_claim_scope = None  # type: ignore[assignment]
 
+    @override
     def get_additional_claims(self, request: Any) -> dict[str, Any]:
         user = getattr(request, "user", None)
         if user is None or not getattr(user, "is_authenticated", False):

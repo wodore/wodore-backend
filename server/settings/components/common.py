@@ -10,6 +10,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 import os
 import subprocess
+from typing import Any
 
 from django_countries.data import COUNTRIES
 
@@ -29,7 +30,9 @@ from server.settings.components import BASE_DIR, config
 try:
     from hut_services_private import SERVICES as PRIVATE_SERVICES
 except ImportError:
-    PRIVATE_SERVICES = {}
+    # The optional private services package is absent (e.g. plain
+    # `uv sync` without the `private` extra): no private services.
+    PRIVATE_SERVICES: dict[str, Any] = {}
 
 if PRIVATE_SERVICES:
     SERVICES.update(PRIVATE_SERVICES)  # type: ignore pyright
@@ -107,32 +110,55 @@ FRONTEND_DOMAIN = (
     else "http://localhost:9000"
 )
 
+# This backend's own public base URL — used to build absolute asset
+# URLs when no request is in scope (the og helpers fall back to it;
+# with a request they use build_absolute_uri instead).
+BACKEND_DOMAIN = (
+    config("BACKEND_DOMAIN")
+    if config("BACKEND_DOMAIN", None)
+    else "http://localhost:8000"
+)
+
 DJANGO_ADMIN_URL = (
     config("DJANGO_ADMIN_URL")
     if config("DJANGO_ADMIN_URL", None)
     else "http://localhost:8000"
 )
 
+# Frontend URL pattern for place pages (used by sitemap/meta URLs).
+PLACE_URL_PATTERN = config("PLACE_URL_PATTERN", "place/{slug}")
+# Places in the sitemap are opt-in: the frontend place routes do not
+# exist yet — flip to "1" once they ship (also requires name+description
+# per place, see server/apps/api/sitemap.py).
+WODORE_SEO_PLACE_SITEMAP = config("WODORE_SEO_PLACE_SITEMAP", False, cast=bool)
+
 # Application definition:
 
 INSTALLED_APPS: tuple[str, ...] = (
+    # dmr (django-modern-rest): templates/static for the OpenAPI UI views
+    "dmr",
     # my server core:
     "server.core.apps.CoreConfig",
     # my apps:
     "server.apps.manager",
     "server.apps.main",
+    "server.apps.apiversions",
     "server.apps.meta_image_field",
     "server.apps.images",
+    "server.apps.visits",
     "server.apps.symbols",
     "server.apps.organizations",
     "server.apps.licenses",
     "server.apps.contacts",
     "server.apps.feedbacks",
     "server.apps.owners",
+    "server.apps.parties",
     "server.apps.categories",
     "server.apps.translations",
     "server.apps.huts",
     "server.apps.availability",
+    "server.apps.basemaps",
+    "server.apps.envvars",
     "server.apps.meteo",
     "server.apps.external_geonames",
     "server.apps.geometries",
@@ -142,7 +168,6 @@ INSTALLED_APPS: tuple[str, ...] = (
     # Extension:
     "psqlextra",  # https://django-postgres-extra.readthedocs.io/
     "pgtrigger",  # https://django-pgtrigger.readthedocs.io/
-    "ninja",
     "colorfield",
     "jsoneditor",
     "modeltrans",
@@ -194,10 +219,25 @@ INSTALLED_APPS: tuple[str, ...] = (
 MIDDLEWARE: tuple[str, ...] = (
     # Environment identification header:
     "server.middleware.headers.EnvironmentHeadersMiddleware",
+    # LLM entry-point documents are language-fixed per URL — strip the
+    # Vary header LocaleMiddleware (below) would stamp on them so the
+    # CDN can cache them per URL (see server/middleware/headers.py).
+    "server.middleware.headers.LlmsTxtCacheMiddleware",
     # Logging:
     "server.settings.components.logging.LoggingContextVarsMiddleware",
+    # Public API (/v1) CDN cache policy: auth-state-aware CORS wildcard +
+    # Cache-Control. Registered BEFORE CorsMiddleware (outer in the
+    # response phase, like LlmsTxtCacheMiddleware above) so it runs after
+    # corsheaders and can replace its per-origin Access-Control-Allow-
+    # Origin with `*` for anonymous reads — corsheaders overwrites ACAO
+    # unconditionally, so a position below it would be clobbered
+    # (see server/middleware/headers.py).
+    "server.middleware.headers.ApiCdnCacheMiddleware",
     # Cross-Origin Resource Sharing (CORS)
     "corsheaders.middleware.CorsMiddleware",
+    # API contract versioning (must sit inside CORS so its 400/410
+    # responses keep CORS headers; design.md D5.4)
+    "server.apps.apiversions.middleware.ApiVersionMiddleware",
     # Content Security Policy:
     "csp.middleware.CSPMiddleware",
     # Django:
@@ -222,7 +262,9 @@ MIDDLEWARE: tuple[str, ...] = (
 )
 
 
-CORS_ALLOW_HEADERS = [*default_headers, "access-control-allow-origin"]
+CORS_ALLOW_HEADERS = [*default_headers, "access-control-allow-origin", "Api-Version"]
+# Version/lifecycle headers must be readable by browser (Capacitor/WebView) clients:
+CORS_EXPOSE_HEADERS = ("Api-Version", "Deprecation", "Sunset", "Link")
 
 ROOT_URLCONF = "server.urls"
 
@@ -247,6 +289,36 @@ DATABASES = {
         },
     },
 }
+
+# Async-mode database pooling (PoC, env-gated; openspec: async-api-staging).
+#
+# Django's guidance for ASGI: disable per-connection persistence
+# (CONN_MAX_AGE) and use the backend's connection pool instead, sized to
+# the target in-flight query concurrency (each bridged request worker
+# thread checks a connection out of the pool). Requires psycopg[pool].
+if config("POSTGRES_POOL", cast=bool, default=False):
+    DATABASES["default"].update(
+        {
+            "CONN_MAX_AGE": 0,
+            "OPTIONS": {
+                **DATABASES["default"]["OPTIONS"],
+                # psycopg_pool ConnectionPool kwargs (Django passes this
+                # dict as **pool_options; "pool": True would use defaults,
+                # which start at min_size=4).
+                "pool": {
+                    "min_size": 2,
+                    "max_size": config("POSTGRES_POOL_SIZE", cast=int, default=10),
+                    # Wall-clock budget for one pool checkout. Keep it below
+                    # the k8s readiness deadline so an exhausted pool yields
+                    # a fast, loggable failure instead of psycopg-pool's
+                    # default 30s hang (2026-10-05 staging wedge).
+                    "timeout": config(
+                        "POSTGRES_POOL_TIMEOUT", cast=float, default=30.0
+                    ),
+                },
+            },
+        }
+    )
 
 # Configure django-postgres-extra to wrap PostGIS backend
 POSTGRES_EXTRA_DB_BACKEND_BASE = "django.contrib.gis.db.backends.postgis"
@@ -287,9 +359,19 @@ STORAGES = {
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
 
-# LANGUAGE_CODE = 'en-us'
+# LANGUAGE_CODE is the language of the BASE (non-suffixed) model
+# columns — the master data is German. Many data paths (translation
+# service, imports, the tiles SQL function, the i18n field descriptors)
+# route by it; changing it requires a data migration. Do not touch.
 LANGUAGE_CODE = "de"
-# LANGUAGE_CODE = 'fr'
+
+# DEFAULT_LANG is the default REQUEST language: the default of every
+# API `lang` parameter and the language of the bare (unprefixed)
+# frontend URL, which canonicalizes to this language's prefixed route.
+# Every language in LANGUAGES has a locale-prefixed route — those are
+# the indexed URLs (see apps/api/sitemap.py and the frontend's njs
+# edge).
+DEFAULT_LANG = "en"
 
 # USE_I18N = True
 USE_I18N = True
@@ -355,6 +437,18 @@ IMAGOR_KEY = config("IMAGOR_KEY", None)
 
 # Martin vector tile server
 MARTIN_TILE_URL = config("MARTIN_TILE_URL", "http://localhost:8075")
+
+# Geo image providers: overall wall-clock budget for one provider
+# fan-out and per-provider outbound HTTP timeout (seconds). P0 2026-10-05:
+# 30s provider timeouts and no overall budget let one cold fan-out hold
+# requests (and their pooled DB connections) for 30-60s+, until upstream
+# cancellation leaked psycopg pool checkouts and killed pod readiness.
+# Stragglers are cancelled at the budget deadline; partial results serve
+# the request. Set IMAGES_FANOUT_BUDGET_SECONDS <= 0 to disable the budget.
+IMAGES_FANOUT_BUDGET_SECONDS = config("IMAGES_FANOUT_BUDGET_SECONDS", 10.0, cast=float)
+IMAGES_PROVIDER_HTTP_TIMEOUT_SECONDS = config(
+    "IMAGES_PROVIDER_HTTP_TIMEOUT_SECONDS", 10.0, cast=float
+)
 # Templates
 # https://docs.djangoproject.com/en/4.2/ref/templates/api
 
@@ -408,6 +502,9 @@ AUTHENTICATION_BACKENDS = (
 )
 
 PASSWORD_HASHERS = [
+    # Argon2id with OWASP-grade cost (Django's default memory_cost is 512 KiB
+    # - far below the ~19 MiB floor); see server/apps/accounts/password_hashers.py
+    "server.apps.accounts.password_hashers.TunedArgon2PasswordHasher",
     "django.contrib.auth.hashers.Argon2PasswordHasher",
     "django.contrib.auth.hashers.PBKDF2PasswordHasher",
     "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
@@ -506,7 +603,7 @@ HUTS_CATEGORY_PARENT = config("HUTS_CATEGORY_PARENT", default="accommodation")
 # https://django-q2.readthedocs.io/
 # Pattern from the django-admin-runner q2 example
 # (examples/unfold_django_q2/settings.py).
-Q_CLUSTER = {
+Q_CLUSTER: dict[str, Any] = {
     "name": "DJANGORM",
     "orm": "default",
     # Missed schedule slots while the cluster was down are NOT replayed:
@@ -522,6 +619,12 @@ Q_CLUSTER = {
     "timeout": 86400,  # 24 h
     "poll": 2,
     "max_attempts": 1,
+    # Task-failure bridge to the Sentry SDK (openspec: add-error-tracking):
+    # q2 swallows worker exceptions (stored as string results, no ERROR
+    # log), so without this the SDK never sees them. Loads the in-repo
+    # reporter registered under the `djangoq.errorreporters` entry point
+    # (server.core.q2_sentry); inert without SENTRY_DSN.
+    "error_reporter": {"wodore-sentry": {}},
     # Worker processes per qcluster — keep low: tasks are long-running and
     # heavy. Defaults to node CPU count if unset (too many on a VPS), so set
     # it explicitly (burginfra: WD_QCLUSTER_WORKERS -> Q_CLUSTER_WORKERS).

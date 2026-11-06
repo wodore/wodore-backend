@@ -1,9 +1,10 @@
-# NOTE: description=_(...) is the project-wide lazy-gettext idiom (i18n-safe);  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+# NOTE: description=_(...) is the project-wide lazy-gettext idiom (i18n-safe);
 # per-line pyright ignores below suppress the unfold-stub str-typing mismatch.
-from typing import ClassVar
+from typing import Any, ClassVar, override
 
 from django.contrib import admin
 from django.db import models
+from django.forms import ModelForm
 from django.http import HttpRequest
 from django.shortcuts import redirect
 from django.utils.safestring import mark_safe
@@ -18,6 +19,7 @@ from server.apps.manager.widgets import UnfoldReadonlyJSONSuit
 from server.core.utils import text_shorten_html
 
 from ..models import (
+    Hut,
     HutSource,
 )
 
@@ -47,11 +49,12 @@ class HutSourceViewInline(unfold_admin.StackedInline):
     can_delete = False
     autocomplete_fields = ("organization",)  # ~680 orgs (OSM brands): no plain select
     # classes = ("collapse",)  # Commented out to keep tab expanded by default
-    formfield_overrides: ClassVar = {
+    formfield_overrides: ClassVar = {  # type: ignore  # inline formfield_overrides typing drift
         models.JSONField: {"widget": UnfoldReadonlyJSONSuit}
     }
 
-    def has_add_permission(self, request, obj):
+    @override
+    def has_add_permission(self, request: HttpRequest, obj: Hut | None = None) -> bool:
         return False
 
 
@@ -105,7 +108,7 @@ class HutsSourceAdmin(ModelAdmin):
     radio_fields: ClassVar = {"review_status": admin.HORIZONTAL}
 
     @display(
-        description=_("Status"),  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+        description=_("Status"),
         ordering="status",
         label={
             HutSource.ReviewStatusChoices.new: "warning",  # green
@@ -114,17 +117,24 @@ class HutsSourceAdmin(ModelAdmin):
             HutSource.ReviewStatusChoices.failed: "danger",  # red
         },
     )
-    def review_tag(self, obj):
+    def review_tag(self, obj: HutSource):
         return obj.review_status
 
-    @display(description=_("Review Comment"))  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
-    def review_comment_short(self, obj):  # new
+    @display(description=_("Review Comment"))
+    def review_comment_short(self, obj: HutSource):  # new
         return text_shorten_html(obj.review_comment, width=100)
 
-    def get_form(self, request, obj=None, change=False, **kwargs):
+    @override
+    def get_form(
+        self,
+        request: HttpRequest,
+        obj: HutSource | None = None,
+        change: bool = False,
+        **kwargs: Any,
+    ) -> type[ModelForm[HutSource]]:
         form = super().get_form(request, obj, **kwargs)
         if obj is not None:
-            form.base_fields["previous_object"].queryset = (  # pyright: ignore[reportAttributeAccessIssue] — ModelChoiceField attr
+            form.base_fields["previous_object"].queryset = (  # type: ignore  # dynamic attr: plugin-less inference gap
                 # HutSource.objects.select_related("organization")
                 HutSource.objects.filter(
                     source_id=obj.source_id, version__lt=obj.version
@@ -142,26 +152,26 @@ class HutsSourceAdmin(ModelAdmin):
     # actions_detail = ["change_detail_action_block"]
     # actions_submit_line = ["submit_line_action_activate"]
 
-    @action(description=_(mark_safe("set to <b>done</b>")), permissions=["change"])  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+    @action(description=_(mark_safe("set to <b>done</b>")), permissions=["change"])
     def action_row_set_review_to_done(
         self, request: HttpRequest, object_id: int
     ):  # obj: HutSource):
         obj = HutSource.objects.get(id=object_id)
         obj.review_status = HutSource.ReviewStatusChoices.done
         obj.save()
-        return redirect(request.META.get("HTTP_REFERER") or "/")  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+        return redirect(request.META.get("HTTP_REFERER") or "/")
 
-    @action(description=_(mark_safe("set to <b>review</b>")), permissions=["change"])  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+    @action(description=_(mark_safe("set to <b>review</b>")), permissions=["change"])
     def action_row_set_review_to_review(
         self, request: HttpRequest, object_id: int
     ):  # obj: HutSource):
         obj = HutSource.objects.get(id=object_id)
         obj.review_status = HutSource.ReviewStatusChoices.review
         obj.save()
-        return redirect(request.META.get("HTTP_REFERER") or "/")  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+        return redirect(request.META.get("HTTP_REFERER") or "/")
 
     @action(
-        description=_(mark_safe("set to <b>reject</b> (inactive)")),  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+        description=_(mark_safe("set to <b>reject</b> (inactive)")),
         permissions=["delete"],
     )
     def action_row_set_inactive(
@@ -171,12 +181,12 @@ class HutsSourceAdmin(ModelAdmin):
         obj.review_status = HutSource.ReviewStatusChoices.reject
         obj.is_active = False
         obj.save()
-        return redirect(request.META.get("HTTP_REFERER") or "/")  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+        return redirect(request.META.get("HTTP_REFERER") or "/")
 
-    @action(description=_(mark_safe("<b>delete</b> entry")), permissions=["delete"])  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+    @action(description=_(mark_safe("<b>delete</b> entry")), permissions=["delete"])
     def action_row_delete(
         self, request: HttpRequest, object_id: int
     ):  # obj: HutSource):
         obj = HutSource.objects.get(id=object_id)
         obj.delete()
-        return redirect(request.META.get("HTTP_REFERER") or "/")  # pyright: ignore[reportArgumentType]  # lazy-gettext idiom (i18n-safe)
+        return redirect(request.META.get("HTTP_REFERER") or "/")

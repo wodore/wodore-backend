@@ -7,14 +7,26 @@ https://github.com/unfoldadmin/django-unfold#configuration
 
 """
 
+from typing import TYPE_CHECKING, Any
+
 from django.templatetags.static import static
 from django.urls import reverse_lazy
 from django.utils.translation import gettext_lazy as _
 
-UNFOLD = {
+if TYPE_CHECKING:
+    from django.http import HttpRequest
+
+# The unfold settings dict is a heterogeneous configuration structure
+# consumed by the unfold admin template tags (string, bool, dict, list
+# and ``Callable[[HttpRequest], ...]`` callbacks). The broad value type
+# keeps that contract explicit without narrowing runtime semantics.
+UNFOLD: dict[str, Any] = {
     "SITE_TITLE": "wodo.re",
     "SITE_HEADER": "Wodore Admin",
     "SITE_URL": "/",
+    # Required by UnfoldAdminJSONSchemaWidget (get_setting_value("FORMS")
+    # must resolve to a dict — schema-driven extra editing).
+    "FORMS": {},
     "SITE_ICON": lambda request: static(
         "main/images/favicon-32x32.png"
     ),  # both modes, optimise for 32px height
@@ -83,15 +95,9 @@ UNFOLD = {
             "900": "#133426",
         },
     },
-    "EXTENSIONS": {
-        "modeltranslation": {
-            "flags": {
-                "en": "🇬🇧",
-                "fr": "🇫🇷",
-                "nl": "🇧🇪",
-            },
-        },
-    },
+    # NOTE: EXTENSIONS (modeltranslation flags) was removed in django-unfold
+    # 0.102 (PR #2181): the setting is silently ignored since then and
+    # translated field labels render their default "[en]"-style suffixes.
     "SIDEBAR": {
         "show_search": False,  # Search in applications and models names
         "show_all_applications": True,  # Dropdown with all applications and models
@@ -141,6 +147,14 @@ UNFOLD = {
                         ),
                     },
                     {
+                        "title": _("Parties"),
+                        "icon": "groups",
+                        "link": reverse_lazy("admin:parties_party_changelist"),
+                        "permission": lambda request: request.user.has_perm(
+                            "parties.view_party"
+                        ),
+                    },
+                    {
                         "title": _("Organizations"),
                         "icon": "corporate_fare",
                         "link": reverse_lazy(
@@ -156,6 +170,14 @@ UNFOLD = {
                         "link": reverse_lazy("admin:categories_category_changelist"),
                         "permission": lambda request: request.user.has_perm(
                             "categories.view_category"
+                        ),
+                    },
+                    {
+                        "title": _("Icons"),
+                        "icon": "interests",
+                        "link": reverse_lazy("admin:symbols_icon_changelist"),
+                        "permission": lambda request: request.user.has_perm(
+                            "symbols.view_icon"
                         ),
                     },
                     {
@@ -358,6 +380,45 @@ UNFOLD = {
     "TABS": [
         {
             "models": [
+                "basemaps.maplayer",
+                "basemaps.mapparameter",
+                "basemaps.mapcoverage",
+                "basemaps.mapslot",
+                "basemaps.maplegend",
+            ],
+            "items": [
+                {
+                    "title": _("Map layers"),
+                    "link": reverse_lazy("admin:basemaps_maplayer_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "basemaps.view_maplayer"
+                    ),
+                },
+                {
+                    "title": _("Parameters"),
+                    "link": reverse_lazy("admin:basemaps_mapparameter_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "basemaps.view_mapparameter"
+                    ),
+                },
+                {
+                    "title": _("Coverages"),
+                    "link": reverse_lazy("admin:basemaps_mapcoverage_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "basemaps.view_mapcoverage"
+                    ),
+                },
+                {
+                    "title": _("Legends"),
+                    "link": reverse_lazy("admin:basemaps_maplegend_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "basemaps.view_maplegend"
+                    ),
+                },
+            ],
+        },
+        {
+            "models": [
                 "huts.hut",
                 "huts.hutsource",
             ],
@@ -464,6 +525,28 @@ UNFOLD = {
                     "link": reverse_lazy("admin:owners_ownerhutproxy_changelist"),
                     "permission": lambda request: request.user.has_perm(
                         "owners.view_ownerhutproxy"
+                    ),
+                },
+            ],
+        },
+        {
+            "models": [
+                "parties.party",
+                "parties.partylink",
+            ],
+            "items": [
+                {
+                    "title": _("Parties"),
+                    "link": reverse_lazy("admin:parties_party_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "parties.view_party"
+                    ),
+                },
+                {
+                    "title": _("Party Links"),
+                    "link": reverse_lazy("admin:parties_partylink_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "parties.view_partylink"
                     ),
                 },
             ],
@@ -598,11 +681,27 @@ UNFOLD = {
                 },
             ],
         },
+        {
+            "models": [
+                "envvars.envvar",
+            ],
+            "items": [
+                {
+                    "title": _("Environment Variables"),
+                    "link": reverse_lazy("admin:envvars_envvar_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "envvars.view_envvar"
+                    ),
+                },
+            ],
+        },
     ],
 }
 
 
-def dashboard_callback(request, context):
+def dashboard_callback(
+    request: "HttpRequest", context: dict[str, Any]
+) -> dict[str, Any]:
     """
     Callback to prepare custom variables for index template which is used as dashboard
     template. It can be overridden in application by creating custom admin/index.html.
@@ -615,9 +714,11 @@ def dashboard_callback(request, context):
     return context
 
 
-def badge_callback(request):
+def badge_callback(request: "HttpRequest") -> int:
     return 3
 
 
-def permission_callback(request):
-    return request.user.has_perm("sample_app.change_model")
+def permission_callback(request: "HttpRequest") -> bool:
+    return request.user.has_perm(  # type: ignore  # dynamic attr: plugin-less inference gap
+        "sample_app.change_model"
+    )

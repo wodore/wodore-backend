@@ -1,3 +1,5 @@
+# registers the ilike lookup on CharField (search prefilter — read-performance)
+from .. import lookups as _lookups
 from ._admin_detail import AdminDetail
 from ._amenity_detail import AmenityDetail, MonthStatus, OperatingStatus
 from ._associations import (
@@ -5,22 +7,47 @@ from ._associations import (
     GeoPlaceCategory,
     GeoPlaceExternalLink,
     GeoPlaceImageAssociation,
+    GeoPlaceParty,
     GeoPlaceSourceAssociation,
     UpdatePolicy,
 )
 from ._base_detail import GeoPlaceDetailBase
-from ._geoplace import DetailType, GeoPlace
+from ._category_extra_schema import (
+    CategoryExtraSchema,
+    resolve_extra_schema,
+    validate_place_extra,
+)
+from ._geoplace import GeoPlace
+from ._kind_contract import CategoryKindContract
+from ._operation import GeoPlaceOperation
+from ._relation import GeoPlaceRelation
+from ._seasonality import (
+    FUZZY_MONTH_SHARE,
+    GeoPlaceSeasonality,
+    Month,
+    MonthAccessor,
+)
 
 __all__ = [
     "AdminDetail",
     "AmenityDetail",
     "DeletePolicy",
-    "DetailType",
+    "CategoryKindContract",
+    "CategoryExtraSchema",
     "GeoPlace",
     "GeoPlaceCategory",
+    "GeoPlaceOperation",
+    "GeoPlaceRelation",
+    "GeoPlaceSeasonality",
+    "Month",
+    "MonthAccessor",
+    "FUZZY_MONTH_SHARE",
+    "resolve_extra_schema",
+    "validate_place_extra",
     "GeoPlaceDetailBase",
     "GeoPlaceExternalLink",
     "GeoPlaceImageAssociation",
+    "GeoPlaceParty",
     "GeoPlaceSourceAssociation",
     "MonthStatus",
     "OperatingStatus",

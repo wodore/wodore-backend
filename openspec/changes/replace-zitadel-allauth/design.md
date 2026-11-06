@@ -154,7 +154,7 @@ set `OIDC_ENABLED=false` and get the clean-401 path that already exists.
 
 ### D6: Security hardening baseline
 
-- Password hasher: **Argon2**.
+- Password hasher: **Argon2id with tuned cost** — `TunedArgon2PasswordHasher` (64 MiB / t=3 / p=4); Django's stock Argon2 defaults sit far below the OWASP floor (~19 MiB). Hashes stay out of staging by policy (see backups).
 - allauth: `ACCOUNT_RATE_LIMITS` (login + reset), `ACCOUNT_PREVENT_ENUMERATION`, verified-email requirements.
 - DOT: `PKCE_REQUIRED=True`, `ROTATE_REFRESH_TOKEN=True` +
   `REFRESH_TOKEN_REUSE_PROTECTION=True`, exact-match redirect URIs,
@@ -165,7 +165,9 @@ set `OIDC_ENABLED=false` and get the clean-401 path that already exists.
   supported by key id; fail-fast at startup if the key is missing while
   the provider is enabled.
 - Ops: `cleartokens` cron for token/grant tables; audit logging on auth
-  signals (login, logout, MFA changes, token issuance failures).
+  signals (login, logout, MFA changes, token issuance failures); backups
+  exclude ephemeral auth tables and keep the rest encrypted — the
+  backup/staging contract lives in `docs/backups.md`.
 
 ### D7: Users — no migration needed
 
@@ -173,7 +175,10 @@ Production has no user base yet, so there is no import/invite cutover:
 initial accounts (admin/editor) are bootstrapped directly with the dev
 fixture-style command before the flip. The invite/password-set email
 machinery drops off the critical path; allauth's email verification
-remains for future self-registration.
+remains for future self-registration. User PKs are UUID v4
+(`accounts.0003_uuid_pk`) — opaque, non-enumerable ids for URLs and
+claims, and stable references when sanitized prod→staging copies
+re-create placeholder users with the same ids (`docs/backups.md`).
 
 ## Risks / Trade-offs
 

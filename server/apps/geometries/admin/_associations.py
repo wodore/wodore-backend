@@ -6,16 +6,29 @@ direct inspection of the data.
 """
 
 from django.contrib import admin
+from django.utils.translation import gettext_lazy as _
+
+from unfold.decorators import display
 
 from server.apps.manager.admin import ModelAdmin
 
 from ..models import (
     AdminDetail,
+    CategoryExtraSchema,
     GeoPlaceCategory,
     GeoPlaceExternalLink,
     GeoPlaceImageAssociation,
+    GeoPlaceParty,
     GeoPlaceSourceAssociation,
 )
+
+
+@admin.register(GeoPlaceParty)
+class GeoPlacePartyAdmin(ModelAdmin):
+    list_display = ("geo_place", "party", "role", "order")
+    list_filter = ("role",)
+    search_fields = ("geo_place__name", "geo_place__slug", "party__slug")
+    autocomplete_fields = ("geo_place", "party", "role")
 
 
 @admin.register(AdminDetail)
@@ -24,6 +37,28 @@ class AdminDetailAdmin(ModelAdmin):
     list_filter = ("admin_level",)
     search_fields = ("geo_place__name", "geo_place__slug")
     autocomplete_fields = ("geo_place",)
+
+
+@admin.register(CategoryExtraSchema)
+class CategoryExtraSchemaAdmin(ModelAdmin):
+    """Extra-attribute schemas — seeded from code, evolved in admin.
+
+    ``Organization.props_schema`` parity: the JSON Schema describing
+    a category subtree's association ``extra`` keys. Changing a
+    schema takes effect on the next write (old rows are not
+    retro-checked) — evolve additively.
+    """
+
+    list_display = ("category", "schema_preview", "modified")
+    search_fields = ("category__slug", "category__identifier")
+    autocomplete_fields = ("category",)
+
+    @display(description=_("Schema"))
+    def schema_preview(self, obj: CategoryExtraSchema) -> str:
+        import json
+
+        text = json.dumps(obj.schema)
+        return f"{text[:80]}…" if len(text) > 80 else text
 
 
 @admin.register(GeoPlaceCategory)
