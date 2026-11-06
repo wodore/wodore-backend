@@ -808,6 +808,62 @@ _ACCOMMODATION_COUNT_FILTER = ["==", ["get", "count"], 1]
 _ACCOMMODATION_CLUSTER_FILTER = [">", ["get", "count"], 1]
 
 
+_AMENITY_ICON_SIZE_STOPS: list[tuple[int, float]] = [
+    (7, 0.1),
+    (9, 0.3),
+    (11, 0.55),
+    (13, 0.75),
+    (16, 1.0),
+    (20, 1.25),
+]
+
+#: Cluster nodes render the SAME per-kind icon as individuals, NO
+#: count labels — slightly bigger, scaled by member count: 1.1× at
+#: count 2 → 1.8× at count ≥ 12 (MapLibre ``interpolate`` clamps
+#: beyond the outer stops; membership itself comes from
+#: ``GET /v1/geoplaces/near`` on click, never from the tile).
+_CLUSTER_COUNT_SCALE: list[Any] = [
+    "interpolate",
+    ["linear"],
+    ["get", "count"],
+    2,
+    1.1,
+    12,
+    1.8,
+]
+
+#: Subset twins cannot multiply the zoom ladder by the count scale
+#: (the Leaflet-class whitelist has no ``*`` operator) — their cluster
+#: icons render ~1.35× the raw size at every zoom, count-independent
+#: (degraded profile; the full profile scales by count).
+_AMENITY_CLUSTER_ICON_SIZE_STOPS: list[tuple[int, float]] = [
+    (zoom, round(size * 1.35, 3)) for zoom, size in _AMENITY_ICON_SIZE_STOPS
+]
+
+
+def _size_ladder(stops: list[tuple[int, float]]) -> list[Any]:
+    """Flatten (zoom, size) stops into an interpolate expression."""
+    flat: list[Any] = []
+    for zoom, size in stops:
+        flat.extend((zoom, size))
+    return ["interpolate", ["linear"], ["zoom"], *flat]
+
+
+_AMENITY_HALO_STOPS: list[tuple[int, float]] = [
+    (7, 0.5),
+    (9, 0.75),
+    (11, 1.0),
+    (13, 1.5),
+    (16, 2.0),
+    (20, 2.5),
+]
+_AMENITY_TEXT_SIZE_STOPS: list[tuple[int, float]] = [
+    (11, 10),
+    (14, 12.5),
+    (17, 14),
+]
+
+
 def accommodations_style() -> dict[str, Any]:
     """The accommodations overlay style — the huts look on POI data.
 
@@ -917,70 +973,50 @@ def accommodations_style() -> dict[str, Any]:
         "glyphs": GLYPHS,
         "layers": [
             {
-                # Server-side clusters (count>1): category-colored
-                # bubbles with the member count — the decluttered
-                # country view until the raw icons graduate at z9.
+                # Server-side clusters (count>1): the SAME per-kind icon
+                # as individuals — no count labels, slightly bigger with
+                # member count (1.1× at 2 → 1.8× at ≥ 12; membership
+                # comes from GET /v1/geoplaces/near on click). The
+                # decluttered country view until the raw icons graduate.
                 "id": "wd-accommodations-clusters",
-                "type": "circle",
-                "source": ACCOMMODATIONS_SOURCE_ID,
-                "source-layer": GEOPLACES_SOURCE,
-                "minzoom": 5,
-                "filter": _ACCOMMODATION_CLUSTER_FILTER,
-                "paint": {
-                    "circle-color": ["coalesce", ["get", "color"], "#718096"],
-                    "circle-opacity": 0.45,
-                    "circle-stroke-color": "#ffffff",
-                    "circle-stroke-width": 1.5,
-                    "circle-stroke-opacity": 0.9,
-                    "circle-radius": [
-                        "interpolate",
-                        ["linear"],
-                        ["zoom"],
-                        5,
-                        [
-                            "interpolate",
-                            ["linear"],
-                            ["get", "count"],
-                            2,
-                            7,
-                            10,
-                            9,
-                            50,
-                            12,
-                        ],
-                        9,
-                        [
-                            "interpolate",
-                            ["linear"],
-                            ["get", "count"],
-                            2,
-                            9,
-                            10,
-                            12,
-                            50,
-                            16,
-                        ],
-                    ],
-                },
-            },
-            {
-                "id": "wd-accommodations-cluster-count",
                 "type": "symbol",
                 "source": ACCOMMODATIONS_SOURCE_ID,
                 "source-layer": GEOPLACES_SOURCE,
                 "minzoom": 5,
                 "filter": _ACCOMMODATION_CLUSTER_FILTER,
                 "layout": {
-                    "text-field": ["to-string", ["get", "count"]],
-                    "text-font": ["Barlow Semi Condensed SemiBold", "Noto Sans Bold"],
-                    "text-size": 11,
-                    "text-allow-overlap": True,
-                    "text-ignore-placement": True,
+                    "icon-image": icon_ladder,
+                    "icon-size": [
+                        "*",
+                        [
+                            "interpolate",
+                            ["linear"],
+                            ["zoom"],
+                            7,
+                            ["*", 0.1, "{{accommodations.icon_scale}}"],
+                            9,
+                            ["*", 0.3, "{{accommodations.icon_scale}}"],
+                            11,
+                            ["*", 0.55, "{{accommodations.icon_scale}}"],
+                            13,
+                            ["*", 0.75, "{{accommodations.icon_scale}}"],
+                            16,
+                            ["*", 1.0, "{{accommodations.icon_scale}}"],
+                            20,
+                            ["*", 1.25, "{{accommodations.icon_scale}}"],
+                        ],
+                        _CLUSTER_COUNT_SCALE,
+                    ],
+                    "icon-allow-overlap": True,
+                    "icon-overlap": "always",
+                    "symbol-sort-key": ["get", "importance"],
                 },
                 "paint": {
-                    "text-color": "#ffffff",
-                    "text-halo-color": "rgba(34, 78, 59, 0.85)",
-                    "text-halo-width": 1.2,
+                    "icon-color": ["coalesce", ["get", "color"], "#718096"],
+                    "icon-halo-color": "#ffffff",
+                    "icon-halo-width": 1.5,
+                    "icon-halo-blur": 0,
+                    "icon-opacity": 0.85,
                 },
             },
             {
@@ -1122,7 +1158,6 @@ def accommodations_style() -> dict[str, Any]:
         "metadata": {
             "wd:slot_layers": [
                 "wd-accommodations-clusters",
-                "wd-accommodations-cluster-count",
                 "wd-accommodations-selected",
                 "wd-accommodations",
             ],
@@ -1161,29 +1196,28 @@ def _accommodations_style_subset() -> dict[str, Any]:
         "glyphs": GLYPHS,
         "layers": [
             {
+                # Cluster icons (count-independent here — the subset
+                # whitelist has no ``*`` to scale by count; ~1.35× the
+                # raw size at every zoom).
                 "id": "wd-accommodations-clusters",
-                "type": "circle",
+                "type": "symbol",
                 "source": ACCOMMODATIONS_SOURCE_ID,
                 "source-layer": GEOPLACES_SOURCE,
                 "minzoom": 5,
                 "filter": _ACCOMMODATION_CLUSTER_FILTER,
+                "layout": {
+                    "icon-image": ACCOMMODATIONS_ICON_FALLBACK,
+                    "icon-size": _size_ladder(_AMENITY_CLUSTER_ICON_SIZE_STOPS),
+                    "icon-allow-overlap": True,
+                },
                 "paint": {
-                    "circle-color": [
+                    "icon-color": [
                         "case",
                         ["has", "color"],
                         ["get", "color"],
                         "#718096",
                     ],
-                    "circle-opacity": 0.45,
-                    "circle-radius": [
-                        "interpolate",
-                        ["linear"],
-                        ["zoom"],
-                        5,
-                        7,
-                        9,
-                        12,
-                    ],
+                    "icon-opacity": 0.85,
                 },
             },
             {
@@ -1287,6 +1321,9 @@ class AmenityOverlaySpec:
     subtree: str
     name: str
     description: str
+    #: Backend icon-library reference (``pack/slug@mono``) — the
+    #: frontend resolves it via GET /v1/icons (fluent-emoji carries a
+    #: mono style per icon).
     icon: str
     min_zoom: int
     cluster_max_zoom: int
@@ -1303,7 +1340,7 @@ AMENITY_OVERLAYS: dict[str, AmenityOverlaySpec] = {
             "Restaurants, cafés and bars from the POI database "
             "(geoplaces vector tiles, server-clustered, MLT via Martin)."
         ),
-        icon="huts",
+        icon="fluent-emoji/fork-and-knife@mono",
         min_zoom=5,
         cluster_max_zoom=7,
         max_label_zoom=11,
@@ -1317,7 +1354,7 @@ AMENITY_OVERLAYS: dict[str, AmenityOverlaySpec] = {
             "database (geoplaces vector tiles, server-clustered, MLT "
             "via Martin)."
         ),
-        icon="huts",
+        icon="fluent-emoji/hospital@mono",
         min_zoom=5,
         cluster_max_zoom=7,
         max_label_zoom=11,
@@ -1331,7 +1368,7 @@ AMENITY_OVERLAYS: dict[str, AmenityOverlaySpec] = {
             "from the POI database (geoplaces vector tiles, "
             "server-clustered, MLT via Martin)."
         ),
-        icon="cycling",
+        icon="fluent-emoji/camping@mono",
         min_zoom=5,
         cluster_max_zoom=7,
         max_label_zoom=11,
@@ -1346,7 +1383,7 @@ AMENITY_OVERLAYS: dict[str, AmenityOverlaySpec] = {
             "database (geoplaces vector tiles, server-clustered, MLT "
             "via Martin)."
         ),
-        icon="huts",
+        icon="fluent-emoji/shopping-cart@mono",
         min_zoom=9,
         cluster_max_zoom=9,
         max_label_zoom=11,
@@ -1359,7 +1396,7 @@ AMENITY_OVERLAYS: dict[str, AmenityOverlaySpec] = {
             "Shops and retail from the POI database (geoplaces vector "
             "tiles, server-clustered, MLT via Martin)."
         ),
-        icon="huts",
+        icon="fluent-emoji/shopping-bags@mono",
         min_zoom=9,
         cluster_max_zoom=9,
         max_label_zoom=11,
@@ -1372,7 +1409,7 @@ AMENITY_OVERLAYS: dict[str, AmenityOverlaySpec] = {
             "Attractions, museums and viewpoints from the POI database "
             "(geoplaces vector tiles, server-clustered, MLT via Martin)."
         ),
-        icon="nature",
+        icon="fluent-emoji/castle@mono",
         min_zoom=9,
         cluster_max_zoom=9,
         max_label_zoom=11,
@@ -1386,7 +1423,7 @@ AMENITY_OVERLAYS: dict[str, AmenityOverlaySpec] = {
             "POI database (geoplaces vector tiles, server-clustered, "
             "MLT via Martin)."
         ),
-        icon="huts",
+        icon="fluent-emoji/hammer-and-wrench@mono",
         min_zoom=9,
         cluster_max_zoom=9,
         max_label_zoom=11,
@@ -1399,7 +1436,7 @@ AMENITY_OVERLAYS: dict[str, AmenityOverlaySpec] = {
             "Banks and ATMs from the POI database (geoplaces vector "
             "tiles, server-clustered, MLT via Martin)."
         ),
-        icon="huts",
+        icon="fluent-emoji/bank@mono",
         min_zoom=9,
         cluster_max_zoom=9,
         max_label_zoom=11,
@@ -1414,7 +1451,7 @@ AMENITY_OVERLAYS: dict[str, AmenityOverlaySpec] = {
             "(geoplaces vector tiles, visible when zoomed in close, MLT "
             "via Martin)."
         ),
-        icon="huts",
+        icon="fluent-emoji/toilet@mono",
         min_zoom=13,
         cluster_max_zoom=11,
         max_label_zoom=13,
@@ -1428,7 +1465,7 @@ AMENITY_OVERLAYS: dict[str, AmenityOverlaySpec] = {
             "vector tiles, visible when zoomed in close, MLT via "
             "Martin)."
         ),
-        icon="transport",
+        icon="fluent-emoji/automobile@mono",
         min_zoom=13,
         cluster_max_zoom=11,
         max_label_zoom=13,
@@ -1439,27 +1476,6 @@ AMENITY_OVERLAYS: dict[str, AmenityOverlaySpec] = {
 #: Absolute zoom ladders shared with the accommodations overlay — a
 #: marker is the same size at the same zoom whatever the overlay's
 #: floor (MapLibre clamps below the first stop).
-_AMENITY_ICON_SIZE_STOPS: list[tuple[int, float]] = [
-    (7, 0.1),
-    (9, 0.3),
-    (11, 0.55),
-    (13, 0.75),
-    (16, 1.0),
-    (20, 1.25),
-]
-_AMENITY_HALO_STOPS: list[tuple[int, float]] = [
-    (7, 0.5),
-    (9, 0.75),
-    (11, 1.0),
-    (13, 1.5),
-    (16, 2.0),
-    (20, 2.5),
-]
-_AMENITY_TEXT_SIZE_STOPS: list[tuple[int, float]] = [
-    (11, 10),
-    (14, 12.5),
-    (17, 14),
-]
 
 
 def amenity_overlay_style(spec: AmenityOverlaySpec) -> dict[str, Any]:
@@ -1479,10 +1495,6 @@ def amenity_overlay_style(spec: AmenityOverlaySpec) -> dict[str, Any]:
     sprite_id = f"wd-sdf-{subtree}"
     fallback = f"{sprite_id}:mono/amenity.{subtree}"
     raw_floor = spec.cluster_max_zoom + 2
-    # Interpolate zoom stops must be strictly ascending (MapLibre hard
-    # error otherwise). Tier C has min_zoom == cluster_max_zoom + 2, so
-    # clamp the radius anchor one step above the floor.
-    radius_floor = max(raw_floor, spec.min_zoom + 1)
     count_filter: list[Any] = ["==", ["get", "count"], 1]
     cluster_filter: list[Any] = [">", ["get", "count"], 1]
 
@@ -1576,70 +1588,35 @@ def amenity_overlay_style(spec: AmenityOverlaySpec) -> dict[str, Any]:
         "glyphs": GLYPHS,
         "layers": [
             {
-                # Server-side clusters (count>1): category-colored
-                # bubbles with the member count until the raw icons
-                # graduate at cmz+2 (+1 for the z10+ style flip).
+                # Server-side clusters (count>1): the SAME per-kind icon
+                # as individuals — no count labels, slightly bigger with
+                # member count (1.1× at 2 → 1.8× at ≥ 12; membership
+                # comes from GET /v1/geoplaces/near on click) until the
+                # raw icons graduate at cmz+2 (+1 for the z10+ style
+                # flip).
                 "id": f"{source_id}-clusters",
-                "type": "circle",
-                "source": source_id,
-                "source-layer": GEOPLACES_SOURCE,
-                "minzoom": spec.min_zoom,
-                "filter": cluster_filter,
-                "paint": {
-                    "circle-color": ["coalesce", ["get", "color"], "#718096"],
-                    "circle-opacity": 0.45,
-                    "circle-stroke-color": "#ffffff",
-                    "circle-stroke-width": 1.5,
-                    "circle-stroke-opacity": 0.9,
-                    "circle-radius": [
-                        "interpolate",
-                        ["linear"],
-                        ["zoom"],
-                        spec.min_zoom,
-                        [
-                            "interpolate",
-                            ["linear"],
-                            ["get", "count"],
-                            2,
-                            7,
-                            10,
-                            9,
-                            50,
-                            12,
-                        ],
-                        radius_floor,
-                        [
-                            "interpolate",
-                            ["linear"],
-                            ["get", "count"],
-                            2,
-                            9,
-                            10,
-                            12,
-                            50,
-                            16,
-                        ],
-                    ],
-                },
-            },
-            {
-                "id": f"{source_id}-cluster-count",
                 "type": "symbol",
                 "source": source_id,
                 "source-layer": GEOPLACES_SOURCE,
                 "minzoom": spec.min_zoom,
                 "filter": cluster_filter,
                 "layout": {
-                    "text-field": ["to-string", ["get", "count"]],
-                    "text-font": ["Barlow Semi Condensed SemiBold", "Noto Sans Bold"],
-                    "text-size": 11,
-                    "text-allow-overlap": True,
-                    "text-ignore-placement": True,
+                    "icon-image": icon_ladder,
+                    "icon-size": [
+                        "*",
+                        ladder(_AMENITY_ICON_SIZE_STOPS),
+                        _CLUSTER_COUNT_SCALE,
+                    ],
+                    "icon-allow-overlap": True,
+                    "icon-overlap": "always",
+                    "symbol-sort-key": ["get", "importance"],
                 },
                 "paint": {
-                    "text-color": "#ffffff",
-                    "text-halo-color": "rgba(34, 78, 59, 0.85)",
-                    "text-halo-width": 1.2,
+                    "icon-color": ["coalesce", ["get", "color"], "#718096"],
+                    "icon-halo-color": "#ffffff",
+                    "icon-halo-width": 1.5,
+                    "icon-halo-blur": 0,
+                    "icon-opacity": 0.85,
                 },
             },
             {
@@ -1739,7 +1716,6 @@ def amenity_overlay_style(spec: AmenityOverlaySpec) -> dict[str, Any]:
         "metadata": {
             "wd:slot_layers": [
                 f"{source_id}-clusters",
-                f"{source_id}-cluster-count",
                 f"{source_id}-selected",
                 source_id,
             ],
@@ -1751,19 +1727,16 @@ def amenity_overlay_style_subset(spec: AmenityOverlaySpec) -> dict[str, Any]:
     """Build the subset twin of an amenity overlay (Leaflet).
 
     Same surgery as the accommodations twin (:func:
-    `_accommodations_style_subset`): cluster bubbles with a zoom-only
-    radius ladder, the raw symbol as a STATIC fallback sprite tinted by
-    the category color via ``case``/``has``/``get`` — no count labels,
-    no text, no feature-state selection circle.
+    `_accommodations_style_subset`): cluster nodes as the STATIC
+    fallback sprite at ~1.35× the raw icon size (count-independent —
+    the whitelist has no ``*`` to scale by count), the raw symbol as
+    the same static sprite — no count labels, no text, no
+    feature-state selection circle.
     """
     subtree = spec.subtree
     source_id = f"wd-{subtree}"
     sprite_id = f"wd-sdf-{subtree}"
     fallback = f"{sprite_id}:mono/amenity.{subtree}"
-    raw_floor = spec.cluster_max_zoom + 2
-    # Same ascending-stop clamp as the full builder (tier C degenerate
-    # band: min_zoom == cluster_max_zoom + 2).
-    radius_floor = max(raw_floor, spec.min_zoom + 1)
     count_filter: list[Any] = ["==", ["get", "count"], 1]
     cluster_filter: list[Any] = [">", ["get", "count"], 1]
 
@@ -1788,29 +1761,28 @@ def amenity_overlay_style_subset(spec: AmenityOverlaySpec) -> dict[str, Any]:
         "glyphs": GLYPHS,
         "layers": [
             {
+                # Cluster icons (count-independent here — the subset
+                # whitelist has no ``*`` to scale by count; ~1.35× the
+                # raw size at every zoom).
                 "id": f"{source_id}-clusters",
-                "type": "circle",
+                "type": "symbol",
                 "source": source_id,
                 "source-layer": GEOPLACES_SOURCE,
                 "minzoom": spec.min_zoom,
                 "filter": cluster_filter,
+                "layout": {
+                    "icon-image": fallback,
+                    "icon-size": ladder(_AMENITY_CLUSTER_ICON_SIZE_STOPS),
+                    "icon-allow-overlap": True,
+                },
                 "paint": {
-                    "circle-color": [
+                    "icon-color": [
                         "case",
                         ["has", "color"],
                         ["get", "color"],
                         "#718096",
                     ],
-                    "circle-opacity": 0.45,
-                    "circle-radius": [
-                        "interpolate",
-                        ["linear"],
-                        ["zoom"],
-                        spec.min_zoom,
-                        7,
-                        radius_floor,
-                        12,
-                    ],
+                    "icon-opacity": 0.85,
                 },
             },
             {

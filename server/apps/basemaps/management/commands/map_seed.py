@@ -390,9 +390,8 @@ def _amenity_overlay_layers() -> list[dict[str, Any]]:
                 "role": MapLayer.Role.overlay,
                 "name": spec.name,
                 "description": spec.description,
-                # Provisional frontend chip icon (static
-                # overlays/exports/<name>.svg) — swap once dedicated
-                # chips land (accommodations precedent: "huts").
+                # Backend icon-library ref (pack/slug@mono) — the
+                # frontend toggle resolves it via GET /v1/icons.
                 "icon": spec.icon,
                 "slot": "ways",
                 "order": spec.order,
@@ -422,7 +421,6 @@ def _amenity_overlay_layers() -> list[dict[str, Any]]:
                             "defaultValue": [],
                             "mapLayers": [
                                 f"{source_id}-clusters",
-                                f"{source_id}-cluster-count",
                                 f"{source_id}-selected",
                                 source_id,
                             ],
@@ -536,10 +534,9 @@ LAYERS: list[dict[str, Any]] = [
             "served as MLT through Martin) — first overlay of the geoplaces "
             "family, the other POI groups follow the same pattern."
         ),
-        # "huts": the frontend icon set's accommodation-family icon (the
-        # overlay is its POI-database superset); no dedicated icon verified
-        # in the frontend library yet — swap once one exists.
-        "icon": "huts",
+        # Backend icon-library ref (pack/slug@mono) — the frontend
+        # toggle resolves it via GET /v1/icons (POI overlay family).
+        "icon": "fluent-emoji/hotel@mono",
         "slot": "ways",
         "order": 1,
         "min_zoom": 5,
@@ -574,7 +571,6 @@ LAYERS: list[dict[str, Any]] = [
                     "defaultValue": [],
                     "mapLayers": [
                         "wd-accommodations-clusters",
-                        "wd-accommodations-cluster-count",
                         "wd-accommodations-selected",
                         "wd-accommodations",
                     ],

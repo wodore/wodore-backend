@@ -97,7 +97,6 @@ class AmenityStyleContractTests(SimpleTestCase):
             by_id = {layer["id"]: layer for layer in style["layers"]}
             for layer_id in (
                 f"wd-{subtree}-clusters",
-                f"wd-{subtree}-cluster-count",
                 f"wd-{subtree}",
             ):
                 assert by_id[layer_id]["minzoom"] == floor, layer_id
@@ -134,36 +133,46 @@ class AmenityStyleContractTests(SimpleTestCase):
                 1,
             ], subtree
 
-    def test_cluster_radius_stops_strictly_ascending(self) -> None:
-        """MapLibre rejects interpolate stops that are not strictly
-        ascending (hard parse error). Tier C has min_zoom ==
-        cluster_max_zoom + 2, so the radius anchor must be clamped —
-        this guard pins that for every tier, in both documents."""
+    def test_cluster_nodes_are_count_scaled_icons(self) -> None:
+        """Cluster nodes render the SAME per-kind icon as individuals,
+        scaled by member count (1.1× at 2 → 1.8× at ≥ 12, clamped) —
+        no count labels, no bubbles (membership comes from
+        /v1/geoplaces/near on click)."""
+        for subtree in EXPECTED_BANDS:
+            full = lib.AMENITY_OVERLAY_STYLES[subtree]
+            by_id = {layer["id"]: layer for layer in full["layers"]}
+            cluster = by_id[f"wd-{subtree}-clusters"]
+            assert cluster["type"] == "symbol", subtree
+            assert f"wd-{subtree}-cluster-count" not in by_id, subtree
+            size = cluster["layout"]["icon-size"]
+            assert size[0] == "*", subtree
+            zoom_ladder, count_scale = size[1], size[2]
+            assert zoom_ladder[0] == "interpolate" and zoom_ladder[2] == ["zoom"], (
+                subtree
+            )
+            # count scale: 2 → 1.1, 12 → 1.8 (MapLibre clamps beyond)
+            assert count_scale[2] == ["get", "count"], subtree
+            assert count_scale[3::2] == [2, 12], subtree
+            assert count_scale[4::2] == [1.1, 1.8], subtree
+            # stops strictly ascending (MapLibre hard parse error)
+            stops = [float(stop) for stop in zoom_ladder[3::2]]
+            assert stops == sorted(stops) and len(set(stops)) == len(stops), subtree
 
-        def zoom_stops(expression: Any) -> list[float]:
-            if (
-                isinstance(expression, list)
-                and len(expression) >= 4
-                and expression[0] == "interpolate"
-                and expression[2] == ["zoom"]
-            ):
-                return [float(stop) for stop in expression[3::2]]
-            return []
-
-        documents = {
-            "full": lib.AMENITY_OVERLAY_STYLES,
-            "subset": lib.AMENITY_OVERLAY_STYLES_SUBSET,
-        }
-        for kind, styles in documents.items():
-            for subtree, style in styles.items():
-                cluster = next(
-                    layer
-                    for layer in style["layers"]
-                    if layer["id"] == f"wd-{subtree}-clusters"
-                )
-                stops = zoom_stops(cluster["paint"]["circle-radius"])
-                assert len(stops) == 2, (kind, subtree, stops)
-                assert stops[0] < stops[1], (kind, subtree, stops)
+    def test_subset_cluster_icons_oversize_raw_ladder(self) -> None:
+        """Subset twins: static-sprite cluster icons at a strictly
+        ascending zoom ladder (count-independent — the whitelist has
+        no ``*``)."""
+        for subtree in EXPECTED_BANDS:
+            subset = lib.AMENITY_OVERLAY_STYLES_SUBSET[subtree]
+            by_id = {layer["id"]: layer for layer in subset["layers"]}
+            cluster = by_id[f"wd-{subtree}-clusters"]
+            assert cluster["type"] == "symbol", subtree
+            size = cluster["layout"]["icon-size"]
+            stops = [float(stop) for stop in size[3::2]]
+            assert size[2] == ["zoom"], subtree
+            assert stops == sorted(stops) and len(set(stops)) == len(stops), subtree
+            raw = by_id[subtree if subtree.startswith("wd-") else f"wd-{subtree}"]
+            assert stops[0] > raw["layout"]["icon-size"][4], subtree
 
 
 def _fallbacks(expression: Any) -> set[str]:
@@ -218,3 +227,18 @@ class AmenitySeedEntryTests(SimpleTestCase):
             ], subtree
             # Server-side clustering — a client hint would double-cluster
             assert "clustering" not in entry["config"], subtree
+
+    def test_poi_overlay_icons_are_backend_refs(self) -> None:
+        """Toggle icons resolve through GET /v1/icons (frontend's
+        WdBackendIcon): every POI overlay carries a pack/slug@mono
+        backend ref, not a frontend asset name."""
+        import re
+
+        from server.apps.basemaps.management.commands.map_seed import LAYERS
+
+        poi_slugs = {"accommodations", *lib.AMENITY_OVERLAYS}
+        by_slug = {entry["slug"]: entry for entry in LAYERS}
+        for slug in poi_slugs:
+            icon = by_slug[slug]["icon"]
+            assert re.fullmatch(r"[a-z0-9-]+/[a-z0-9-]+@mono", icon), (slug, icon)
+            assert icon.startswith("fluent-emoji/"), (slug, icon)
