@@ -1047,25 +1047,27 @@ class TestSweepCommand:
 
 @pytest.mark.django_db
 class TestDumpCommand:
-    """dump_map_styles CI-input behavior: written files, walker-owned
-    subset skips, and the _skipped.txt manifest for styl-ignored rows."""
+    """dump_map_styles CI-input behavior: written files (FULL and
+    SUBSET profiles — both validators see every document since the
+    2026-11-06 staging incident), parameter-token resolution, and the
+    _skipped.txt manifest for styl-ignored rows."""
 
-    def test_dump_writes_full_skips_subset_and_ignored(self, tmp_path: Any) -> None:
+    def test_dump_writes_all_profiles_and_ignored_manifest(self, tmp_path: Any) -> None:
         call_command(DumpCommand(), out=str(tmp_path))
         names = sorted(path.name for path in tmp_path.iterdir())
-        # Authored full styles without an ignore list are dumped.
+        # Authored full styles without an ignore list are dumped …
         assert "huts--medium--full.json" in names
-        # transport-stops is a single SUBSET row now (walker-owned,
-        # never dumped — see TransportVectorContractTests)
-        assert "transport-stops--medium--full.json" not in names
+        # … and so are the subset twins (walker-owned AND validator-
+        # owned now: styl + the maplibre validator run over every dump)
+        assert "huts--medium--subset.json" in names
+        assert "world-topo--high--subset.json" in names
+        assert "mtb--medium--subset.json" in names
+        assert "transport-stops--medium--subset.json" in names
+        assert "restaurant--medium--subset.json" in names
         body = json.loads((tmp_path / "huts--medium--full.json").read_text())
         assert body["version"] == 8
-        # Subset rows are walker-owned (never dumped) …
-        assert "world-topo--high--subset.json" not in names
-        assert "mtb--medium--subset.json" not in names
-        assert "transport-stops--medium--subset.json" not in names
-        # … and styl-ignored (["*"]) full rows are skipped + manifested —
-        # the seed list is the single source of truth the CI job reads.
+        # styl-ignored (["*"]) rows are skipped + manifested — the seed
+        # list is the single source of truth the CI job reads.
         assert "world-satellite-hybrid--high--full.json" not in names
         manifest = (tmp_path / "_skipped.txt").read_text().split()
         assert "world-satellite-hybrid" in manifest
@@ -1073,6 +1075,26 @@ class TestDumpCommand:
         assert "ch-swisstopo-full" in manifest
         assert "wd-outdoor-base-ofm-hill" in manifest
         assert "huts" not in manifest
+
+    def test_dump_resolves_parameter_tokens(self, tmp_path: Any) -> None:
+        """The dump is the RESOLVED form (frontend validation parity):
+        scalar tokens baked to their defaults, opacity-curve tokens to
+        their default EXPRESSIONS — styl rejects unresolved token
+        strings (E018) and the maplibre validator rejects strings in
+        numeric expression slots. ``{{env:…}}``/``{{date}}`` tokens
+        embedded in URL strings legitimately stay."""
+        call_command(DumpCommand(), out=str(tmp_path))
+        huts = (tmp_path / "huts--medium--full.json").read_text()
+        assert "{{huts.icon_scale}}" not in huts
+        cycling = json.loads((tmp_path / "cycling--medium--subset.json").read_text())
+        # the resolved opacity default is an interpolate EXPRESSION
+        opacity = cycling["layers"][0]["paint"]["raster-opacity"]
+        assert isinstance(opacity, list)
+        assert opacity[0] == "interpolate"
+        accommodations = (tmp_path / "accommodations--medium--full.json").read_text()
+        assert "{{accommodations.icon_scale}}" not in accommodations
+        # env/URL-embedded tokens are serve-time, not dump-time
+        assert "{{env:MARTIN_TILE_URL}}" in accommodations
 
 
 # ── API surface ───────────────────────────────────────────────────────
