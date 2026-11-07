@@ -15,7 +15,7 @@ from typing import Any, override
 
 from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.core.management.base import BaseCommand, CommandError
-from django.db.models import Q
+from django.db.models import Count
 
 from server.apps.basemaps import seed_lib as lib
 from server.apps.basemaps.models import (
@@ -167,6 +167,23 @@ LEGENDS: dict[str, dict[str, Any]] = {
                 "category": "accommodation",
             }
         ]
+    },
+    # The ten amenity overlays: one category-driven section each —
+    # same shape as "accommodations" (the section's category is the
+    # subtree group; the catalog projection carries its kind children
+    # with colors, the frontend legend renders the symbols).
+    **{
+        spec.subtree: {
+            "sections": [
+                {
+                    "title": spec.name,
+                    "description": f"{spec.name} types by symbol (POI database).",
+                    "type": "symbol_mono",
+                    "category": spec.subtree,
+                }
+            ]
+        }
+        for spec in lib.AMENITY_OVERLAYS.values()
     },
     "huts": {
         "sections": [
@@ -417,7 +434,10 @@ def _amenity_overlay_layers() -> list[dict[str, Any]]:
                             "id": f"{spec.subtree}Types",
                             "label": f"{spec.name} types",
                             "type": "multi-select",
-                            "category": spec.subtree,
+                            # dot-notation: bare subtree slugs can be
+                            # ambiguous (three 'restaurant' categories exist)
+                            # and the categories list API 400s on ambiguity
+                            "category": f"amenity.{spec.subtree}",
                             "defaultValue": [],
                             "mapLayers": [
                                 f"{source_id}-clusters",
@@ -621,7 +641,7 @@ LAYERS: list[dict[str, Any]] = [
                     "id": "transportTypes",
                     "label": "Transit modes",
                     "type": "multi-select",
-                    "category": "transport",
+                    "category": "map.transport",
                     "defaultValue": [],
                     "mapLayers": ["transport-stops"],
                     # route_types_basic is Transitland's JSON-string array
@@ -1343,11 +1363,20 @@ class Command(BaseCommand):
         for order, section_def in enumerate(wanted_sections):
             category = None
             if section_def.get("category"):
+                from django.db.models import Count
+
                 from server.apps.categories.models import Category
 
-                category = Category.objects.filter(
-                    slug=section_def["category"], parent__isnull=True
-                ).first()
+                # Root match first, else the SUBTREE GROUP: slugs collide
+                # across branches (e.g. 'restaurant' exists as the amenity
+                # child with the kind children AND as a stray leaf) — the
+                # group for a legend is the category that HAS children.
+                candidates = Category.objects.filter(
+                    slug=section_def["category"]
+                ).annotate(child_count=Count("children"))
+                category = candidates.filter(parent__isnull=True).first() or max(
+                    candidates, key=lambda c: c.child_count, default=None
+                )
             section, _ = MapLegendSection.objects.update_or_create(
                 legend=legend,
                 order=order,
@@ -1431,10 +1460,19 @@ class Command(BaseCommand):
         }
         keep: set[tuple[str, str]] = set()
         for entry in wanted:
-            category = Category.objects.filter(
-                Q(slug=entry["slug"], parent__isnull=True)
-                | Q(slug=entry["slug"].split(".")[-1])
-            ).first()
+            # Dot-notation entries resolve exactly; bare slugs may be
+            # ambiguous (colliding strays) — prefer the root match, else
+            # the subtree GROUP (the category carrying the kind children),
+            # mirroring _seed_legend's disambiguation.
+            lookup = (
+                entry["slug"] if "." in entry["slug"] else entry["slug"].split(".")[-1]
+            )
+            candidates = Category.objects.filter(slug=lookup).annotate(
+                child_count=Count("children")
+            )
+            category = candidates.filter(parent__isnull=True).first() or max(
+                candidates, key=lambda c: c.child_count, default=None
+            )
             if category is None:
                 self.stdout.write(
                     self.style.WARNING(

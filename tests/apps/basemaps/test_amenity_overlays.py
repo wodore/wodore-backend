@@ -289,3 +289,24 @@ class AmenitySeedEntryTests(SimpleTestCase):
                 icon,
             )
             assert icon.startswith("fluent-emoji/"), (entry["slug"], icon)
+
+    def test_poi_overlays_carry_category_legends(self) -> None:
+        """Every POI overlay seeds a category-driven legend section (the
+        huts/accommodations shape): the section binds the subtree GROUP
+        category — slugs collide across branches (the stray
+        'restaurant' leaf), and the group is the category WITH kind
+        children, so the catalog payload carries them and the frontend
+        legend renders type symbols (2026-11-07: filters shipped, the
+        legend payload was null because the lookup matched roots only
+        and the ten subtrees had no LEGENDS entries at all)."""
+        from server.apps.basemaps.management.commands.map_seed import LEGENDS
+
+        poi_slugs = ["accommodations", *lib.AMENITY_OVERLAYS]
+        for slug in poi_slugs:
+            definition = LEGENDS.get(slug)
+            assert definition is not None, slug
+            (section,) = definition["sections"]
+            assert section["type"] == "symbol_mono", slug
+            assert section["category"] == (
+                slug if slug != "accommodations" else "accommodation"
+            ), slug
