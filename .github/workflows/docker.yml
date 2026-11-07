@@ -74,6 +74,7 @@ jobs:
         if: github.event_name == 'push' && steps.check-build.outputs.result != 'true'
         run: |
           echo "Skipping build: No BUILD label found on merged PR"
+          echo "::warning title=Docker image not published::No BUILD label on the merged PR — NO image was pushed. Recover: add the label to the merged PR and re-run this workflow (workflow_dispatch) on main."
           exit 0
 
       - name: Log in to the Container registry
