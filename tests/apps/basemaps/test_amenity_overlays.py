@@ -18,6 +18,7 @@ import pytest
 from django.test import SimpleTestCase
 
 from server.apps.basemaps import seed_lib as lib
+from server.apps.basemaps.models import MapLayer
 from server.apps.basemaps.validation import StyleValidationError, validate_subset_style
 
 #: The band matrix (importance-scaled, see the AMENITY_OVERLAYS
@@ -268,17 +269,23 @@ class AmenitySeedEntryTests(SimpleTestCase):
             # Server-side clustering — a client hint would double-cluster
             assert "clustering" not in entry["config"], subtree
 
-    def test_poi_overlay_icons_are_backend_refs(self) -> None:
-        """Toggle icons resolve through GET /v1/icons (frontend's
-        WdBackendIcon): every POI overlay carries a pack/slug@mono
-        backend ref, not a frontend asset name."""
+    def test_every_overlay_icon_is_a_backend_ref(self) -> None:
+        """ALL overlays (POI family and the raster/vector classics)
+        carry pack/slug@mono backend icon refs — the toggle renders
+        them through GET /v1/icons (frontend WdBackendIcon); no
+        frontend asset names remain."""
         import re
 
         from server.apps.basemaps.management.commands.map_seed import LAYERS
 
-        poi_slugs = {"accommodations", *lib.AMENITY_OVERLAYS}
-        by_slug = {entry["slug"]: entry for entry in LAYERS}
-        for slug in poi_slugs:
-            icon = by_slug[slug]["icon"]
-            assert re.fullmatch(r"[a-z0-9-]+/[a-z0-9-]+@mono", icon), (slug, icon)
-            assert icon.startswith("fluent-emoji/"), (slug, icon)
+        overlays = [
+            entry for entry in LAYERS if entry.get("role") == MapLayer.Role.overlay
+        ]
+        assert len(overlays) >= 20
+        for entry in overlays:
+            icon = entry["icon"]
+            assert re.fullmatch(r"[a-z0-9-]+/[a-z0-9-]+@mono", icon), (
+                entry["slug"],
+                icon,
+            )
+            assert icon.startswith("fluent-emoji/"), (entry["slug"], icon)
