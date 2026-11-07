@@ -168,6 +168,23 @@ LEGENDS: dict[str, dict[str, Any]] = {
             }
         ]
     },
+    # The ten amenity overlays: one category-driven section each —
+    # same shape as "accommodations" (the section's category is the
+    # subtree group; the catalog projection carries its kind children
+    # with colors, the frontend legend renders the symbols).
+    **{
+        spec.subtree: {
+            "sections": [
+                {
+                    "title": spec.name,
+                    "description": f"{spec.name} types by symbol (POI database).",
+                    "type": "symbol_mono",
+                    "category": spec.subtree,
+                }
+            ]
+        }
+        for spec in lib.AMENITY_OVERLAYS.values()
+    },
     "huts": {
         "sections": [
             {
@@ -1343,11 +1360,20 @@ class Command(BaseCommand):
         for order, section_def in enumerate(wanted_sections):
             category = None
             if section_def.get("category"):
+                from django.db.models import Count
+
                 from server.apps.categories.models import Category
 
-                category = Category.objects.filter(
-                    slug=section_def["category"], parent__isnull=True
-                ).first()
+                # Root match first, else the SUBTREE GROUP: slugs collide
+                # across branches (e.g. 'restaurant' exists as the amenity
+                # child with the kind children AND as a stray leaf) — the
+                # group for a legend is the category that HAS children.
+                candidates = Category.objects.filter(
+                    slug=section_def["category"]
+                ).annotate(child_count=Count("children"))
+                category = candidates.filter(parent__isnull=True).first() or max(
+                    candidates, key=lambda c: c.child_count, default=None
+                )
             section, _ = MapLegendSection.objects.update_or_create(
                 legend=legend,
                 order=order,
