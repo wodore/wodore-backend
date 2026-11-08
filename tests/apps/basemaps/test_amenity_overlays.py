@@ -241,6 +241,11 @@ class AmenityStyleContractTests(SimpleTestCase):
             assert paint["circle-blur"] == 0, subtree
             assert paint["circle-opacity"][0] == "case", subtree
             assert paint["circle-stroke-color"][0] == "case", subtree
+            # the ring storm regression: stroke opacity MUST be gated —
+            # it defaults to 1 and renders for EVERY feature regardless
+            # of circle-opacity (2026-11-07 staging incident)
+            assert paint["circle-stroke-opacity"][0] == "case", subtree
+            assert paint["circle-stroke-opacity"][5] == 0, subtree
             # radius per-stop values scale by the count factor
             radius = paint["circle-radius"]
             assert radius[2] == ["zoom"], subtree
