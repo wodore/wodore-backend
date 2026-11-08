@@ -40,19 +40,18 @@ tourism partners already use.
 - **Moderation**: OIDC auth gate on writes, per-user submission quota,
   server-side signature blacklist (hidden from our listings), abuse reports
   relayed as signed `report_abuse` actions.
-- **OSM linkage batch job** (django-q2, Overpass API): recurring job that
-  links/refreshes huts ↔ OSM elements — filling the 27% unlinked gap and
-  verifying the 1166 existing links — feeding the standard
-  `metadata.osm_id` claim on submitted reviews. No permission needed
-  (ODbL); ambiguous matches go to an admin review queue.
+- **OSM metadata from the existing linkage**: review submissions stamp
+  `metadata.osm_id` (`node/ID[/VERSION]` form) from the hut's existing
+  `HutSource` linkage (org `osm`, fed by the hut import pipeline) — no new
+  matching job; gap-filling and refresh stay with the import pipeline.
 - **Review images** in scope: `images` (`{src, label}` × ≤5) validated and
   relayed; the upstream server fetches and persists them (hosting nuance is
   an open decision).
 - **Resilience & contract pinning**: an `httpx`-based `MangroveClient`
   (timeouts, bounded retries, structlog + Sentry tracing) whose payload
   expectations are pinned to upstream 0.2.0 with recorded fixtures.
-- **WEP011** board post summarizing the change; **frontend work is explicitly
-  out of scope** (informative tasks listed for the Quasar app, later).
+- **Frontend work is explicitly out of scope** (informative tasks listed
+  for the Quasar app, later).
 
 ## Capabilities
 
@@ -67,8 +66,6 @@ tourism partners already use.
 - `review-identity`: per-account Mangrove keypairs — encrypted server-side
   custody, lazy minting, signing service, ownership enforcement, JWK
   import/export (later phase), erasure path.
-- `hut-osm-linkage`: recurring Overpass-based job linking huts to OSM
-  elements with an ambiguity review queue, feeding review metadata.
 
 ### Modified Capabilities
 
@@ -79,22 +76,21 @@ endpoints.)
 ## Impact
 
 - **Code**: new app `server/apps/reviews` (models: reviewer key, submission
-  log, blacklist, OSM link candidates; dmr controllers; `MangroveClient`
-  service; management commands for the OSM job and user erasure), a settings
-  component (`MANGROVE_*` env via Infisical: base URL, timeout, key-encryption
-  key, quota defaults), Unfold admin + tab, django-q2 schedule entries.
+  log, blacklist; dmr controllers; `MangroveClient` service; management
+  command for user erasure), a settings component (`MANGROVE_*` env via
+  Infisical: base URL, timeout, key-encryption key, quota defaults),
+  Unfold admin + tab.
 - **API**: new `/v1/` endpoints (additive — no version bump, no snapshot
   transforms), new error codes in the RFC 9457 registry
   (`upstream_unavailable`, review validation/quota codes), CDN-Tag
   `api:reviews` with write-through purge.
 - **Dependencies**: `httpx` (client), `cryptography`/authlib (ES256 + JWK —
-  already in tree via OIDC), Overpass API (external, ODbL),
-  `https://api.mangrove.reviews` (external, 0.2.0, not frozen → pinned via
-  fixtures).
+  already in tree via OIDC), `https://api.mangrove.reviews` (external,
+  0.2.0, not frozen → pinned via fixtures).
 - **Privacy/legal**: server-held private keys are encrypted at rest and never
   served publicly (export only to the owning account); reviews are published
   under Mangrove ToS with CC-BY-4.0 (attribution surfaced in API payloads);
   GDPR erasure = signed `delete` actions + local record destruction.
 - **Frontend** (separate repo, later): hut-page review list/submit UI, star ↔
   rating mapping, my-reviews profile section, map badges.
-- **Docs**: WEP011 board post; AGENTS.md gains a reviews section.
+- **Docs**: AGENTS.md gains a reviews section.

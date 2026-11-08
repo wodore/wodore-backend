@@ -86,8 +86,9 @@ recommendation each — implementation PRs resolve them there.
 - Upstream-resilient reads (caching + timeouts + graceful degradation) and
   a **pinned contract** so upstream 0.2.x drift fails our tests, not
   production requests.
-- OSM linkage good enough to stamp `metadata.osm_id` on hut reviews and to
-  power later cross-client bridging.
+- Reuse of the existing OSM linkage (`HutSource` org `osm`) to stamp
+  `metadata.osm_id` on hut reviews; cross-client bridging later via
+  equivalence claims.
 - An additive API (no `Api-Version` bump) that fits every existing
   convention (dmr, error registry, CDN-Tag, throttling, OpenAPI).
 
@@ -149,14 +150,14 @@ New Django app `server/apps/reviews`:
 
 ```text
 server/apps/reviews/
-  models.py        # ReviewerKey, ReviewerProfile, SubmittedReview, ReviewBlacklist, OsmLinkCandidate
+  models.py        # ReviewerKey, ReviewerProfile, SubmittedReview, ReviewBlacklist
   client.py        # MangroveClient (httpx) + subject recipe
   signing.py       # ES256 JWT construction per MaReSt (header kid+jwk, claims, actions)
   services.py      # read/write orchestration: validation, quota, cache invalidation, blacklist filter
   cache.py         # subject-keyed read cache + write-through invalidation
   api.py           # dmr controllers (`paths`)
-  admin.py         # Unfold: blacklist, submission log, OSM link queue, reviewer keys
-  management/commands/reviews_osm_sync.py, reviews_erase_user.py
+  admin.py         # Unfold: blacklist, submission log, reviewer keys
+  management/commands/reviews_erase_user.py
 ```
 
 `MangroveClient` is the **only** code allowed to talk to
@@ -207,7 +208,7 @@ Submitted review DTO: `{rating?: 0–100, opinion?: ≤1000, images?: [{src, lab
 nickname?, language?, experience_context?, is_personal_experience?, is_affiliated?}`.
 Server-side metadata enrichment: `client_id` = the Wodore frontend origin
 (config), `license` = `CC-BY-4.0` (default; see D9), `osm_id` from the
-hut's OSM linkage (D6) when present, `language` defaulting from the request
+hut's OSM linkage (D8) when present, `language` defaulting from the request
 language. Validation rejects anything outside the MaReSt metadata allowlist
 we choose to accept (error codes `review_invalid_*`).
 
@@ -326,35 +327,19 @@ hello@open-reviews.net (links/Matrix/Mastodon on open-reviews.net) —
 relevant both for equivalence status and partner onboarding (Swiss tourism
 portals are ORA partners).
 
-### D8 — OSM linkage batch job
+### D8 — OSM metadata from the existing linkage
 
-A recurring django-q2 job (management command `reviews_osm_sync`, scheduled
-like availability sync; precedent `server/apps/huts/management/commands/huts.py`):
-
-- **Input**: every public+active hut; skip huts with a *verified current*
-  OSM link unless re-checking (`--refresh` / weekly full pass).
-- **Overpass query** around each hut location (bbox ~500 m):
-  `nwr[tourism~"^(alpine_hut|wilderness_hut|cabin| hut|apartment|guest_house|hotel)$"]`
-  — final tag set to tune during implementation (the hut import's OSM
-  source already encodes the relevant vocabulary).
-- **Scoring**: distance (hut location ↔ element center) + name similarity
-  (existing `pg_trgm` GIN index on `huts.name` — `hut_name_gin_idx` — is
-  the precedent) → unique best candidate above threshold (e.g. ≤200 m AND
-  similarity ≥0.5, tunable) ⇒ write/update a `HutSource` row with
-  organization `osm` (existing pattern: `source_id` = numeric id,
-  `source_data` = `{osm_type, id, version?, center_lat/lon, tags: subset}`).
-- **Ambiguity queue**: multiple/tentative candidates ⇒ `OsmLinkCandidate`
-  row (hut, candidates JSON, scores) surfaced in Unfold admin with
-  accept/reject actions; accepted candidates write the `HutSource`.
-- **Politeness**: single-threaded, rate-limited Overpass usage (instance
-  configurable), exponential backoff on 429; ODbL attribution lives in the
-  existing OSM org/source records. No permission from anyone needed for
-  Overpass reads; operator contact is unnecessary for linkage (relevant
-  only if we later want operator-flagged reviews, e.g. `is_affiliated`).
-- **Consumption**: at submit time the service resolves the hut's OSM link
-  and stamps `metadata.osm_id` = `<osm_type>/<source_id>` (+`/<version>`
-  when the sync captured one) — the standard's format for unstable-by-design
-  ids, which is why the *subject* stays slug-based (D1).
+There is no new matching job: the hut import pipeline (hut-services `osm`
+source → `HutSource` rows, org `osm`) already links 1166/1585 huts
+(`source_id` = numeric OSM id; `source_data` = `{osm_type, tags,
+center_lat/lon}`) and keeps refreshing it — gap-filling and verification
+stay with that pipeline (out of scope here). The reviews app only
+**reads** the linkage at submit time: the service resolves the hut's
+current OSM `HutSource` and stamps `metadata.osm_id` =
+`<osm_type>/<source_id>` (+`/<version>` when the source captured one) —
+the standard's format for unstable-by-design ids, which is also why the
+*subject* stays slug-based (D1). Huts without a link submit without the
+field.
 
 ### D9 — Images, legal, data sovereignty
 
@@ -394,7 +379,7 @@ decidables with dev/test defaults): `MANGROVE_API_BASE_URL`,
 `MANGROVE_TIMEOUT_CONNECT/READ`, `MANGROVE_U_RADIUS` (O1),
 `MANGROVE_CACHE_TTL_LIST/SUMMARY`, `MANGROVE_QUOTA_SUBMIT/EDIT`,
 `MANGROVE_KEY_ENCRYPTION_KEY`, `MANGROVE_CLIENT_ID` (frontend origin for
-`metadata.client_id`), `MANGROVE_OVERPASS_URL`. Sentry: spans around every
+`metadata.client_id`). Sentry: spans around every
 upstream call, breadcrumbs on submit; PII rules apply (never log opinions
 or nicknames at info level — they'd flow into breadcrumbs). Local auth
 (dev) works end-to-end: `AuthBearer` already accepts local tokens, so
@@ -426,8 +411,9 @@ review writing is testable without Zitadel.
 - [Quota/gaming: accounts are free] → auth gate + per-user quota +
   upstream credibility system does the heavy lifting; blacklist hides
   locally; revisit with feedbacks-style heuristics only if abuse observed.
-- [Overpass rate limits / OSM data quality] → polite rate limiting,
-  ambiguity queue instead of auto-linking dubious matches, weekly cadence.
+- [OSM linkage coverage is partial (73%)] → unlinked huts simply submit
+  without `metadata.osm_id`; coverage improves with the import pipeline's
+  own refresh cadence — no reviews-path dependency on it.
 - [PII leakage into an open dataset] → nickname-only policy (minted
   defaults), metadata allowlist, no email/real-name fields accepted,
   documented in the submit endpoint description.
@@ -436,11 +422,11 @@ review writing is testable without Zitadel.
 
 Purely additive: new app + tables (no changes to existing tables), new
 endpoints, q2 schedule entries, env secrets. Rollout: deploy backend →
-seed nothing (subjects are computed, links sync on first job run) →
-frontend later. Rollback: disable the app's endpoints via feature flag
-(env kill-switch `MANGROVE_ENABLED` gating the write path at minimum) or
-revert deploy — no data migration involved. Contract recapture and OSM
-sync are ops-run commands, not deploy steps.
+seed nothing (subjects are computed from hut rows) → frontend later.
+Rollback: disable the app's endpoints via feature flag (env kill-switch
+`MANGROVE_ENABLED` gating the write path at minimum) or revert deploy —
+no data migration involved. Contract recapture and erasure are ops-run
+commands, not deploy steps.
 
 ## Open decisions
 
@@ -452,8 +438,8 @@ recommendation is what implementation should do unless new information
   50–200 m; clustered sites like hut+winterroom+bivouac sit within ~50 m).
   *Recommendation*: constant `u=30` for v1 (simple, predictable matching,
   no extent storage); revisit per-hut extent (max center→vertex distance
-  from OSM geometry, MapComplete's polygon recipe) when the linkage job
-  makes extents cheaply available. A larger `u` only widens *incoming*
+  from OSM geometry, MapComplete's polygon recipe) if/when the import
+  pipeline captures element extents. A larger `u` only widens *incoming*
   match tolerance from foreign subjects with the same `q` — with slug
   `q`s that is moot today.
 - **O2 — Equivalence-resolution spike.** Verify on api.mangrove.reviews

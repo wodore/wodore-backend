@@ -2,8 +2,8 @@
 
 All backend tasks are implementable as-is; each section lands testable
 (`inv tests` / `scripts/lane-run.sh .venv/bin/pytest`). The frontend
-section (12) is **informative only — explicitly out of scope for this
-change** (separate repo, separate proposal). Phase-2 items (sections 10–11)
+section (11) is **informative only — explicitly out of scope for this
+change** (separate repo, separate proposal). Phase-2 items (sections 9–10)
 are decided but sequenced after the first release cut.
 
 ## 1. App scaffold, settings, models
@@ -11,14 +11,14 @@ are decided but sequenced after the first release cut.
 - [ ] 1.1 Create `server/apps/reviews` app (apps.py, `__init__.py`,
       empty admin/models/api split per AGENTS.md structure), add to
       `INSTALLED_APPS`, add the Unfold tab (models: ReviewerKey,
-      ReviewerProfile, SubmittedReview, ReviewBlacklist, OsmLinkCandidate)
+      ReviewerProfile, SubmittedReview, ReviewBlacklist)
 - [ ] 1.2 Settings component `server/settings/components/reviews.py`:
       `MANGROVE_API_BASE_URL` (default `https://api.mangrove.reviews`),
       `MANGROVE_ENABLED` kill-switch, timeout/retry constants,
       `MANGROVE_U_RADIUS` (default 30, per design O1),
       `MANGROVE_CACHE_TTL_LIST/SUMMARY`, `MANGROVE_QUOTA_SUBMIT/EDIT`,
-      `MANGROVE_CLIENT_ID`, `MANGROVE_OVERPASS_URL`,
-      `MANGROVE_KEY_ENCRYPTION_KEY` (Infisical-backed; dev default)
+      `MANGROVE_CLIENT_ID`, `MANGROVE_KEY_ENCRYPTION_KEY` (Infisical-backed;
+      dev default)
 - [ ] 1.3 Models + migration: `ReviewerKey` (1:1 User, `kid` PEM
       whitespace-normalized + unique index, private JWK encrypted via
       Fernet/MultiFernet under the dedicated key, minted_at),
@@ -26,9 +26,8 @@ are decided but sequenced after the first release cut.
       language), `SubmittedReview` (append-only: user FK, hut slug,
       subject URI, action, iat, signature + unique index, JWT verbatim,
       attempt state), `ReviewBlacklist` (signature + reason + created_by +
-      unique index), `OsmLinkCandidate` (hut FK, candidates JSON, reason,
-      status) — `TimeStampedModel`/`BaseManager` conventions, Unfold
-      admin for all five
+      unique index) — `TimeStampedModel`/`BaseManager` conventions, Unfold
+      admin for all four
 - [ ] 1.4 Tests: model constraints (one key per user, unique signatures,
       blacklist dedup), encryption round-trip (value at rest ≠ plaintext,
       decrypts correctly), nickname minting never derives from account
@@ -100,133 +99,112 @@ are decided but sequenced after the first release cut.
       (mocked client), blacklist exclusion from list/count/aggregates,
       hut ETag regression (hut detail endpoints unchanged)
 
-## 5. Write endpoints: submit, edit, delete, report
+## 5. Write endpoints: submit, edit, delete, report, my-reviews
 
 - [ ] 5.1 `POST /v1/huts/{slug}/reviews` (`AuthBearer`): DTO validation
       (rating and/or opinion; images; metadata subset — unknown keys →
       `review_invalid_*` 400), server-side enrichment (`client_id`,
-      `license: CC-BY-4.0`, `osm_id` from linkage when present, language
-      default from request), sign + relay, 201 with created review incl.
-      signature, `SubmittedReview` log write, write-through invalidation;
-      OpenAPI description states Mangrove ToS/CC-BY-4.0 publication
+      `license: CC-BY-4.0`, `osm_id` from the hut's existing OSM
+      `HutSource` linkage when present, language default from request),
+      sign + relay, 201 with created review incl. signature,
+      `SubmittedReview` log write, write-through invalidation; OpenAPI
+      description states Mangrove ToS/CC-BY-4.0 publication
 - [ ] 5.2 `PATCH …/{signature}` (edit) and `DELETE …/{signature}`
       (delete): local ownership check before signing, relay
       `action:edit/delete` JWTs, 200/204 responses, cache invalidation,
       log updates; 403 path signs nothing
 - [ ] 5.3 `POST …/{signature}/report` (report_abuse, no ownership,
       reason as opinion, no rating)
-- [ ] 5.4 Quota service: per-user rolling window (submit vs edit/delete
+- [ ] 5.4 `osm_id` stamping: submit path resolves the hut's current OSM
+      link from the existing `HutSource` (org `osm`, import-pipeline-fed)
+      → `metadata.osm_id` (`node/ID[/VERSION]` form, ≤50); absent link
+      submits without the field; tests for both paths
+- [ ] 5.5 Quota service: per-user rolling window (submit vs edit/delete
       classes, defaults from settings), 429 `review_quota_exceeded` with
-      reset time; counts skip nothing that was relayed; tests for window
-      rollover and class separation
-- [ ] 5.5 `GET /v1/me/reviews` (`AuthBearer`): upstream kid-listing,
+      reset time; tests for window rollover and class separation
+- [ ] 5.6 `GET /v1/me/reviews` (`AuthBearer`): upstream kid-listing,
       subject→hut slug resolution (huts annotation absent for
       non-Wodore subjects), latest-edit collapse, deleted excluded
-- [ ] 5.6 Contract tests per write endpoint (auth 401s, validation 400s,
+- [ ] 5.7 Contract tests per write endpoint (auth 401s, validation 400s,
       quota 429s, ownership 403s, upstream rejection sanitized, relay
       payload assertions against mocked client)
 
-## 6. OSM linkage job
+## 6. Moderation + admin
 
-- [ ] 6.1 Management command `reviews_osm_sync`: iterate public+active
-      huts (skip recently-verified unless `--refresh`), Overpass candidate
-      query around `Hut.location` (tourism-hut-class tags, tunable set),
-      polite single-threaded usage + 429 backoff, per-hut scoring
-      (distance + name similarity reusing the trigram precedent)
-- [ ] 6.2 Auto-link writer: unique above-threshold candidate →
-      create/update `HutSource` (org `osm`, existing pattern:
-      `source_id` numeric id, `source_data` `{osm_type, center_lat/lon,
-      tags subset, version?}`); stale existing links → flag for review,
-      never silent rewrite
-- [ ] 6.3 Ambiguity queue: below/multi-threshold → `OsmLinkCandidate`
-      rows; Unfold admin actions accept (writes HutSource) / reject;
-      dashboards for queue depth and coverage (linked / queued / unlinked)
-- [ ] 6.4 django-q2 schedule entry (weekly full refresh; nightly
-      gap-filler) via the existing q2 setup; failure reporting through
-      the in-repo q2 error reporter
-- [ ] 6.5 `osm_id` stamping: submit path resolves the hut's current OSM
-      link → `metadata.osm_id` (`node/ID[/VERSION]` form, ≤50); absent
-      link submits without the field; tests for both paths
-- [ ] 6.6 Tests: scoring thresholds (auto/ambiguous/reject), stale-link
-      flagging, queue accept/reject flows, rate-limit backoff (mocked
-      Overpass), command idempotency
-
-## 7. Moderation + admin
-
-- [ ] 7.1 `ReviewBlacklist` admin: list/filter/actions (bulk blacklist by
+- [ ] 6.1 `ReviewBlacklist` admin: list/filter/actions (bulk blacklist by
       pasted signature), reason audit; read-path filter tests (list,
       count, summary, batch) already covered by 4.4 — add admin action
       tests
-- [ ] 7.2 `SubmittedReview` admin (read-only, filter by user/hut/action,
+- [ ] 6.2 `SubmittedReview` admin (read-only, filter by user/hut/action,
       export selected rows as JSONL — the archival/export path from the
       mangrove-client spec)
 
-## 8. Docs, snapshots, release plumbing
+## 7. Docs, snapshots, release plumbing
 
-- [ ] 8.1 Verify no `Api-Version` bump: endpoints additive; run
+- [ ] 7.1 Verify no `Api-Version` bump: endpoints additive; run
       `app api_snapshot` and confirm the diff is purely additive (no
       transforms registered); CI labels for the eventual PR: `type:*` +
       `api:added`
-- [ ] 8.2 AGENTS.md: reviews section (app layout, subject recipe, key
-      custody + rotation runbook, quota/blacklist pointers, OSM sync
-      ops); `docs/` note linking WEP011 and the openspec change
-- [ ] 8.3 Infisical: register the new env vars (staging + prod), document
+- [ ] 7.2 AGENTS.md: reviews section (app layout, subject recipe, key
+      custody + rotation runbook, quota/blacklist pointers); `docs/` note
+      referencing the openspec change
+- [ ] 7.3 Infisical: register the new env vars (staging + prod), document
       `MANGROVE_KEY_ENCRYPTION_KEY` rotation (MultiFernet add-new-keep-old)
       in the runbook
-- [ ] 8.4 Full suite green: `inv tests`, `inv check.types` (pyrefly
+- [ ] 7.4 Full suite green: `inv tests`, `inv check.types` (pyrefly
       strict — full annotations, no baseline), `inv lint`
 
-## 9. Pre-release verification (spikes, informative)
+## 8. Pre-release verification (spikes, informative)
 
-- [ ] 9.1 Equivalence spike (design O2): on a staging/dev keypair, file
+- [ ] 8.1 Equivalence spike (design O2): on a staging/dev keypair, file
       an equivalence claim between two reserved test subjects
       (`geo:0,0?q=Test&u=100` family), observe whether
       api.mangrove.reviews resolves it in aggregation; document findings
       in `_work/` + design.md addendum — outcome gates future
       slug↔OSM-name bridging, not v1 behavior
-- [ ] 9.2 Contact ORA (hello@open-reviews.net / links on
+- [ ] 8.2 Contact ORA (hello@open-reviews.net / links on
       open-reviews.net) about: equivalence-resolution status, partner
       onboarding (Swiss tourism portals), upstream contract changelog
       practice; record answers in the same note
-- [ ] 9.3 Live smoke (staging, manual): submit→list→edit→delete round
+- [ ] 8.3 Live smoke (staging, manual): submit→list→edit→delete round
       trip on a reserved test subject via the staging API; confirm CDN
       purge behavior on the `api:reviews` tag
 
-## 10. Phase 2 — identity import/export (decided, later release)
+## 9. Phase 2 — identity import/export (decided, later release)
 
-- [ ] 10.1 `GET /v1/me/reviews/identity` (export private JWK string,
+- [ ] 9.1 `GET /v1/me/reviews/identity` (export private JWK string,
       re-authentication required) and `PUT /v1/me/reviews/identity`
       (import JWK: re-derive kid, verify ES256 shape, rebind account —
       one active key per account; old key dropped after confirmation of
       the first successful action under the new key)
-- [ ] 10.2 Tests: export/import round-trip, imported-key ownership
+- [ ] 9.2 Tests: export/import round-trip, imported-key ownership
       checks, re-auth enforcement, erasure command coverage of imported
       reviews (kid-listing sweep)
 
-## 11. Phase 2 — erasure automation
+## 10. Phase 2 — erasure automation
 
-- [ ] 11.1 `reviews_erase_user` management command: sign+relay `delete`
+- [ ] 10.1 `reviews_erase_user` management command: sign+relay `delete`
       for every authorable review (submission log + upstream kid
       listing), destroy key/profile/log rows; wire as account-deletion
       hook; export mode dumps the log first
-- [ ] 11.2 Tests: full erasure, other users untouched, upstream-failure
+- [ ] 10.2 Tests: full erasure, other users untouched, upstream-failure
       retry semantics (command is resumable)
 
-## 12. Frontend (wodore-frontend-quasar) — INFORMATIVE, NOT THIS CHANGE
+## 11. Frontend (wodore-frontend-quasar) — INFORMATIVE, NOT THIS CHANGE
 
 Not part of `reviews-mangrove`; tracked here so the intent is not lost.
 Any of these belongs to a frontend proposal of its own.
 
-- [ ] 12.1 Hut page (`/hut/:slug`): review list section (rating stars,
+- [ ] 11.1 Hut page (`/hut/:slug`): review list section (rating stars,
   opinion, nickname, date, images) + submit/edit/delete/report UI bound
   to the new endpoints; CC-BY-4.0 attribution + Mangrove ToS notice in
   the submit flow
-- [ ] 12.2 Star ↔ rating mapping UX: 5 stars ↔ 0/25/50/75/100
+- [ ] 11.2 Star ↔ rating mapping UX: 5 stars ↔ 0/25/50/75/100
   (likelihood-to-recommend semantics in the tooltip copy); API stays
   integer 0–100
-- [ ] 12.3 Map badges: batch summary endpoint feeding count/mean chips on
+- [ ] 11.3 Map badges: batch summary endpoint feeding count/mean chips on
   clustered and raw POI markers (zoom-aware batching)
-- [ ] 12.4 Profile "my reviews" section (`GET /v1/me/reviews`),
+- [ ] 11.4 Profile "my reviews" section (`GET /v1/me/reviews`),
   including imported-identity reviews without hut annotation
-- [ ] 12.5 Later: JWK import/export UI (bring your MapComplete identity),
+- [ ] 11.5 Later: JWK import/export UI (bring your MapComplete identity),
   OSM-preference sync, `did:web` display once upstream is live
