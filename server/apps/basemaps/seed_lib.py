@@ -1098,6 +1098,19 @@ def accommodations_style() -> dict[str, Any]:
                         0.85,
                         0,
                     ],
+                    # stroke opacity MUST be gated separately — it
+                    # defaults to 1 and renders for EVERY feature
+                    # regardless of circle-opacity (the 2026-11-07
+                    # blue-ring storm: hundreds of thin rings covered
+                    # the map at city zooms).
+                    "circle-stroke-opacity": [
+                        "case",
+                        ["boolean", ["feature-state", "selected"], False],
+                        1,
+                        ["boolean", ["feature-state", "hovered"], False],
+                        0.9,
+                        0,
+                    ],
                     "circle-stroke-color": [
                         "case",
                         ["boolean", ["feature-state", "color"], False],
@@ -1735,6 +1748,19 @@ def amenity_overlay_style(spec: AmenityOverlaySpec) -> dict[str, Any]:
                         1,
                         ["boolean", ["feature-state", "hovered"], False],
                         0.85,
+                        0,
+                    ],
+                    # stroke opacity MUST be gated separately — it
+                    # defaults to 1 and renders for EVERY feature
+                    # regardless of circle-opacity (the 2026-11-07
+                    # blue-ring storm: hundreds of thin rings covered
+                    # the map at city zooms).
+                    "circle-stroke-opacity": [
+                        "case",
+                        ["boolean", ["feature-state", "selected"], False],
+                        1,
+                        ["boolean", ["feature-state", "hovered"], False],
+                        0.9,
                         0,
                     ],
                     "circle-stroke-color": [
