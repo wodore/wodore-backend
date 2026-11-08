@@ -1,6 +1,7 @@
 """Reviews test fixtures (openspec: reviews-mangrove)."""
 
 import typing as t
+from typing import Any
 
 import pytest
 
@@ -49,7 +50,7 @@ def _ensure_category_tree() -> None:
 
 
 @pytest.fixture
-def hut(seed_data: object):
+def hut(seed_data: object):  # noqa: ARG001  # pytest fixture dependency
     """A public active hut with OSM and refuges.info sources (stand-ins)."""
     from server.apps.huts.models import HutSource
     from server.apps.organizations.models import Organization
@@ -167,6 +168,12 @@ def _stub_refuges_provider(monkeypatch: pytest.MonkeyPatch) -> FakeRefugesClient
 def fake_refuges(_stub_refuges_provider: FakeRefugesClient) -> FakeRefugesClient:
     """The autouse provider stub, requestable when a test sets comments."""
     return _stub_refuges_provider
+
+
+@pytest.fixture(autouse=True)
+def _enable_writes(settings: Any):
+    """Enable writes for review tests (MANGROVE_WRITES_ENABLED defaults False)."""
+    settings.MANGROVE_WRITES_ENABLED = True
 
 
 @pytest.fixture(autouse=True)

@@ -63,11 +63,15 @@ def _review_image_results(slug: str, limit: int) -> list[ImageResult]:
         )
         return []
     blacklisted = set(ReviewBlacklist.objects.values_list("signature", flat=True))
+    import html as _html
+
+    from .services import _effective_subject, _image_src_allowed
+
     results: list[ImageResult] = []
     for item in response.reviews:
-        if item.payload.action is not None or item.signature in blacklisted:
+        if item.payload.action not in (None, "edit") or item.signature in blacklisted:
             continue
-        if not subject_geo_matches(item.payload.sub, subject):
+        if not subject_geo_matches(_effective_subject(item), subject):
             continue
         metadata = item.payload.metadata or {}
         author = (
@@ -86,6 +90,9 @@ def _review_image_results(slug: str, limit: int) -> list[ImageResult]:
             else Point(hut.location.x, hut.location.y)
         )
         for index, image in enumerate(item.payload.images or []):
+            if not _image_src_allowed(image.src):
+                continue  # SSRF guard: same allowlist as the list path (Opus B1)
+            safe_author = _html.escape(author) if author else "Anonymous"
             results.append(
                 ImageResult(
                     provider="mangrove",
@@ -97,7 +104,7 @@ def _review_image_results(slug: str, limit: int) -> list[ImageResult]:
                     distance_m=0,
                     license_slug=license_slug,
                     attribution=(
-                        f"{author or 'Anonymous'}, CC-BY-4.0 via "
+                        f"{safe_author}, CC-BY-4.0 via "
                         '<a href="https://mangrove.reviews" target="_blank" '
                         'rel="nofollow">Mangrove</a>'
                     ),

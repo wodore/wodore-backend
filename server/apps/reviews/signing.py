@@ -150,8 +150,15 @@ def build_action_jwt(
     target_signature: str,
     rating: int | None = None,
     opinion: str | None = None,
+    preserved_fields: dict[str, t.Any] | None = None,
 ) -> str:
-    """An ``edit``/``delete``/``report_abuse`` JWT (``urn:maresi`` sub)."""
+    """An ``edit``/``delete``/``report_abuse`` JWT (``urn:maresi`` sub).
+
+    For ``edit``, ``preserved_fields`` carries the original review's
+    metadata/images so the edit payload is COMPLETE — upstream serves
+    the edit JWT as the review, and anything omitted is permanently
+    stripped from the open dataset (Opus review B3).
+    """
     payload: dict[str, t.Any] = {
         "iat": _now_epoch(),
         "sub": f"urn:maresi:{target_signature}",
@@ -162,6 +169,11 @@ def build_action_jwt(
         payload["opinion"] = opinion
     if rating is not None and action == "edit":
         payload["rating"] = rating
+    # Edits REPLACE the review upstream: the served row IS the edit JWT.
+    if action == "edit" and preserved_fields:
+        for key, value in preserved_fields.items():
+            if key not in payload:
+                payload[key] = value
     return build_jwt(kid, private_jwk, payload)
 
 

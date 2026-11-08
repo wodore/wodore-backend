@@ -19,6 +19,14 @@ _IS_DEV_OR_TEST = os.environ.get("DJANGO_ENV") in ("development", "test")
 #: key-encryption secret, see below).
 MANGROVE_ENABLED: bool = config("MANGROVE_ENABLED", cast=bool, default=_IS_DEV_OR_TEST)
 
+#: Publishing guard (Opus review B5): there is no Mangrove sandbox —
+#: every non-stubbed write publishes permanently to the open dataset.
+#: Dev/test/staging default OFF (test suites stub the client); production
+#: flips it together with MANGROVE_ENABLED at rollout.
+MANGROVE_WRITES_ENABLED: bool = config(
+    "MANGROVE_WRITES_ENABLED", cast=bool, default=False
+)
+
 #: Original Mangrove Server base URL (OpenAPI 0.4.1 at deploy time).
 MANGROVE_API_BASE_URL: str = config(
     "MANGROVE_API_BASE_URL", default="https://api.mangrove.reviews"

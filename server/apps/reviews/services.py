@@ -28,6 +28,7 @@ from dmr import APIError
 
 from django.conf import settings
 from django.core.cache import caches
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.http import HttpRequest
 from django.utils import timezone
@@ -181,11 +182,26 @@ def caller_from_request(request: HttpRequest) -> t.Any | None:
             from django.contrib.auth import get_user_model
 
             user_model = get_user_model()
+            # Built-in provider: sub = str(user.pk) → direct lookup.
             try:
                 return user_model.objects.get(pk=sub)
-            except (user_model.DoesNotExist, ValueError):
-                logger.info("reviews_caller_unknown_sub")
-                return None
+            except (user_model.DoesNotExist, ValueError, ValidationError):
+                pass
+            # Zitadel: sub = numeric Zitadel id (not a UUID pk) → try
+            # the email claim (same identity rule as oidc_permission.py,
+            # Opus review B4).
+            email = (
+                auth.get("claims", {}).get("email")
+                if isinstance(auth.get("claims"), dict)
+                else auth.get("email")
+            )
+            if email:
+                try:
+                    return user_model.objects.get(email=email)
+                except user_model.DoesNotExist:
+                    pass
+            logger.info("reviews_caller_unknown_sub")
+            return None
     return None
 
 
@@ -303,12 +319,26 @@ def enforce_quota(user: t.Any, kind: str) -> None:
 
 
 def enforce_enabled() -> None:
-    """Kill-switch: writes refuse cleanly when disabled (design D10)."""
+    """Kill-switch: writes refuse cleanly when disabled (design D10).
+
+    Two gates: `MANGROVE_ENABLED` (feature flag) and
+    `MANGROVE_WRITES_ENABLED` (publishing guard — dev/staging default
+    OFF because there is no Mangrove sandbox; a test review would be
+    published permanently to the open dataset, Opus review B5).
+    """
     if not settings.MANGROVE_ENABLED:
         raise APIError(
             {
                 "code": ErrorCode.service_unavailable,
                 "detail": "Review writing is temporarily disabled.",
+            },
+            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+        )
+    if not settings.MANGROVE_WRITES_ENABLED:
+        raise APIError(
+            {
+                "code": ErrorCode.service_unavailable,
+                "detail": "Review writing is not enabled on this environment.",
             },
             status_code=HTTPStatus.SERVICE_UNAVAILABLE,
         )
@@ -359,11 +389,21 @@ def _invalidate_subject(subject: str) -> None:
     _cache.delete(_list_cache_key(subject))
 
 
+#: Negative-cache TTL for Mangrove upstream failures (Opus B6): a
+#: failing subject stays "down" so subsequent requests don't re-dial
+#: the timeouts. Mirror of the refuges.info ``:down`` pattern.
+_MANGROVE_NEGATIVE_TTL = 60
+
+
 def _cached_items(subject: str) -> list[ReviewItem] | None:
     """Cached upstream list for a subject; ``None`` on miss (checked!).
 
-    Upstream infra failures map to the sanitized 503 (design D6).
+    Upstream infra failures map to the sanitized 503 (design D6) and
+    negative-cache the subject for 60 s (brownout protection, Opus B6).
     """
+    down_key = f"reviews:list:{subject}:down"
+    if _cache.get(down_key):
+        raise _upstream_unavailable()  # recent failure — circuit open
     if not settings.MANGROVE_ENABLED:
         return []
     cached = _cache.get(_list_cache_key(subject))
@@ -372,6 +412,7 @@ def _cached_items(subject: str) -> list[ReviewItem] | None:
     try:
         response = client().list_reviews(subject)
     except (UpstreamUnavailable, UpstreamRejected) as exc:
+        _cache.set(down_key, True, _MANGROVE_NEGATIVE_TTL)
         raise _upstream_unavailable() from exc
     items = [item for item in response.reviews if item.payload.action in (None, "edit")]
     _cache.set(
@@ -707,12 +748,38 @@ def _refuge_reviews(
     ]
 
 
-def visible_reviews(hut: Hut, provider_cached_only: bool = False) -> list[ReviewOut]:
-    """All visible reviews of the hut (Mangrove + refuges.info), newest first."""
+def visible_reviews(
+    hut: Hut, provider_cached_only: bool = False, all_cached_only: bool = False
+) -> list[ReviewOut]:
+    """All visible reviews of the hut (Mangrove + refuges.info), newest first.
+
+    ``all_cached_only=True`` (batch path): Mangrove lists come from cache
+    only too — zero cold upstream calls on the hot path (Opus B6).
+    """
     blacklisted = set(ReviewBlacklist.objects.values_list("signature", flat=True))
     subject = subject_for_hut(hut)
-    dtos = [serialize_review(item) for item in _visible_items(subject, blacklisted)]
-    dtos.extend(_refuge_reviews(hut, blacklisted, cached_only=provider_cached_only))
+    if all_cached_only:
+        cached = _cache.get(_list_cache_key(subject))
+        if cached is None:
+            return _refuge_reviews(hut, blacklisted, cached_only=True)
+        items = [ReviewItem.model_validate(item) for item in cached]
+        items = _overlay_own_writes(subject, items, blacklisted)
+        visible = [
+            item
+            for item in items
+            if item.signature not in blacklisted
+            and _effective_signature(item) not in blacklisted
+            and subject_geo_matches(_effective_subject(item), subject)
+        ]
+        visible.sort(key=lambda item: item.payload.iat, reverse=True)
+        dtos = [serialize_review(item) for item in visible]
+    else:
+        dtos = [serialize_review(item) for item in _visible_items(subject, blacklisted)]
+    dtos.extend(
+        _refuge_reviews(
+            hut, blacklisted, cached_only=provider_cached_only or all_cached_only
+        )
+    )
     dtos.sort(key=lambda review: review.created, reverse=True)
     return dtos
 
@@ -753,8 +820,11 @@ def batch_summary(slugs: list[str]) -> BatchSummaryEnvelope:
     # Map badges must not fan out to the volunteer-run provider: cached
     # provider data only, cold huts fall back to Mangrove-only counts
     # (Opus review B6).
+    # Batch = cached-only for BOTH providers (Opus B6): no cold upstream
+    # fetches on the map-badge path. Zeroed for cold huts; a q2 job can
+    # warm them in the background.
     summaries = [
-        _summarize(hut.slug, visible_reviews(hut, provider_cached_only=True))
+        _summarize(hut.slug, visible_reviews(hut, all_cached_only=True))
         for hut in Hut.objects.filter(
             is_active=True, is_public=True, slug__in=canonical
         ).only("slug", "location", "name")
@@ -981,7 +1051,13 @@ def submit_review(
 
 
 def edit_review(user: t.Any, hut: Hut, signature: str, dto: ReviewEditIn) -> ReviewOut:
-    """Ownership + hut gate → signed ``edit`` action (design D5)."""
+    """Ownership + hut gate → signed ``edit`` action with FULL payload.
+
+    The edit JWT REPLACES the review upstream (the served row IS the
+    edit), so metadata, images, license and client_id from the original
+    must be carried through — anything omitted is permanently stripped
+    from the open dataset (Opus review B3).
+    """
     enforce_enabled()
     _refuse_foreign_target(hut, signature)
     # No premature mint (Opus N4): an edit target implies a prior submit,
@@ -991,6 +1067,45 @@ def edit_review(user: t.Any, hut: Hut, signature: str, dto: ReviewEditIn) -> Rev
         raise _not_owner()
     enforce_quota(user, "edit")
     subject = subject_for_hut(hut)
+    # Rebuild the edit payload from the ORIGINAL review's logged JWT.
+    original_row = SubmittedReview.objects.filter(
+        user=user, signature=signature, action=SubmittedReview.Action.review
+    ).first()
+    original_metadata: dict[str, t.Any] = {}
+    original_images: list[dict[str, t.Any]] = []
+    if original_row is not None:
+        original_payload = _jwt_payload(original_row.jwt)
+        if original_payload:
+            original_metadata = dict(original_payload.get("metadata") or {})
+            original_images = list(original_payload.get("images") or [])
+    # Merge DTO overrides into the original metadata.
+    if dto.nickname is not None:
+        original_metadata["nickname"] = dto.nickname
+    if dto.language is not None:
+        original_metadata["language"] = dto.language
+    if dto.experience_context is not None:
+        original_metadata["experience_context"] = dto.experience_context
+    if dto.is_personal_experience:
+        original_metadata["is_personal_experience"] = True
+    if dto.is_affiliated:
+        original_metadata["is_affiliated"] = True
+    # Re-stamp the fields Wodore always controls.
+    original_metadata["client_id"] = settings.MANGROVE_CLIENT_ID
+    original_metadata["license"] = LICENSE
+    osm_id = osm_id_for_hut(hut)
+    if osm_id:
+        original_metadata["osm_id"] = osm_id
+    elif "osm_id" in original_metadata:
+        del original_metadata["osm_id"]  # hut lost its OSM link
+    # Images: DTO replaces if explicitly provided; None keeps originals.
+    final_images: list[dict[str, t.Any]]
+    if dto.images is not None:
+        final_images = [img.model_dump(exclude_none=True) for img in dto.images]
+    else:
+        final_images = original_images
+    preserved: dict[str, t.Any] = {"metadata": original_metadata}
+    if final_images:
+        preserved["images"] = final_images
     jwt = signing.build_action_jwt(
         key.kid,
         _decrypt_key_jwk(key),
@@ -998,24 +1113,41 @@ def edit_review(user: t.Any, hut: Hut, signature: str, dto: ReviewEditIn) -> Rev
         target_signature=signature,
         rating=dto.rating,
         opinion=dto.opinion,
+        preserved_fields=preserved,
     )
     _relay(user, hut, subject, SubmittedReview.Action.edit, jwt, target=signature)
     _update_cached_item(subject, signature, dto.rating, dto.opinion)
+    if dto.images:
+        invalidate_image_provider_cache(hut)
     return ReviewOut(
         signature=signature,
         rating=dto.rating,
         opinion=dto.opinion,
-        nickname=None,
-        language=None,
-        experience_context=None,
-        is_personal_experience=False,
-        is_affiliated=False,
-        images=[],
+        nickname=_str_or_none(original_metadata.get("nickname")),
+        language=_str_or_none(original_metadata.get("language")),
+        experience_context=_str_or_none(original_metadata.get("experience_context")),
+        is_personal_experience=original_metadata.get("is_personal_experience") is True,
+        is_affiliated=original_metadata.get("is_affiliated") is True,
+        images=[
+            ReviewImageOut(src=img.get("src", ""), label=img.get("label"))
+            for img in final_images
+        ],
         created=timezone.now().isoformat(),
         source="mangrove",
         license=LICENSE,
         link=None,
     )
+
+
+def _jwt_payload(jwt: str) -> dict[str, t.Any] | None:
+    """Best-effort decode of a logged JWT's payload segment."""
+    try:
+        segment = jwt.split(".")[1]
+        padded = segment + "=" * ((4 - len(segment) % 4) % 4)
+        decoded = json.loads(base64.urlsafe_b64decode(padded))
+        return decoded if isinstance(decoded, dict) else None
+    except (ValueError, TypeError, IndexError):
+        return None
 
 
 def delete_review(user: t.Any, hut: Hut, signature: str) -> None:

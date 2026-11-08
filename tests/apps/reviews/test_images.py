@@ -198,7 +198,11 @@ class TestPhotoUpload:
 
         response = client.post(
             "/v1/reviews/images",
-            data={"files": SimpleUploadedFile("photo1.jpg", b"fake-jpeg-bytes", "image/jpeg")},
+            data={
+                "files": SimpleUploadedFile(
+                    "photo1.jpg", b"fake-jpeg-bytes", "image/jpeg"
+                )
+            },
         )
         assert response.status_code == 201, response.content
         body = response.json()
