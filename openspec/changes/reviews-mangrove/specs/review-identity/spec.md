@@ -4,11 +4,14 @@
 Each user account SHALL hold at most one Mangrove reviewer keypair (ES256
 P-256), minted lazily on the account's first review write action. The
 private key SHALL be stored encrypted at rest under a dedicated key
-(`MANGROVE_KEY_ENCRYPTION_KEY`, independent of the Django secret) and
-SHALL NOT be served by any public endpoint. The public key (`kid` PEM,
-whitespace-normalized) SHALL be stored for ownership lookups. An account
-without a key SHALL be able to read reviews and to hold an account; only
-writing mints the key.
+(`MANGROVE_KEY_ENCRYPTION_KEY`, independent of the Django secret; its
+insecure default SHALL be refused outside development/test environments)
+and SHALL NOT be served by any endpoint of this change. The public key
+(`kid` PEM, whitespace-normalized single-line form) SHALL be stored for
+ownership lookups. The user foreign keys of the reviewer models SHALL use
+`on_delete=PROTECT` so that deleting an account without the erasure path
+fails loudly instead of destroying the only key able to sign delete
+actions for the account's reviews.
 
 #### Scenario: Lazy minting
 
@@ -17,16 +20,21 @@ writing mints the key.
 
 #### Scenario: Keys never public
 
-- **WHEN** any public or third-party endpoint is called
-- **THEN** no private or public key material of any account is included in the response
+- **WHEN** any public endpoint of this change is called
+- **THEN** no private key material of any account is included in the response
+
+#### Scenario: Account deletion is guarded
+
+- **WHEN** a user with reviews is deleted without running the erasure path
+- **THEN** the database refuses the deletion (protected foreign key) rather than silently losing the signing key
 
 ### Requirement: Server-side signing
 All Mangrove JWTs for a user (reviews and actions) SHALL be signed
 server-side by the backend using the account's stored key. Users SHALL
 NEVER submit pre-signed JWTs through the API; the API accepts review
 content, not signatures. The signing service SHALL produce MaReSt-compliant
-headers (`alg: ES256`, `typ: JWT`, `kid` PEM, `jwk` JSON string with
-`key_ops: ["verify"]`) and claims.
+headers (`alg: ES256`, `typ: JWT`, single-line `kid` PEM, `jwk` JSON
+string with `key_ops: ["verify"]`) and claims.
 
 #### Scenario: Content in, JWT out
 
@@ -40,10 +48,12 @@ headers (`alg: ES256`, `typ: JWT`, `kid` PEM, `jwk` JSON string with
 
 ### Requirement: Ownership enforcement before signing
 Edit and delete actions SHALL be signed only after the backend verifies
-locally that the target review's key id equals the caller's current
-reviewer key; otherwise the action SHALL be refused (403) without signing
-or relaying. Report-abuse actions carry no ownership requirement (signed
-with the reporter's key).
+that the target review belongs to the caller: its signature found in the
+submission log under the caller's user with the caller's current key, or
+— for targets not in the log — the upstream review record whose `kid`
+equals the caller's (whitespace-insensitive comparison). Otherwise the
+action SHALL be refused (403) without signing or relaying. Report-abuse
+actions carry no ownership requirement (signed with the reporter's key).
 
 #### Scenario: Ownership check precedes relay
 
@@ -54,40 +64,28 @@ with the reporter's key).
 The reviewer profile SHALL keep a display `nickname` used as review
 metadata, which SHALL default to a minted non-identifying name. The
 system SHALL NOT derive nicknames or any review metadata from account
-email, real name, or other account PII, and SHALL reject submitted
-metadata that would carry such data beyond the allowed standard fields.
+email, real name, or other account PII, and the accepted metadata subset
+carries no such fields. A per-review `nickname` in the request payload
+SHALL override the profile default.
 
 #### Scenario: Minted default nickname
 
 - **WHEN** a user mints a reviewer key without choosing a nickname
 - **THEN** their reviews carry a minted nickname unrelated to their account identity data
 
-### Requirement: Key import and export (opt-in)
-The system SHALL provide authenticated endpoints to export the account's
-private key as a JWK string (compatible with MapComplete and
-mangrove.reviews import formats) and to import an existing JWK, re-deriving
-its `kid` and rebinding the account to it (one active key per account).
-Both actions SHALL be explicitly opt-in by the owner, and export SHALL
-require re-authentication. (Delivered in a later implementation phase of
-this change; the data model SHALL support it from the start.)
+#### Scenario: Per-review override
 
-#### Scenario: Export requires ownership and re-auth
-
-- **WHEN** an authenticated owner requests the identity export without a fresh re-authentication
-- **THEN** the endpoint refuses; with fresh re-authentication it returns the JWK string
-
-#### Scenario: Import rebinds authorship
-
-- **WHEN** the owner imports a JWK that already authored reviews on other subjects
-- **THEN** subsequent edit/delete requests for those reviews pass the ownership check under the new binding
+- **WHEN** a submission carries an explicit `nickname`
+- **THEN** that review's metadata uses it; the profile default is unchanged
 
 ### Requirement: Erasure path
-The system SHALL provide a management command (and account-deletion hook)
-that, for a given user, signs and relays `delete` actions for every
-review authorable by the account (submission log plus upstream kid
-listing, covering imported keys), then destroys the reviewer key, profile
-and submission-log rows. Erasure SHALL NOT delete reviews authored by
-other accounts.
+The system SHALL provide a management command that, for a given user,
+signs and relays `delete` actions for every review authorable by the
+account (from the submission log), treating upstream refusals for
+already-deleted reviews as success, and then destroys the reviewer key,
+profile and submission-log rows (the one documented exception to the
+log's append-only rule). Erasure SHALL NOT delete or hide reviews
+authored by other accounts.
 
 #### Scenario: Full erasure
 
@@ -98,3 +96,8 @@ other accounts.
 
 - **WHEN** the erasure command runs
 - **THEN** no review authored by another account is deleted or hidden beyond existing blacklist state
+
+#### Scenario: Idempotent erasure
+
+- **WHEN** a delete action is refused upstream because the review is already deleted
+- **THEN** erasure continues and treats that target as erased

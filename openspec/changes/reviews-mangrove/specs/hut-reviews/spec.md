@@ -3,16 +3,16 @@
 ### Requirement: Public review list per hut
 The system SHALL serve `GET /v1/huts/{slug}/reviews` returning the reviews
 of the hut's Mangrove subject in the generic collection envelope
-(`{"data": […], "count": N}`), anonymously readable, newest-first
-(action-edited reviews appearing with their latest edit), paginated, and
-accepting `lang` like other hut endpoints. Huts that are not public or not
+(`{"data": […], "count": N}`), anonymously readable, newest-first (upstream
+`latest_edits_only` already collapses edits), locally paginated
+(`limit` ≤100 default 20, `offset`). Huts that are not public or not
 active SHALL answer 404. Huts whose subject has no reviews SHALL return an
 empty collection, not an error. Every listed review SHALL carry at least
 its `rating` (if present), `opinion` (if present), `nickname` (if present),
-`language` (if present), `images`, flags (`is_affiliated`,
-`is_personal_experience`), issuance time and its Mangrove `signature`, plus
-the envelope `license` (`CC-BY-4.0`) and attribution link to the Mangrove
-dataset.
+`language` (if present), images (allowlist-filtered), flags
+(`is_affiliated`, `is_personal_experience`), issuance time and its
+`signature`; the envelope SHALL carry `license: "CC-BY-4.0"` and an
+attribution link to the Mangrove dataset.
 
 #### Scenario: Anonymous read works
 
@@ -34,87 +34,103 @@ dataset.
 - **WHEN** a review's signature is on the local blacklist
 - **THEN** it is absent from the list and the count reflects the exclusion
 
-### Requirement: Review summaries and map-badge batch aggregates
-The system SHALL serve `GET /v1/huts/{slug}/reviews/summary` (per-hut
-aggregate: review count, mean rating, positives when upstream provides
-them) and a batch summary endpoint accepting a bounded list of hut slugs
-and returning one aggregate per hut (fed by the upstream batch/subject
-aggregate calls). Zero-review huts SHALL return zeroed aggregates. Both
-SHALL be anonymously readable and cacheable like the review list.
+#### Scenario: Foreign subjects do not leak in
+
+- **WHEN** upstream returns (e.g. via an equivalence link) a review whose subject does not match the hut's subject under the geo rule — normalized `q` equality and coordinates within the sum of both `u` radii
+- **THEN** that review is dropped from the listing
+
+### Requirement: Locally computed summaries and map-badge batches
+The system SHALL serve `GET /v1/huts/{slug}/reviews/summary` and
+`GET /v1/reviews/summary?slugs=…` (≤50 slugs, deduplicated and
+canonicalized before cache-keying), both anonymously readable and
+cacheable like the review list. Aggregates SHALL be computed locally from
+the cached, blacklist-filtered review list: `count` (listed reviews),
+`rating_count` and `rating_mean` (over rated reviews only), 
+`positive_count` (rating > 50), `opinion_count`. Zero-review huts SHALL
+return zeroed aggregates; oversized slug lists SHALL answer 400 with the
+standard validation error.
 
 #### Scenario: Single-hut summary
 
-- **WHEN** a public hut's subject has 3 reviews with ratings 25/50/100 upstream
-- **THEN** the summary reports count 3 and the mean of the ratings
+- **WHEN** a public hut's visible reviews carry ratings 25/50/100 and one unrated opinion
+- **THEN** the summary reports count 4, rating_count 3, rating_mean 58.3, positive_count 1, opinion_count 1
 
 #### Scenario: Batch for map badges
 
-- **WHEN** the batch summary endpoint receives a list of hut slugs within its bound
-- **THEN** it returns one aggregate per requested slug (zeroed for huts without reviews) and rejects oversized lists with a validation error
+- **WHEN** the batch endpoint receives 30 slugs within its bound
+- **THEN** it returns one aggregate per slug (zeroed for huts without reviews), reusing the per-subject cached lists
+
+#### Scenario: Oversized batch refused
+
+- **WHEN** more than 50 slugs are requested
+- **THEN** the response is 400 with the standard validation error code
 
 ### Requirement: Authenticated review submission
-The system SHALL serve `POST /v1/huts/{slug}/reviews` requiring
-`AuthBearer` authentication. The request body SHALL accept `rating`
-(integer 0–100) and/or `opinion` (≤1000 chars), optional `images`
-(≤5 items of `{src: https URL, label?: ≤50 chars}`) and an optional
-metadata subset (`nickname`, `language`, `experience_context`,
-`is_personal_experience`, `is_affiliated`). The backend SHALL validate the
-payload against the Mangrove Review Standard, reject unknown metadata keys
-(`400` with `review_invalid_*` error codes), enrich it server-side
-(`client_id`, `license: CC-BY-4.0`, `osm_id` from the hut's OSM linkage
-when present, language defaulting from the request), sign it with the
-account's reviewer key and relay it upstream. A successful submission
-SHALL return the created review including its `signature`, invalidate the
-hut's cached list/summary, and be recorded in the local submission log.
+The system SHALL serve `POST /v1/huts/{slug}/reviews/submit` requiring
+authentication. The request body SHALL accept `rating` (integer 0–100)
+and/or `opinion` (≤1000 code points), optional `images` (≤5 items of
+`{src: https URL, label?: ≤50 chars}`) and an optional metadata subset
+(`nickname`, `language`, `experience_context`,
+`is_personal_experience: true`, `is_affiliated: true`) — unknown keys are
+rejected by the typed DTO with the standard validation error. The backend
+SHALL enrich server-side (`client_id`, `license: CC-BY-4.0`, `osm_id`
+from the hut's OSM linkage when present, nickname/language defaults),
+sign the JWT with the account's reviewer key, relay it upstream, and
+return 201 with the created review including its derived `signature`
+(the JWT's third segment). A successful submission SHALL invalidate the
+hut's cached list/summary and be recorded in the local submission log.
 
 #### Scenario: Successful submission
 
 - **WHEN** an authenticated user posts `{rating: 75, opinion: "…"}` for a public hut and the upstream accepts the signed JWT
-- **THEN** the response is 201 with the review (including its `signature`), and a subsequent list request reflects the new review without waiting for cache TTL
+- **THEN** the response is 201 with the review (including its `signature`), and a subsequent origin or authenticated list request reflects the new review immediately
 
 #### Scenario: Anonymous submission refused
 
-- **WHEN** an unauthenticated client posts a review
+- **WHEN** an unauthenticated client submits a review
 - **THEN** the response is 401 with the standard `not_authenticated` error body
 
 #### Scenario: Out-of-range rating
 
-- **WHEN** the body carries `rating: 120` or an unknown metadata key
-- **THEN** the response is 400 with a `review_invalid_*` error code and nothing is signed or relayed
+- **WHEN** the body carries `rating: 120` or an unknown key
+- **THEN** the response is 400 with the standard validation error and nothing is signed or relayed
 
 #### Scenario: Upstream rejection surfaces sanitized
 
 - **WHEN** the upstream server rejects the signed JWT (4xx)
-- **THEN** the response carries a review submission error code with a sanitized detail; the raw upstream body is logged server-side only
+- **THEN** the response is a sanitized error without the raw upstream body; the raw body is logged server-side only
 
 ### Requirement: Per-user write quota
-The system SHALL enforce a configurable per-user rolling-window quota on
-review write actions (submissions, edits, deletes — configurable per
-action class, defaults set by settings). Exceeding the quota SHALL answer
-429 with error code `review_quota_exceeded` and the reset time, without
-signing or relaying anything. Authenticated requests below the quota SHALL
-be unaffected by any anonymous-user throttles beyond the ordinary rate
-throttles.
+The system SHALL enforce a rolling 24-hour per-user quota counted from
+the submission-log rows: submissions (default 5/day) and edit+delete
+combined (default 20/day), both configurable. Exceeding the quota SHALL
+answer 429 with error code `review_quota_exceeded` (registered in the
+shared RFC 9457 registry), a `Retry-After` header and the reset time in
+the body, without signing or relaying anything. Abuse reports are not
+quota-counted; they carry an ordinary rate throttle.
 
 #### Scenario: Quota exhaustion
 
-- **WHEN** a user submits more reviews within the window than the configured submission quota
-- **THEN** the next submission answers 429 with `review_quota_exceeded` and a reset time
+- **WHEN** a user submits more reviews within 24 hours than the configured submission quota
+- **THEN** the next submission answers 429 with `review_quota_exceeded`, a `Retry-After` header and a reset time in the body
 
 #### Scenario: Window rolls over
 
-- **WHEN** the window passes after exhaustion
+- **WHEN** 24 hours pass after exhaustion
 - **THEN** the user can submit again without any manual intervention
 
-### Requirement: Review edit with signed action
-The system SHALL serve `PATCH /v1/huts/{slug}/reviews/{signature}`
-requiring authentication. It SHALL accept updated `rating` and/or
-`opinion` (same validation as submission), verify locally that the target
-review's key id belongs to the caller's account, then sign an
-`action: "edit"` JWT against `urn:maresi:{signature}` and relay it
-upstream. A successful edit SHALL invalidate the hut's caches and return
-the updated review state. Non-owned targets SHALL answer 403 without
-signing.
+### Requirement: Signed edit action
+The system SHALL serve `POST /v1/huts/{slug}/reviews/{signature}/edit`
+requiring authentication and local ownership of the target (its signature
+in the submission log under the caller's user and key, or — for keys not
+in the log — the upstream review record whose `kid` equals the caller's,
+compared whitespace-insensitively). It SHALL accept updated `rating`
+and/or `opinion` (same validation as submission), sign an
+`action: "edit"` JWT against `urn:maresi:{signature}` and relay it. A
+successful edit SHALL invalidate the hut's caches and return the updated
+review state. Targets that belong to a different subject than the hut in
+the path SHALL answer 404; non-owned targets SHALL answer 403 with
+nothing signed.
 
 #### Scenario: Owner edits
 
@@ -126,47 +142,67 @@ signing.
 - **WHEN** the target review was signed by a different key than the caller's
 - **THEN** the response is 403, and no JWT is signed or relayed
 
-### Requirement: Review delete with signed action
-The system SHALL serve `DELETE /v1/huts/{slug}/reviews/{signature}`
-requiring authentication and local ownership (same rule as edit), then
+#### Scenario: Foreign target hidden
+
+- **WHEN** the signature in the path does not belong to the hut's subject
+- **THEN** the response is 404, and no JWT is signed or relayed
+
+### Requirement: Signed delete action
+The system SHALL serve `POST /v1/huts/{slug}/reviews/{signature}/delete`
+requiring authentication and local ownership (same rules as edit), then
 sign an `action: "delete"` JWT against `urn:maresi:{signature}` and relay
-it. Success SHALL return 204, remove the review from the local submission
-log's active set, and invalidate the hut's caches.
+it, treating an upstream refusal for an already-deleted target as
+success (idempotent). Success SHALL return 204, record a `delete` action
+row in the submission log (the log is append-only — deletion never
+mutates existing rows), and invalidate the hut's caches.
 
 #### Scenario: Owner deletes
 
 - **WHEN** the owner deletes their review and the upstream accepts the action
-- **THEN** the endpoint answers 204 and the review disappears from Wodore-served lists once the upstream marks it deleted
+- **THEN** the endpoint answers 204, a delete action row is appended to the log, and the review disappears from Wodore-served lists
+
+#### Scenario: Delete is idempotent
+
+- **WHEN** the upstream refuses the delete because the review is already deleted
+- **THEN** the endpoint still answers 204 and the local caches are invalidated
 
 ### Requirement: Abuse report relay
-The system SHALL serve `POST /v1/huts/{slug}/reviews/{signature}/report`
-requiring authentication with a reason text (`opinion` ≤1000), sign an
-`action: "report_abuse"` JWT (no rating) with the *reporter's* key against
-`urn:maresi:{signature}`, and relay it upstream. Reporting SHALL NOT
-require ownership of the target review.
+The system SHALL serve
+`POST /v1/huts/{slug}/reviews/{signature}/report` requiring
+authentication and a required reason text (`opinion` ≤1000), sign an
+`action: "report_abuse"` JWT (no rating) with the *reporter's* key
+against `urn:maresi:{signature}`, and relay it upstream. Reporting SHALL
+NOT require ownership of the target review; the target MUST belong to
+the hut's subject (404 otherwise). The endpoint carries an ordinary rate
+throttle.
 
 #### Scenario: Any user reports
 
 - **WHEN** any authenticated user reports a foreign review with a reason
 - **THEN** the signed `report_abuse` action is relayed and the endpoint answers 2xx
 
+#### Scenario: Reason is required
+
+- **WHEN** a report is submitted without an opinion text
+- **THEN** the response is 400 with the standard validation error
+
 ### Requirement: My reviews listing
-The system SHALL serve `GET /v1/me/reviews` requiring authentication,
-returning the reviews authored by the caller's reviewer key (upstream
-kid-listing), each annotated with the Wodore hut slug resolved from its
-subject URI and the review's state (deleted reviews excluded, edited
-reviews shown with their latest edit). Subjects that do not resolve to a
-Wodore hut (e.g. reviews imported with an external identity) SHALL be
-listed with the hut annotation absent rather than dropped.
+The system SHALL serve `GET /v1/my/reviews` on the user-scoped `/v1/my/`
+controller base (bearer/session authenticated, `private, no-store`,
+never a CDN candidate), returning the reviews authored by the caller's
+reviewer key (upstream `kid` listing), each annotated with the Wodore
+hut slug resolved from its subject URI when it resolves to a public hut
+(annotation absent otherwise). Deleted reviews SHALL be excluded and
+edited reviews shown with their latest edit.
 
 #### Scenario: Own reviews with hut context
 
 - **WHEN** the caller has submitted reviews on two huts
 - **THEN** the listing contains both reviews, each carrying the respective hut slug
 
-#### Scenario: Imported identity reviews appear
+#### Scenario: Foreign-subject reviews appear unannotated
 
-- **WHEN** the caller imported a key that had written reviews on non-Wodore subjects
+- **WHEN** the caller's key has written reviews on non-Wodore subjects (e.g. after a future key import)
 - **THEN** those reviews are listed without a hut slug annotation
 
 ### Requirement: Signature blacklist moderation
@@ -181,20 +217,21 @@ mutates or deletes upstream data.
 - **WHEN** staff blacklists a review's signature via the admin
 - **THEN** list and aggregate responses exclude it from that moment on, upstream data unchanged
 
-### Requirement: Caching, CDN and versioning behavior
-Review read endpoints SHALL set cache headers (`Cache-Control` with
-bounded max-age) and the CDN tag `api:reviews`; write endpoints SHALL be
-`no-store`. Successful local writes SHALL invalidate the affected hut's
-list, summary and batch-aggregate cache entries (write-through), and purge
-the CDN tag. All review endpoints SHALL pass through the API versioning
-middleware (additive endpoints — no version transforms) and the shared
-RFC 9457 error contract. Hut detail endpoints and their ETags SHALL NOT
-change as a function of review state.
+### Requirement: Caching and versioning behavior
+Review read endpoints SHALL set bounded public cache headers (short
+max-age); write endpoints and the my-reviews endpoint SHALL be
+uncached/private. Successful local writes SHALL invalidate the affected
+hut's local list and summary cache entries (write-through). All review
+endpoints SHALL pass through the API versioning middleware (additive
+endpoints — no version transforms) and the shared RFC 9457 error
+contract. Hut detail endpoints and their ETags SHALL NOT change as a
+function of review state. Anonymous reads SHALL be rate-throttled and
+the batch endpoint bounded (≤50 slugs).
 
 #### Scenario: Write-through invalidation
 
-- **WHEN** a review is submitted for a hut whose list response is cached
-- **THEN** the next list request re-fetches from upstream rather than serving the pre-write cache entry
+- **WHEN** a review is submitted for a hut whose list response is cached locally
+- **THEN** the next origin list request re-fetches from upstream rather than serving the pre-write cache entry
 
 #### Scenario: Hut ETags stay review-blind
 
@@ -204,4 +241,4 @@ change as a function of review state.
 #### Scenario: Upstream failure degrades gracefully
 
 - **WHEN** the upstream API is unreachable or slow beyond the configured timeouts
-- **THEN** read endpoints answer 503 `upstream_unavailable` (or serve within-TTL cache where applicable) — never a 5xx with an unsanitized upstream body or stack trace
+- **THEN** read endpoints answer 503 with the registered `service_unavailable` error body while within-TTL cache still serves — never a 5xx with an unsanitized upstream body or stack trace
