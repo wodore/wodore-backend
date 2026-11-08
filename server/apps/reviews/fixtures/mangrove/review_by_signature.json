@@ -1,0 +1,26 @@
+{
+ "status": 200,
+ "body": {
+  "signature": "0pZ-DYF0Fvic2-Q1y5LavkTzH5W_c8LNpqOi_EP5uz2uY9mbRaodJDc0Odt3pvzb4Fqjxhv3D5baYLmhgVTNpg",
+  "jwt": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Ii0tLS0tQkVHSU4gUFVCTElDIEtFWS0tLS0tTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FFYVlzNWRtSVVsT2NKRVg3OTdYUGIweFY4clpKL0N4V0J0OWNFY1JvcVJoaGtzMzZjQlNlLzRJK2dMTGtCWTFpWHI4dVc2NlVYdGpoZ3F0YlpyMytYMFE9PS0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLSIsImp3ayI6IntcImNydlwiOlwiUC0yNTZcIixcImt0eVwiOlwiRUNcIixcInhcIjpcImFZczVkbUlVbE9jSkVYNzk3WFBiMHhWOHJaSl9DeFdCdDljRWNSb3FSaGdcIixcInlcIjpcIlpMTi1uQVVudi1DUG9DeTVBV05ZbDZfTGx1dWxGN1k0WUtyVzJhOV9sOUVcIixcImtleV9vcHNcIjpbXCJ2ZXJpZnlcIl0sXCJleHRcIjp0cnVlfSJ9.eyJpYXQiOjE3OTQwOTg5MzYsInN1YiI6ImdlbzowLDAuMDAwMT9xPVRlc3QmdT0xMDAiLCJyYXRpbmciOjQyLCJtZXRhZGF0YSI6eyJuaWNrbmFtZSI6IndvZG9yZS1zcGlrZSIsImNsaWVudF9pZCI6Imh0dHBzOi8vd29kb3JlLmNvbSJ9fQ.0pZ-DYF0Fvic2-Q1y5LavkTzH5W_c8LNpqOi_EP5uz2uY9mbRaodJDc0Odt3pvzb4Fqjxhv3D5baYLmhgVTNpg",
+  "kid": "-----BEGIN PUBLIC KEY-----MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEaYs5dmIUlOcJEX797XPb0xV8rZJ/CxWBt9cEcRoqRhhks36cBSe/4I+gLLkBY1iXr8uW66UXtjhgqtbZr3+X0Q==-----END PUBLIC KEY-----",
+  "payload": {
+   "iat": 1794098936,
+   "sub": "geo:0,0.0001?q=Test&u=100",
+   "rating": 42,
+   "metadata": {
+    "client_id": "https://wodore.com",
+    "nickname": "wodore-spike"
+   }
+  },
+  "scheme": "geo",
+  "geo": {
+   "coordinates": {
+    "lat": 0.0,
+    "lon": 0.0001
+   },
+   "uncertainty": 100
+  }
+ },
+ "path_signature": "0pZ-DYF0Fvic2-Q1y5LavkTzH5W_c8LNpqOi_EP5uz2uY9mbRaodJDc0Odt3pvzb4Fqjxhv3D5baYLmhgVTNpg"
+}

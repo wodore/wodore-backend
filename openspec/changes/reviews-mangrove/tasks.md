@@ -26,10 +26,10 @@ are decided but sequenced after the first release cut.
 
 ## 1. App scaffold, settings, models
 
-- [ ] 1.1 Create `server/apps/reviews` app (apps.py, `__init__.py`), add to
+- [x] 1.1 Create `server/apps/reviews` app (apps.py, `__init__.py`), add to
       `INSTALLED_APPS`, add the Unfold tab (models: ReviewerKey,
       ReviewerProfile, SubmittedReview, ReviewBlacklist)
-- [ ] 1.2 Settings component `server/settings/components/reviews.py` +
+- [x] 1.2 Settings component `server/settings/components/reviews.py` +
       include in the split-settings list: `MANGROVE_API_BASE_URL`,
       `MANGROVE_ENABLED` kill-switch (false → writes 503
       `service_unavailable`, reads serve empty collections),
@@ -40,7 +40,7 @@ are decided but sequenced after the first release cut.
       (read/batch burst+daily), `MANGROVE_KEY_ENCRYPTION_KEY` (dev default
       **hard-refused outside `DJANGO_ENV=development|test`**, mirroring
       `LOCAL_AUTH_ENABLED`)
-- [ ] 1.3 Models + migration: `ReviewerKey` (1:1 User `on_delete=PROTECT`,
+- [x] 1.3 Models + migration: `ReviewerKey` (1:1 User `on_delete=PROTECT`,
       `kid` single-line PEM whitespace-normalized + unique index, private
       JWK encrypted via Fernet/MultiFernet under the dedicated key,
       minted_at), `ReviewerProfile` (1:1 User PROTECT, minted
@@ -50,85 +50,85 @@ are decided but sequenced after the first release cut.
       pending/accepted/failed), `ReviewBlacklist` (signature + reason +
       created_by + unique index) — `TimeStampedModel`/`BaseManager`
       conventions, Unfold admin for all four
-- [ ] 1.4 Tests: model constraints (one key per user, unique signatures,
+- [x] 1.4 Tests: model constraints (one key per user, unique signatures,
       blacklist dedup, PROTECT refuses user deletion while reviews exist),
       encryption round-trip (value at rest ≠ plaintext), nickname minting
       never derives from account fields
-- [ ] 1.5 Register `review_quota_exceeded` in
+- [x] 1.5 Register `review_quota_exceeded` in
       `server/apps/api/error_codes.py` (`ErrorCode` + `PROBLEM_TITLES`);
       update the codes-completeness test
 
 ## 2. MangroveClient: subject recipe + read calls
 
-- [ ] 2.1 `client.py`: `subject_for_hut(hut) -> str` pure function
+- [x] 2.1 `client.py`: `subject_for_hut(hut) -> str` pure function
       (`geo:{lat:.6f},{lon:.6f}?q={urlencode(slug)}&u={settings…}`,
       WGS84 → 6-decimal formatting) + `subject_geo_matches(subject,
       hut_subject)` normalized-q + radius-sum predicate (the D6 filter);
       tests pin byte-stability, rename/translation invariance, and the
       normalized-uniqueness invariant (two huts within 2u whose slugs
       normalize equal → reported)
-- [ ] 2.2 `MangroveClient` (httpx): base URL/timeout from settings;
+- [x] 2.2 `MangroveClient` (httpx): base URL/timeout from settings;
       methods `list_reviews(sub)`, `review(signature)`,
       `issuer(pem)`, `submit(jwt)` (`POST /submit`, text/plain body);
       connect/read timeouts; GET-only bounded retries with backoff;
       writes fail fast (never retried); one structlog event per call
       (endpoint, subject, status, duration — never opinion/nickname),
       Sentry span `mangrove.request`
-- [ ] 2.3 Typed response models (pydantic) for the 0.4.1 endpoints:
+- [x] 2.3 Typed response models (pydantic) for the 0.4.1 endpoints:
       review list item (`did?`, `geo?`, `jwt`, `kid`, `original_sub?`,
       `payload`, `scheme?`, `signature`), issuer stats, batch/subject
       aggregates — defensive parsing (unknown fields ignored; missing
       essential fields → `UpstreamUnavailable`)
-- [ ] 2.4 Contract fixtures recorded under
+- [x] 2.4 Contract fixtures recorded under
       `server/apps/reviews/fixtures/mangrove/` (reserved test subjects
       ONLY — never real subjects; requires §3 signing for the submit
       fixture) + contract tests replaying them through the client; error
       translation test (timeout/5xx/garbage body → `UpstreamUnavailable`,
       raw body only in logs); dev-only recapture helper documented (not
       CI)
-- [ ] 2.5 Tests with `respx` (add as dev dependency): retry budget,
+- [x] 2.5 Tests with `respx` (add as dev dependency): retry budget,
       no-retry-on-submit, timeout mapping, logging assertions (no review
       PII in events)
 
 ## 3. Identity: signing service + key custody
 
-- [ ] 3.1 `signing.py` on `cryptography` (P-256 ECDSA/SHA-256, DER→raw
+- [x] 3.1 `signing.py` on `cryptography` (P-256 ECDSA/SHA-256, DER→raw
       r‖s conversion — no JOSE dependency): header `{alg, typ, kid:
       <single-line pem>, jwk: <JSON string, key_ops ["verify"]>}`;
       builders: review claims, `edit`/`delete`/`report_abuse` actions
       (`sub: urn:maresi:{sig}`), generic `equivalence` builder (not
       exposed via API); derived signature = JWT third segment
-- [ ] 3.2 Key service: lazy mint on first write, encrypted persistence,
+- [x] 3.2 Key service: lazy mint on first write, encrypted persistence,
       `kid` normalization, lookup by kid; caller resolution helper
       (session user or `request.auth["sub"]` → User)
-- [ ] 3.3 Tests: MaReSt compliance over generated JWTs (decode + verify
+- [x] 3.3 Tests: MaReSt compliance over generated JWTs (decode + verify
       against embedded kid/jwk; rating 0–100, opinion ≤1000 code points,
       images ≤5 × `{src https, label ≤50}`, metadata allowlist, flags
       only-when-true), lazy-mint idempotency, ownership checks
 
 ## 4. Read endpoints
 
-- [ ] 4.1 `api.py` read controllers: `GET /v1/huts/{slug}/reviews`
+- [x] 4.1 `api.py` read controllers: `GET /v1/huts/{slug}/reviews`
       (anonymous, envelope `data`/`count`, newest-first, local pagination
       `limit`≤100/`offset`; 404 for non-public/inactive huts; empty
       collection for unknown subjects; blacklist + geo-match filter;
       envelope `license: CC-BY-4.0` + attribution; image allowlist at
       serving) — one operation per path, name= == operation_id per
       E003/E004
-- [ ] 4.2 `GET /v1/huts/{slug}/reviews/summary` + batch
+- [x] 4.2 `GET /v1/huts/{slug}/reviews/summary` + batch
       `GET /v1/reviews/summary?slugs=…` (≤50, sorted/dedup,
       canonicalized cache key; aggregates computed locally from the
       cached filtered list: count, rating_count, rating_mean,
       positive_count, opinion_count; oversized → 400)
-- [ ] 4.3 Caching: Django-cache list keyed by subject, summary keyed by
+- [x] 4.3 Caching: Django-cache list keyed by subject, summary keyed by
       subject; short public `Cache-Control` on reads (120 s) via
       `cache_headers`; dmr rate throttles on reads + batch; write-through
       invalidation helper (list + summary keys)
-- [ ] 4.4 Wire the routers in `server/apps/api/api_v1.py`
+- [x] 4.4 Wire the routers in `server/apps/api/api_v1.py`
       (`Router("huts/", reviews_api.hut_paths)`,
       `Router("reviews/", reviews_api.paths)`, `my/` include for
       my-reviews)
-- [ ] 4.5 Contract tests per endpoint: envelope shape, RFC 9457 error
+- [x] 4.5 Contract tests per endpoint: envelope shape, RFC 9457 error
       bodies, upstream-failure → 503 `service_unavailable` (mocked
       client), blacklist exclusion from list/count/aggregates, geo-match
       filter, hut ETag regression (hut detail endpoints unchanged),
@@ -136,7 +136,7 @@ are decided but sequenced after the first release cut.
 
 ## 5. Write endpoints: submit, edit, delete, report
 
-- [ ] 5.1 `POST /v1/huts/{slug}/reviews/submit` (`AuthBearer`): pydantic
+- [x] 5.1 `POST /v1/huts/{slug}/reviews/submit` (`AuthBearer`): pydantic
       DTO `extra="forbid"` (validation → standard `validation_error`),
       enrichment (`client_id`, `license: CC-BY-4.0`, `osm_id` from
       existing HutSource linkage when present, nickname/language
@@ -144,60 +144,60 @@ are decided but sequenced after the first release cut.
       created review incl. derived signature, write-through
       invalidation; OpenAPI description states Mangrove ToS/CC-BY-4.0
       publication
-- [ ] 5.2 `POST …/{signature}/edit` and `POST …/{signature}/delete`:
+- [x] 5.2 `POST …/{signature}/edit` and `POST …/{signature}/delete`:
       target-belongs-to-hut check (sub/original_sub vs subject → 404),
       ownership check (log first, upstream `GET /review` kid fallback)
       before signing, relay, cache invalidation; delete idempotent
       (upstream refusal for already-deleted = success); 403 path signs
       nothing
-- [ ] 5.3 `POST …/{signature}/report` (report_abuse, no ownership,
+- [x] 5.3 `POST …/{signature}/report` (report_abuse, no ownership,
       required reason ≤1000 as opinion, no rating, rate-throttled)
-- [ ] 5.4 `osm_id` resolution: `HutSource.objects.filter(hut=hut,
+- [x] 5.4 `osm_id` resolution: `HutSource.objects.filter(hut=hut,
       organization__slug="osm", is_current=True)` most recent →
       `metadata.osm_id = "{osm_type}/{source_id}"`; validate `osm_type`
       ∈ {node, way, relation} and length ≤50; NEVER append
       `HutSource.version` (internal revision counter, not an OSM
       version); tests for linked/unlinked paths
-- [ ] 5.5 Quota service: rolling 24 h from `SubmittedReview` rows
+- [x] 5.5 Quota service: rolling 24 h from `SubmittedReview` rows
       (submit class; edit+delete combined class), 429
       `review_quota_exceeded` + `Retry-After` + reset in body; tests for
       window rollover and class separation
-- [ ] 5.6 `GET /v1/my/reviews` on `MyApiController`: upstream kid-listing,
+- [x] 5.6 `GET /v1/my/reviews` on `MyApiController`: upstream kid-listing,
       subject→hut slug resolution (annotation absent for non-Wodore
       subjects), latest-edit collapse, deleted excluded
-- [ ] 5.7 Contract tests per write endpoint (auth 401s, validation 400s,
+- [x] 5.7 Contract tests per write endpoint (auth 401s, validation 400s,
       quota 429s, ownership 403s, wrong-hut 404s, upstream rejection
       sanitized, relay payload assertions against mocked client)
 
 ## 6. Moderation + admin
 
-- [ ] 6.1 `ReviewBlacklist` admin: list/filter/actions (bulk blacklist by
+- [x] 6.1 `ReviewBlacklist` admin: list/filter/actions (bulk blacklist by
       pasted signature), reason audit; admin action tests
-- [ ] 6.2 `SubmittedReview` admin (read-only, filter by user/hut/action/
+- [x] 6.2 `SubmittedReview` admin (read-only, filter by user/hut/action/
       state, export selected rows as JSONL — the archival/export path)
 
 ## 7. Erasure (v1)
 
-- [ ] 7.1 `reviews_erase_user` management command: sign+relay `delete`
+- [x] 7.1 `reviews_erase_user` management command: sign+relay `delete`
       for every authorable review from the log (idempotent — refusals for
       already-deleted = success), then destroy key/profile/log rows;
       `--export` mode dumps the log first
-- [ ] 7.2 Tests: full erasure, other users untouched, idempotency,
+- [x] 7.2 Tests: full erasure, other users untouched, idempotency,
       PROTECT guard (user deletion without erasure fails)
 
 ## 8. Docs, release plumbing
 
-- [ ] 8.1 Verify no `Api-Version` bump: endpoints additive — do NOT
+- [x] 8.1 Verify no `Api-Version` bump: endpoints additive — do NOT
       commit an `api_snapshot` (additive changes need none); verify via
       the OpenAPI diff (`dmr_export_schema`) that only new operations
       appear; eventual PR labels: `type:*` + `api:added`
-- [ ] 8.2 AGENTS.md: reviews section (app layout, subject recipe, key
+- [x] 8.2 AGENTS.md: reviews section (app layout, subject recipe, key
       custody + rotation runbook, quota/blacklist pointers, kill-switch
       behavior); `docs/` note referencing the openspec change
 - [ ] 8.3 Infisical: register the new env vars (staging + prod), document
       `MANGROVE_KEY_ENCRYPTION_KEY` rotation (MultiFernet
       add-new-keep-old) in the runbook
-- [ ] 8.4 Full suite green: `inv tests`, `inv check.types` (pyrefly
+- [x] 8.4 Full suite green: `inv tests`, `inv check.types` (pyrefly
       strict — full annotations, no baseline), `inv lint`
 
 ## 9. Pre-release verification (manual, staging)

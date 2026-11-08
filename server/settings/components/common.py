@@ -163,6 +163,7 @@ INSTALLED_APPS: tuple[str, ...] = (
     "server.apps.external_geonames",
     "server.apps.geometries",
     "server.apps.external_links",
+    "server.apps.reviews",
     "server.apps.api",
     "server.apps.accounts",  # custom user model (email identity) — must always be installed
     # Extension:
