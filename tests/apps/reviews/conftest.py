@@ -29,20 +29,31 @@ def _clear_caches():
 
 @pytest.fixture
 def hut():
-    """A public active hut with an OSM source (import-pipeline stand-in)."""
+    """A public active hut with OSM and refuges.info sources (stand-ins)."""
     from server.apps.huts.models import HutSource
     from server.apps.organizations.models import Organization
 
     made = HutFactory()
-    org, _created = Organization.objects.get_or_create(
+    org_osm, _created = Organization.objects.get_or_create(
         slug="osm", defaults={"name": "OpenStreetMap"}
     )
     HutSource.objects.create(
         hut=made,
-        organization=org,
+        organization=org_osm,
         source_id="123456",
+        name="OSM Hut Name",
         is_current=True,
         source_data={"osm_type": "way", "center_lat": 46.5, "center_lon": 8.0},
+    )
+    org_refuges, _created = Organization.objects.get_or_create(
+        slug="refuges", defaults={"name": "refuges.info"}
+    )
+    HutSource.objects.create(
+        hut=made,
+        organization=org_refuges,
+        source_id="3760",
+        name="OSM Hut Name",
+        is_current=True,
     )
     return made
 
@@ -63,8 +74,13 @@ class FakeClient:
         self.fail_submit = fail_submit
         self.submitted: list[str] = []
 
-    def list_reviews(self, _subject: str) -> ReviewsResponse:
-        return ReviewsResponse(reviews=list(self.items))
+    def list_reviews(self, subject: str) -> ReviewsResponse:
+        # Subject-aware: exact payload.sub matches win (the replies
+        # endpoint queries urn:maresi subjects, answered from kid_items);
+        # fall back to all items for the plain geo-listing tests.
+        pool = self.items + [k for k in self.kid_items if k not in self.items]
+        matching = [item for item in pool if item.payload.sub == subject]
+        return ReviewsResponse(reviews=list(matching if matching else self.items))
 
     def list_reviews_by_kid(self, _kid_pem: str) -> ReviewsResponse:
         return ReviewsResponse(reviews=list(self.kid_items))
@@ -88,6 +104,44 @@ class FakeClient:
 @pytest.fixture
 def fake_client() -> FakeClient:
     return FakeClient()
+
+
+class FakeRefugesClient:
+    """In-memory stand-in for the refuges.info provider."""
+
+    def __init__(
+        self, comments: "list[t.Any] | None" = None, fail: bool = False
+    ) -> None:
+        self.comments = comments or []
+        self.fail = fail
+        self.calls: list[str] = []
+
+    def list_comments(self, point_id: str) -> "list[t.Any]":
+        self.calls.append(point_id)
+        if self.fail:
+            raise RuntimeError("provider down")
+        return list(self.comments)
+
+
+@pytest.fixture(autouse=True)
+def _stub_refuges_provider(monkeypatch: pytest.MonkeyPatch) -> FakeRefugesClient:
+    """Never hit the live refuges.info API from tests (default: empty).
+
+    The ``hut`` fixture carries a refuges.info HutSource; without this
+    autouse stub every listing test would hit the LIVE provider (slow,
+    real comments). Tests wanting provider data set ``fake_refuges.comments``.
+    """
+    from server.apps.reviews import refuges_info
+
+    fake = FakeRefugesClient()
+    monkeypatch.setattr(refuges_info, "_client", fake)
+    return fake
+
+
+@pytest.fixture
+def fake_refuges(_stub_refuges_provider: FakeRefugesClient) -> FakeRefugesClient:
+    """The autouse provider stub, requestable when a test sets comments."""
+    return _stub_refuges_provider
 
 
 @pytest.fixture

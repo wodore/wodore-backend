@@ -9,9 +9,9 @@ from django.core.cache import cache
 
 from server.apps.accounts.models import User
 from server.apps.reviews import services
-from server.apps.reviews.client import subject_for_hut
 from server.apps.reviews.models import SubmittedReview
 from server.apps.reviews.schemas import ReviewSubmitIn
+from server.apps.reviews.services import subject_for_hut
 
 from .conftest import blacklist, log_row, review_item
 
@@ -187,14 +187,24 @@ class TestSubmitRelay:
         assert row.user == user
 
     @pytest.mark.usefixtures("use_fake_client")
-    def test_submit_invalidates_cache(self, hut: Any) -> None:
+    def test_write_through_cache_merge(self, hut: Any) -> None:
+        """The author's own review is visible immediately after submit.
+
+        Even when the upstream listing does not (yet) include it — the
+        cache entry is merged, not invalidated (design D6).
+        """
         from server.apps.reviews.services import _list_cache_key
 
         subject = subject_for_hut(hut)
-        cache.set(_list_cache_key(subject), [], 60)
+        cache.set(_list_cache_key(subject), [], 60)  # pre-existing entry
         user = _user()
-        services.submit_review(user, hut, _dto(rating=50), "de")
-        assert cache.get(_list_cache_key(subject)) is None
+        out = services.submit_review(user, hut, _dto(rating=50), "de")
+        cached = cache.get(_list_cache_key(subject))
+        assert cached is not None, "cache entry must survive (merged, not dropped)"
+        assert any(item["signature"] == out.signature for item in cached)
+        # And the served list reflects it without any upstream change:
+        envelope = services.list_reviews(hut, limit=20, offset=0)
+        assert any(review.signature == out.signature for review in envelope.data)
 
     def test_submit_failure_marks_failed_and_raises(
         self, hut: Any, fake_client: Any, monkeypatch: pytest.MonkeyPatch
@@ -260,5 +270,5 @@ def _payload(jwt: str) -> dict[str, t.Any]:
     part = jwt.split(".")[1]
     return t.cast(
         dict[str, t.Any],
-        json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4))),
+        json.loads(base64.urlsafe_b64decode(part + "=" * ((4 - len(part) % 4) % 4))),
     )

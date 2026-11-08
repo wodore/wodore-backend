@@ -423,6 +423,8 @@ UNFOLD: dict[str, Any] = {
                 "huts.hutsource",
                 "reviews.submittedreview",
                 "reviews.reviewblacklist",
+                "reviews.reviewmergerequest",
+                "reviews.hutreviewsubject",
             ],
             "items": [
                 {

@@ -96,6 +96,40 @@ class ReviewReportIn(pydantic.BaseModel):
     opinion: str = Field(max_length=1000, description="Reason for the report")
 
 
+class ReviewReplyIn(pydantic.BaseModel):
+    """Reply body: rating (helpfulness) and/or opinion (text)."""
+
+    model_config = pydantic.ConfigDict(extra="forbid")
+
+    rating: int | None = Field(
+        None, ge=0, le=100, description="Helpfulness rating of the parent review"
+    )
+    opinion: str | None = Field(None, max_length=1000, description="Reply text")
+
+    @pydantic.model_validator(mode="after")
+    def _rating_or_opinion(self) -> "ReviewReplyIn":
+        if self.rating is None and self.opinion is None:
+            msg = "at least one of rating or opinion is required"
+            raise ValueError(msg)
+        return self
+
+
+class ReviewMergeRequestIn(pydantic.BaseModel):
+    """Merge-request body: a target identifier plus context."""
+
+    model_config = pydantic.ConfigDict(extra="forbid")
+
+    target: str = Field(
+        max_length=255, description="Subject URI, hut slug or URL to merge with"
+    )
+    note: str = Field(
+        default="", max_length=2000, description="Why these reviews belong together"
+    )
+    link: str | None = Field(
+        None, max_length=500, description="Supporting link (e.g. the other listing)"
+    )
+
+
 class ReviewListQuery(pydantic.BaseModel):
     """Local pagination of the proxied review list."""
 
@@ -119,9 +153,9 @@ class ReviewImageOut(pydantic.BaseModel):
 
 
 class ReviewOut(pydantic.BaseModel):
-    """One served review."""
+    """One served review (Mangrove or a read-only provider)."""
 
-    signature: str = Field(description="Mangrove review signature (maresi id)")
+    signature: str = Field(description="Review signature (maresi id or provider id)")
     rating: int | None = Field(None, description="0–100 likelihood to recommend")
     opinion: str | None = Field(None, description="Review text")
     nickname: str | None = Field(None, description="Reviewer nickname")
@@ -131,6 +165,16 @@ class ReviewOut(pydantic.BaseModel):
     is_affiliated: bool = Field(False)
     images: list[ReviewImageOut] = Field(default_factory=list)
     created: str = Field(description="Issuance time (ISO 8601, UTC)")
+    source: str = Field(
+        default="mangrove", description="Review source (mangrove | refuges.info)"
+    )
+    license: str = Field(
+        default="CC-BY-4.0",
+        description="License of this review's content (SPDX / CC label)",
+    )
+    link: str | None = Field(
+        None, description="Attribution link to the review's source page"
+    )
 
 
 class ReviewsEnvelope(pydantic.BaseModel):
@@ -168,3 +212,8 @@ class MyReviewOut(ReviewOut):
 
 class ReportOut(pydantic.BaseModel):
     status: str = Field(description="Report relay status")
+
+
+class MergeRequestOut(pydantic.BaseModel):
+    id: int = Field(description="Merge request id")
+    state: str = Field(description="Review state (new/done/rejected)")

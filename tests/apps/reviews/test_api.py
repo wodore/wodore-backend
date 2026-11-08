@@ -8,8 +8,8 @@ import pytest
 from django.test import Client
 
 from server.apps.accounts.models import User
-from server.apps.reviews.client import subject_for_hut
 from server.apps.reviews.models import SubmittedReview
+from server.apps.reviews.services import subject_for_hut
 
 from .conftest import log_row, review_item
 

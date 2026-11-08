@@ -102,7 +102,8 @@ class ReviewerKey(TimeStampedModel):
 
         try:
             raw = decrypt_private_jwk(self.private_jwk_encrypted)
-        except InvalidToken as exc:
+            parsed = json.loads(raw)
+        except (InvalidToken, ValueError, TypeError) as exc:
             msg = (
                 "ReviewerKey cannot be decrypted - the encryption secret "
                 "was lost or rotated away (see AGENTS.md § Reviews)."
@@ -110,7 +111,7 @@ class ReviewerKey(TimeStampedModel):
             raise RuntimeError(msg) from exc
         return t.cast(
             dict[str, t.Any],
-            json.loads(raw),
+            parsed,
         )
 
 
@@ -246,6 +247,102 @@ class SubmittedReview(TimeStampedModel):
         return f"{self.user} {self.action} {self.signature[:16]}… ({self.state})"
 
 
+class HutReviewSubject(TimeStampedModel):
+    """The pinned review name (``q``) of a hut — set on FIRST review write.
+
+    Reads resolve ``q`` dynamically (pinned name → OSM name → hut name);
+    the first submitted review pins the chosen name so later OSM renames
+    or hut renames cannot fork the subject (openspec reviews-mangrove D1).
+    """
+
+    hut = models.OneToOneField(
+        "huts.Hut",
+        on_delete=models.CASCADE,
+        related_name="review_subject",
+        verbose_name=_("Hut"),
+    )
+    name = models.CharField(
+        max_length=100,
+        verbose_name=_("Review name (subject q)"),
+        help_text=_(
+            "Pinned when the first review is written; the Mangrove subject "
+            "q parameter. OSM name if available, otherwise the hut name."
+        ),
+    )
+
+    objects = models.Manager()
+
+    class Meta:  # type: ignore[assignment]  # nested Meta vs abstract base Meta: known checker limitation (Hut.Meta idiom)
+        verbose_name = _("Hut review subject")
+        verbose_name_plural = _("Hut review subjects")
+
+    def __str__(self) -> str:
+        return f"{self.hut}: {self.name}"
+
+
+class ReviewMergeRequest(TimeStampedModel):
+    """User-filed request to merge/relink a hut's reviews (admin queue).
+
+    Just a note with a link (openspec reviews-mangrove D7): staff review
+    and — once Wodore's reviewer identity is credible — file the actual
+    Mangrove equivalence claims manually.
+    """
+
+    class State(models.TextChoices):
+        new = "new", _("new")
+        done = "done", _("done")
+        rejected = "rejected", _("rejected")
+
+    State = State
+
+    hut = models.ForeignKey(
+        "huts.Hut",
+        on_delete=models.CASCADE,
+        related_name="review_merge_requests",
+        verbose_name=_("Hut"),
+    )
+    target = models.CharField(
+        max_length=255,
+        verbose_name=_("Merge target"),
+        help_text=_("Subject URI, hut slug, or URL the reviews should merge with."),
+    )
+    note = models.TextField(
+        max_length=2000, blank=True, default="", verbose_name=_("Note")
+    )
+    link = models.CharField(
+        max_length=500,
+        blank=True,
+        default="",
+        verbose_name=_("Link"),
+        help_text=_("Supporting URL (e.g. the other listing)."),
+    )
+    created_by = models.ForeignKey(  # type: ignore[assignment]  # ForeignKey typing drift vs django-stubs reverse
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="review_merge_requests",
+        verbose_name=_("Created by"),
+    )
+    state = models.CharField(
+        max_length=10,
+        choices=State.choices,
+        default=State.new,
+        db_index=True,
+        verbose_name=_("State"),
+    )
+
+    objects = models.Manager()
+
+    class Meta:  # type: ignore[assignment]  # nested Meta vs abstract base Meta: known checker limitation (Hut.Meta idiom)
+        verbose_name = _("Review merge request")
+        verbose_name_plural = _("Review merge requests")
+        ordering = ("-created",)
+
+    def __str__(self) -> str:
+        return f"{self.hut} → {self.target[:40]} ({self.state})"
+
+
 class ReviewBlacklist(TimeStampedModel):
     """Mangrove review signatures hidden from Wodore-served responses.
 
@@ -282,9 +379,11 @@ class ReviewBlacklist(TimeStampedModel):
 
 __all__ = [
     "InvalidToken",
+    "HutReviewSubject",
     "ReviewerKey",
     "ReviewerProfile",
     "SubmittedReview",
+    "ReviewMergeRequest",
     "ReviewBlacklist",
     "encrypt_private_jwk",
     "decrypt_private_jwk",

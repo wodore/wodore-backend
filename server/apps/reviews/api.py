@@ -32,11 +32,14 @@ from . import services
 from .schemas import (
     BatchSummaryEnvelope,
     BatchSummaryQuery,
+    MergeRequestOut,
     MyReviewOut,
     ReportOut,
     ReviewEditIn,
     ReviewListQuery,
+    ReviewMergeRequestIn,
     ReviewOut,
+    ReviewReplyIn,
     ReviewReportIn,
     ReviewsEnvelope,
     ReviewSubmitIn,
@@ -308,6 +311,79 @@ class ReviewReportController(ReviewsWriteController):
         )
 
 
+class ReviewReplyController(ReviewsWriteController):
+    """Reply to a review (signed review with an ``urn:maresi`` subject)."""
+
+    @modify(
+        operation_id="reply_hut_review",
+        status_code=HTTPStatus.CREATED,
+        extra_responses=[_QUOTA_429, _UPSTREAM_503],
+    )
+    def post(
+        self,
+        parsed_path: Path[HutReviewSignaturePath],
+        parsed_body: Body[ReviewReplyIn],
+    ) -> ReviewOut:
+        """Reply to a hut review.
+
+        Signs a Mangrove review whose subject references the parent
+        review (``urn:maresi:{signature}``) — a reply plus an optional
+        helpfulness rating of the parent."""
+        hut = services.resolve_hut(parsed_path.slug)
+        return services.reply_review(
+            self.caller, hut, parsed_path.signature, parsed_body
+        )
+
+
+class ReviewRepliesController(ApiController):
+    """Replies to one review (public, cached per signature)."""
+
+    @modify(
+        operation_id="get_hut_review_replies",
+        headers=cache_headers(settings.MANGROVE_PUBLIC_MAX_AGE),
+        throttling=[_REVIEWS_BURST_THROTTLE, _REVIEWS_DAILY_THROTTLE],
+        extra_responses=[_UPSTREAM_503],
+    )
+    def get(
+        self,
+        parsed_path: Path[HutReviewSignaturePath],
+    ) -> ReviewsEnvelope:
+        """List replies to a hut review.
+
+        Other reviewers' replies and helpfulness ratings of this
+        review, newest first."""
+        hut = services.resolve_hut(parsed_path.slug)
+        return services.list_replies(hut, parsed_path.signature)
+
+
+class ReviewMergeRequestController(ReviewsWriteController):
+    """File a merge request for staff (no Mangrove write)."""
+
+    @modify(
+        operation_id="create_review_merge_request",
+        status_code=HTTPStatus.CREATED,
+        throttling=[_REVIEWS_BATCH_THROTTLE],
+    )
+    def post(
+        self,
+        parsed_path: Path[HutReviewPath],
+        parsed_body: Body[ReviewMergeRequestIn],
+    ) -> MergeRequestOut:
+        """Request a review merge.
+
+        Files a merge request (target plus context) for staff review —
+        an admin performs the actual subject equivalence later."""
+        hut = services.resolve_hut(parsed_path.slug)
+        request_row = services.create_merge_request(
+            self.caller,
+            hut,
+            parsed_body.target,
+            parsed_body.note,
+            parsed_body.link or "",
+        )
+        return MergeRequestOut(id=request_row.pk, state=request_row.state)
+
+
 class MyReviewsController(ReviewsWriteController):
     """The caller's own reviews (private, never cached)."""
 
@@ -361,6 +437,21 @@ hut_paths = [
         "<str:slug>/reviews/<str:signature>/report",
         ReviewReportController.as_view(),
         name="report_hut_review",
+    ),
+    path(
+        "<str:slug>/reviews/<str:signature>/reply",
+        ReviewReplyController.as_view(),
+        name="reply_hut_review",
+    ),
+    path(
+        "<str:slug>/reviews/<str:signature>/replies",
+        ReviewRepliesController.as_view(),
+        name="get_hut_review_replies",
+    ),
+    path(
+        "<str:slug>/reviews/merge-request",
+        ReviewMergeRequestController.as_view(),
+        name="create_review_merge_request",
     ),
 ]
 

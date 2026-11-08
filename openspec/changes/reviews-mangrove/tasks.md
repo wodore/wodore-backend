@@ -200,6 +200,36 @@ are decided but sequenced after the first release cut.
 - [x] 8.4 Full suite green: `inv tests`, `inv check.types` (pyrefly
       strict — full annotations, no baseline), `inv lint`
 
+## 8b. Round 2 — review names, provider merge, replies, merge requests (2026-11-08)
+
+- [x] 8b.1 Subject `q` = review name (OSM name → hut name fallback),
+      **pinned on the first review write** (`HutReviewSubject` model;
+      `resolve_review_name` / `pin_review_name`); slug recipe
+      superseded; collision check downgraded to operator warning
+- [x] 8b.2 15-minute list TTL + **write-through cache merge**: submit
+      prepends, edit updates, delete removes — the author's own write is
+      visible on the next read regardless of TTL or upstream indexing
+      lag (plain invalidation is not enough — verified in the §0 spike)
+- [x] 8b.3 refuges.info read-only provider (`refuges_info.py`):
+      comments API client (dict-by-index/list, HTML-cleaned, UTC
+      normalized), HutSource org `refuges` point-id linkage, per-review
+      `source`/`license`/`link` fields on the merged listing, provider
+      failures degrade to Mangrove-only, blacklist covers provider ids,
+      `MANGROVE_REFUGES_INFO_ENABLED` kill-switch
+- [x] 8b.4 Replies: `POST …/{signature}/reply` (signed `urn:maresi`
+      review, submit quota) + public `GET …/{signature}/replies`
+      (per-signature cache, blacklist-filtered)
+- [x] 8b.5 Merge requests: `ReviewMergeRequest` model + staff queue in
+      Unfold (new/done/rejected) + `POST …/reviews/merge-request`
+      (auth; target+note+link); no automatic equivalence filing
+- [x] 8b.6 Edit-history answer recorded (design D12): upstream keeps
+      original+edits (`latest_edits_only=false` exposes the chain) and
+      the local append-only log records every Wodore-signed JWT;
+      exposing an endpoint is a documented follow-up, not this round
+- [x] 8b.7 Tests: name resolution/pinning, cache merge, provider merge
+      + attribution + kill-switch + parsing units, replies, merge
+      requests (97 reviews tests green)
+
 ## 9. Pre-release verification (manual, staging)
 
 - [ ] 9.1 Re-verify upstream contract against live 0.4.x at release time

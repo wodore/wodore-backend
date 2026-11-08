@@ -1,32 +1,38 @@
 ## ADDED Requirements
 
 ### Requirement: Deterministic hut subject construction
-The system SHALL compute every hut's Mangrove subject as a pure function of
-the hut row: `geo:{lat},{lon}?q={slug}&u={radius}` with coordinates from
-`Hut.location` (WGS84) formatted to 6 decimal places, `q` the
-percent-encoded Wodore hut slug (never a hut name), and `u` one
-configurable constant for all huts (0 < u ≤ 10000, default from settings).
-The same hut row SHALL always yield byte-identical subjects, and two
-different huts SHALL never yield subjects that upstream's geo-matching
-rule could conflate: their `q` values SHALL remain distinct after
-upstream's normalization (case- and punctuation-insensitive) whenever
-their locations lie within the sum of both `u` radii. A check SHALL
-verify that normalized-uniqueness invariant over the hut corpus.
+The system SHALL compute every hut's Mangrove subject as a function of
+the hut row and its **review name**: `geo:{lat},{lon}?q={name}&u={radius}`
+with coordinates from `Hut.location` (WGS84, 6 decimals) and `u` one
+configurable constant (default from settings). The review name SHALL
+resolve as: the **pinned** name (`HutReviewSubject`, created when the
+hut's first review is written) → the OSM name (current `HutSource`, org
+`osm`) → the hut's own name. The same unchanged hut row plus an
+unchanged pinned state SHALL always yield byte-identical subjects, and
+the first review write on a hut SHALL pin the resolved name so later
+renames cannot fork the subject. A check SHALL report huts within twice
+the `u` radius whose resolved names normalize equal (shared-review
+collision warning).
 
 #### Scenario: Recipe stability
 
-- **WHEN** the subject is computed twice for an unchanged hut
+- **WHEN** the subject is computed twice for an unchanged hut with no pinned name change
 - **THEN** both computations produce the identical URI string
 
-#### Scenario: Slug never a name
+#### Scenario: OSM name used before any review
 
-- **WHEN** a hut's display name changes (rename or translation) while its slug stays
-- **THEN** the hut's Mangrove subject is unchanged and existing reviews keep matching it
+- **WHEN** a hut has a current OSM HutSource and no pinned review name
+- **THEN** the subject `q` is the OSM name (URL-encoded)
 
-#### Scenario: Normalized uniqueness holds
+#### Scenario: First review pins the name
 
-- **WHEN** two huts' slugs differ only by case or punctuation (e.g. `alpe-x` vs `alpex`) and their locations are within twice the `u` radius
-- **THEN** the uniqueness check reports the collision so the slug can be adjusted before reviews fork
+- **WHEN** the hut's first review is submitted
+- **THEN** the resolved name at that moment is stored as the hut's pinned review name, and subsequent subjects use the pinned name even if the OSM or hut name later changes
+
+#### Scenario: Collision warning
+
+- **WHEN** two nearby huts (within twice the `u` radius) have review names that differ only by case or punctuation
+- **THEN** the check reports the collision so operators can act before reviews are shared
 
 ### Requirement: Single upstream client
 All communication with the Mangrove API SHALL go through one client module

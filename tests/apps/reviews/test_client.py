@@ -11,13 +11,13 @@ import respx
 from django.test import override_settings
 
 from server.apps.reviews import client as reviews_client
+from server.apps.reviews import services
 from server.apps.reviews.client import (
     MangroveClient,
     UpstreamRejected,
     UpstreamUnavailable,
     normalize_q,
     parse_geo_subject,
-    subject_for_hut,
     subject_geo_matches,
 )
 
@@ -28,26 +28,54 @@ BASE = "https://mangrove.test"
 
 class TestSubjectRecipe:
     def test_recipe_is_pure_and_stable(self, hut: Any) -> None:
-        first = subject_for_hut(hut)
-        second = subject_for_hut(hut)
+        first = services.subject_for_hut(hut)
+        second = services.subject_for_hut(hut)
         assert first == second
-        assert first.startswith("geo:46.") or first.startswith("geo:")  # shape
+        assert first.startswith("geo:")
         assert "?q=" in first and "&u=30" in first
 
-    def test_name_change_does_not_fork_the_subject(self, hut: Any) -> None:
-        from server.apps.huts.models import Hut
+    def test_q_is_the_osm_name_before_any_review(self, hut: Any) -> None:
+        # OSM name (current HutSource, org osm) wins until a review pins.
+        assert "q=OSM+Hut+Name" in services.subject_for_hut(hut)
 
-        before = subject_for_hut(hut)
-        Hut.objects.filter(pk=hut.pk).update(name="Renamed Refuge")
-        hut.refresh_from_db()
-        assert subject_for_hut(hut) == before
+    def test_q_falls_back_to_hut_name_without_osm(self, hut: Any) -> None:
+        from server.apps.huts.models import HutSource
+
+        HutSource.objects.filter(hut=hut, organization__slug="osm").update(
+            is_current=False
+        )
+        assert f"q={hut.name.replace(' ', '+')}" in services.subject_for_hut(hut)
+
+    def test_first_review_pins_the_name(self, hut: Any, use_fake_client: Any) -> None:
+        from server.apps.accounts.models import User
+        from server.apps.reviews.models import HutReviewSubject
+        from server.apps.reviews.schemas import ReviewSubmitIn
+
+        user = User.objects.create_user(email="p@y.z", password="x")  # type: ignore  # custom manager/queryset inference gap
+        before = services.subject_for_hut(hut)
+        services.submit_review(
+            user, hut, ReviewSubmitIn.model_validate({"rating": 50}), "de"
+        )
+        assert HutReviewSubject.objects.filter(hut=hut, name="OSM Hut Name").exists()
+        assert services.subject_for_hut(hut) == before  # same name, now pinned
+
+    def test_pinned_name_survives_osm_rename(
+        self, hut: Any, use_fake_client: Any
+    ) -> None:
+        from server.apps.huts.models import HutSource
+        from server.apps.reviews.models import HutReviewSubject
+
+        HutReviewSubject.objects.create(hut=hut, name="OSM Hut Name")
+        HutSource.objects.filter(hut=hut, organization__slug="osm").update(
+            name="Renamed on OSM"
+        )
+        assert "q=OSM+Hut+Name" in services.subject_for_hut(hut)
 
     def test_normalized_q_uniqueness_lemma(self) -> None:
-        # Two slugs that differ only by punctuation normalize equal —
-        # the hut corpus check must treat them as a collision.
+        # Two review names that differ only by punctuation normalize equal
+        # — nearby huts sharing them would share reviews (accepted trade-off).
         assert normalize_q("alpe-x") == normalize_q("alpex")
         assert normalize_q("Alpe X") == normalize_q("alpex")
-        # Accents fold locally (conservative).
         assert normalize_q("café") == normalize_q("cafe")
 
 

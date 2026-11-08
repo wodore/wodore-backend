@@ -10,9 +10,14 @@ active SHALL answer 404. Huts whose subject has no reviews SHALL return an
 empty collection, not an error. Every listed review SHALL carry at least
 its `rating` (if present), `opinion` (if present), `nickname` (if present),
 `language` (if present), images (allowlist-filtered), flags
-(`is_affiliated`, `is_personal_experience`), issuance time and its
-`signature`; the envelope SHALL carry `license: "CC-BY-4.0"` and an
-attribution link to the Mangrove dataset.
+(`is_affiliated`, `is_personal_experience`), issuance time, its
+`signature`, and per-review attribution: `source` (`mangrove` or the
+provider id), `license` (the review content's license) and `link` (the
+source page, when one exists); the envelope SHALL carry `license:
+"CC-BY-4.0"` and an attribution link to the Mangrove dataset. The
+listing SHALL merge reviews from read-only providers (spec:
+mangrove-client D11 — refuges.info comments, per-review
+`source`/`license`/`link`), newest-first across all sources.
 
 #### Scenario: Anonymous read works
 
@@ -33,6 +38,16 @@ attribution link to the Mangrove dataset.
 
 - **WHEN** a review's signature is on the local blacklist
 - **THEN** it is absent from the list and the count reflects the exclusion
+
+#### Scenario: Provider comments merge with attribution
+
+- **WHEN** the hut has a refuges.info HutSource with comments
+- **THEN** those comments appear in the listing carrying `source: "refuges.info"`, the CC BY-SA 2.0 FR license label and a link to the refuge page, merged newest-first with the Mangrove reviews
+
+#### Scenario: Provider outage degrades to Mangrove only
+
+- **WHEN** the refuges.info API fails
+- **THEN** the listing still serves Mangrove reviews (provider items absent, no error)
 
 #### Scenario: Foreign subjects do not leak in
 
@@ -205,12 +220,53 @@ edited reviews shown with their latest edit.
 - **WHEN** the caller's key has written reviews on non-Wodore subjects (e.g. after a future key import)
 - **THEN** those reviews are listed without a hut slug annotation
 
+### Requirement: Replies to reviews
+The system SHALL serve `POST /v1/huts/{slug}/reviews/{signature}/reply`
+requiring authentication with a body of `rating` (helpfulness, 0–100)
+and/or `opinion` (≤1000). The reply SHALL be signed as an ordinary
+Mangrove review whose subject is `urn:maresi:{signature}`, counted
+against the submission quota, and logged with the parent signature as
+its target. The public `GET /v1/huts/{slug}/reviews/{signature}/replies`
+SHALL list a parent review's replies (cached per signature, blacklist-
+filtered, newest-first). Targets that do not belong to the hut in the
+path SHALL answer 404.
+
+#### Scenario: Reply relayed with maresi subject
+
+- **WHEN** an authenticated user replies to a hut review with a text
+- **THEN** the signed JWT's subject is `urn:maresi:{signature}` and the replies endpoint can serve it afterwards
+
+#### Scenario: Replies require content
+
+- **WHEN** a reply body carries neither rating nor opinion
+- **THEN** the response is 400 with the standard validation error
+
+### Requirement: Review merge requests
+The system SHALL serve
+`POST /v1/huts/{slug}/reviews/merge-request` requiring authentication
+with a body of `target` (subject URI, slug or URL, ≤255), optional
+`note` and `link`. The request SHALL be stored in an admin-managed
+staff queue (states new/done/rejected) — an operator performs the
+actual subject merge/equivalence work manually; nothing is written to
+Mangrove automatically.
+
+#### Scenario: Merge request queued
+
+- **WHEN** an authenticated user files a merge request with a target
+- **THEN** it is stored as `new` and visible in the admin queue
+
+#### Scenario: Target is required
+
+- **WHEN** the body carries no target
+- **THEN** the response is 400 with the standard validation error
+
 ### Requirement: Signature blacklist moderation
 The system SHALL keep an admin-managed blacklist of Mangrove review
 signatures (with reason and author). Blacklisted signatures SHALL be
 excluded from all Wodore-served review lists, summaries and batch
-aggregates. Blacklisting SHALL be a local serving decision that never
-mutates or deletes upstream data.
+aggregates — covering both Mangrove signatures and read-only provider
+ids. Blacklisting SHALL be a local serving decision that never mutates
+or deletes upstream data.
 
 #### Scenario: Blacklist hides a review
 
@@ -220,8 +276,12 @@ mutates or deletes upstream data.
 ### Requirement: Caching and versioning behavior
 Review read endpoints SHALL set bounded public cache headers (short
 max-age); write endpoints and the my-reviews endpoint SHALL be
-uncached/private. Successful local writes SHALL invalidate the affected
-hut's local list and summary cache entries (write-through). All review
+uncached/private. Local list/summary caches SHALL use a 15-minute TTL.
+Successful local writes SHALL **merge write-through**: a submitted
+review is prepended into the cached list, an edit updates the cached
+copy and a delete removes it — so the author's own write is visible on
+the next read even while upstream indexing lags or the TTL has not
+expired. All review
 endpoints SHALL pass through the API versioning middleware (additive
 endpoints — no version transforms) and the shared RFC 9457 error
 contract. Hut detail endpoints and their ETags SHALL NOT change as a

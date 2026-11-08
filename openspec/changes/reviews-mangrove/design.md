@@ -150,28 +150,35 @@ marked O1–O8 with recommendations.
 
 ## Decisions
 
-### D1 — Subject URI recipe: `geo:<lat>,<lon>?q=<slug>&u=<radius>`
+### D1 — Subject URI recipe: `geo:<lat>,<lon>?q=<review-name>&u=<radius>`
 
-A pure function of the hut row, evaluated on demand:
+A pure function of the hut row **plus the hut's pinned review name**:
 
 ```text
-subject(hut) = "geo:{lat:.6f},{lon:.6f}?q={urlencode(hut.slug)}&u={u}"
+q = review_name(hut)      # pinned name → OSM name → hut name
+subject(hut) = "geo:{lat:.6f},{lon:.6f}?q={urlencode(q)}&u={u}"
 ```
 
-- `lat`/`lon` from `Hut.location` (WGS84, PostGIS SRID 4326), formatted with
-  **6 decimal places** (~0.1 m — avoids float-noise churn between calls).
-- `q` = the **Wodore slug**, percent-encoded (SlugField ≤50 chars, well
-  inside the ≤100 limit). Names are deliberately NOT used: multilingual
-  and mutable, so any name-based `q` would fork the subject. Note upstream
-  matches `q` **normalized** (case/punctuation-insensitive — D-Context),
-  so slug uniqueness must hold *after normalization*; a system-check/test
-  verifies the normalized `q` is unique among huts whose locations sit
-  within 2·u of each other (the only pairs upstream could ever conflate).
-- `u` = one configurable constant for all huts (O1; default 30 m).
-- Rejected alternatives (kept for future implementers): `q=<OSM name>` à
-  la MapComplete (fuzzy matching doesn't exist; normalized-equality is not
-  enough for names), `https://wodore.com/huts/<slug>` subjects (ecosystem
-  isolation, unproven equivalence bridging), `urn:osm` (non-standard).
+- `lat`/`lon` from `Hut.location` (WGS84), 6 decimal places (~0.1 m).
+- **Review name resolution** (owner decision, 2026-11-08 round 2):
+  1. `HutReviewSubject.name` — **pinned on the first review write**
+     (`pin_review_name`), so later OSM renames or hut renames can never
+     fork the subject of a hut that already has reviews;
+  2. before any review exists: the OSM name (current `HutSource`, org
+     `osm`, its `name` column);
+  3. fallback: the hut's own name.
+- Motivation: OSM-name `q`s are what MapComplete emits — Wodore subjects
+  become cross-client matchable (same normalized `q` + coordinates within
+  the radius sum) instead of deliberately isolated. The slug recipe
+  (round 1) is superseded.
+- Trade-off (accepted): hut names are not unique — two huts with the same
+  normalized name within 2·u (60 m) would share reviews. Rare in the
+  corpus; the normalized-name collision check stays as an operator
+  warning, not a hard invariant. Pin-on-first-write keeps any single
+  hut's subject stable for its lifetime.
+- Rejected alternatives (kept for future implementers): slug `q`
+  (round 1 — stable but isolated), name-based without pinning (forks on
+  rename), `https` URL subjects, `urn:osm`.
 
 ### D2 — Architecture: one app, one client, proxy everything
 
@@ -338,11 +345,16 @@ moderation.
 
 ### D6 — Read path, caching, aggregates, CDN
 
-- **Local cache** (Django cache framework): list payload keyed by subject
-  URI (+ nothing else — no lang), summary keyed by subject; TTLs 5 min
-  lists / 15 min summaries (O8). Successful local writes invalidate
-  immediately (write-through); foreign reviews appear on TTL expiry —
-  fine for reviews.
+- **Local cache** (Django cache framework): list payload keyed by
+  subject, summary keyed by subject, refuges.info comments keyed by
+  point id — all 15-minute TTLs (owner decision). Successful local
+  writes **merge write-through**: submit prepends the just-signed review
+  into the cached list, edit updates the cached copy, delete removes it.
+  A plain invalidation would refetch upstream, which may briefly NOT
+  include the new review yet (indexing lag, observed in the §0 spike) —
+  merging makes the author's own write visible on the very next read,
+  TTL or no TTL. Foreign reviews appear on TTL expiry — fine for
+  reviews.
 - **Aggregates are computed locally** from the cached, blacklist-filtered
   list (upstream `quality` is undocumented, `/subject`+`/batch` can't
   subtract blacklists and may not apply geo matching — Context):
@@ -446,6 +458,76 @@ apply (never log opinions or nicknames at info level). Local auth (dev)
 works end-to-end: `AuthBearer` accepts local tokens, so review writing is
 testable without Zitadel (tests use the password grant +
 `local_auth_users` fixture).
+
+### D11 — Read-only provider merge: refuges.info (round 2)
+
+Verified live 2026-11-08: ``GET https://www.refuges.info/api/commentaires?
+id_point={id}&format=json`` returns a dict keyed by index (or a list on
+older deployments); each item carries ``id_commentaire``,
+``auteur_commentaire``, ``date_commentaire`` (``±HH`` offsets, UTC-
+normalized on parse) and ``texte_commentaire`` (HTML-escaped; unescaped
+and tag-stripped on parse). Sampled refuges carry 19–54 text comments.
+Every envelope states the data license: **CC BY-SA 2.0 FR**.
+
+- **Hut linkage**: the existing `HutSource` (org `refuges`, fed by the
+  hut import pipeline) provides the point id — zero new matching.
+- **Serving**: comments merge into the hut listing (newest-first across
+  both sources) as reviews with `rating: null`, synthetic signatures
+  `refuges-info:{comment id}`, and **per-review attribution fields**
+  (`source: "refuges.info"`, `license: "CC BY-SA 2.0 FR"`, `link` to
+  the refuge page) — Mangrove items carry their own
+  (`source: "mangrove"`, `license: "CC-BY-4.0"`). Summaries/aggregates
+  are computed over the merged list (ratings only exist on Mangrove
+  items).
+- **Boundaries**: READ-ONLY. CC BY-SA content is never re-published into
+  Mangrove (no relicensing to CC-BY-4.0; MaReSt reviews must be signed
+  by their authors). Failures degrade to an empty provider list — the
+  Mangrove listing never 503s because the secondary source is down.
+  The signature blacklist hides provider comments too. Kill-switch:
+  `MANGROVE_REFUGES_INFO_ENABLED`.
+- **Cache**: provider results cached per point id (15 min, like lists).
+
+**Future read sources (researched 2026-11-08, none in scope):**
+Camptocamp has no hut ratings (hut objects carry editorial `quality`
+only) — its outings (`GET /outings?wtyp=hut&w={id}`) are trip reports,
+a different product surface; Foursquare OS Places excludes reviews from
+the open set; **Mapy.com** (Seznam) has reviews on the site but NO
+public reviews API (map/geocode/route/panorama only) and user photos
+are licensed to Seznam alone — community guidance explicitly forbids
+reuse outside Mapy.com; **Google/TripAdvisor/Booking** are display-only
+via official APIs (Google: Places-API display with author credit and
+review links, no storage — only place IDs may be stored) or
+partner-gated; deep links to their place pages are always fine. None of
+these may be merged into our API responses.
+
+### D12 — Replies, merge requests, moderation, history (round 2)
+
+- **Replies** = ordinary signed Mangrove reviews whose subject is the
+  parent review: `sub = urn:maresi:{signature}` with an optional
+  helpfulness `rating` (MaReSt's "rate a review") and the reply text as
+  `opinion`. `POST /v1/huts/{slug}/reviews/{signature}/reply`
+  (authenticated, submit-quota). They do NOT appear in the hut's geo
+  listing (their subject is a maresi URI, not geo) — the public
+  `GET …/{signature}/replies` endpoint serves them (upstream
+  `GET /reviews?sub=urn:maresi:…`, cached per signature; invalidated on
+  new replies; blacklist applies).
+- **Merge requests**: `POST /v1/huts/{slug}/reviews/merge-request`
+  (authenticated, target + note + link) files a `ReviewMergeRequest`
+  row — a staff queue (Unfold, state new/done/rejected). No automatic
+  equivalence filing (zero-credibility keys do not resolve — §0 spike);
+  an admin performs the actual merge/equivalence work manually.
+- **Admin delete**: the blacklist IS the delete (a local serving
+  decision — upstream deletion is impossible without the author's key;
+  Wodore-authored reviews go through the erasure command). Bulk-paste
+  admin action plus provider-id coverage from D11.
+- **Edit history** (owner question): YES, two layers. Upstream stores
+  BOTH the original and every edit (`latest_edits_only=false` returns
+  the full chain, edit rows carrying `original_sub`) — history is
+  retrievable for ANY review on demand. Locally, the append-only
+  `SubmittedReview` log records every JWT Wodore signed (originals and
+  edit actions) — history for our own users without upstream calls.
+  Not exposed via an endpoint in this round; documented as a follow-up
+  task.
 
 ## Risks / Trade-offs
 

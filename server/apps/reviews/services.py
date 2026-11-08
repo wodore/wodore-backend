@@ -2,16 +2,26 @@
 
 Everything the controllers do beyond HTTP shape lives here (design D5/D6).
 Reads: subject-keyed local cache → blacklist + geo-match filters → local
-pagination/aggregation. Writes: kill-switch → caller → quota → sign →
-log (pending) → relay → log (accepted/failed) → cache invalidation.
+pagination/aggregation, merged with the read-only refuges.info provider.
+Writes: kill-switch → caller → quota → sign → log (pending) → relay →
+log (accepted/failed) → write-through cache merge (the author's own
+review is visible on the next read, regardless of TTL or upstream
+indexing lag).
+
+Subject names (design D1): ``q`` is the hut's **review name** — pinned
+on the first review write; before that it resolves dynamically from the
+OSM name (current ``HutSource`` org ``osm``) falling back to the hut
+name. Two huts with the same normalized name within 2·u share reviews —
+the accepted interop trade-off (MapComplete-compatible ``q``).
 """
 
+import base64
 import datetime
 import json
 import statistics
 import typing as t
 from http import HTTPStatus
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 import structlog
 from dmr import APIError
@@ -30,13 +40,20 @@ from . import signing
 from .client import (
     MangroveClient,
     ReviewItem,
+    ReviewPayload,
     UpstreamRejected,
     UpstreamUnavailable,
     parse_geo_subject,
-    subject_for_hut,
     subject_geo_matches,
 )
-from .models import ReviewBlacklist, ReviewerKey, ReviewerProfile, SubmittedReview
+from .models import (
+    HutReviewSubject,
+    ReviewBlacklist,
+    ReviewerKey,
+    ReviewerProfile,
+    ReviewMergeRequest,
+    SubmittedReview,
+)
 from .schemas import (
     ATTRIBUTION,
     LICENSE,
@@ -46,6 +63,7 @@ from .schemas import (
     ReviewEditIn,
     ReviewImageOut,
     ReviewOut,
+    ReviewReplyIn,
     ReviewReportIn,
     ReviewsEnvelope,
     ReviewSubmitIn,
@@ -70,6 +88,51 @@ def client() -> MangroveClient:
     return _client
 
 
+# ── subject names (design D1: review name, pinned on first write) ────
+
+
+def resolve_review_name(hut: Hut) -> str:
+    """The hut's review name (``q``): pinned → OSM name → hut name."""
+    pinned = HutReviewSubject.objects.filter(hut=hut).only("name").first()
+    if pinned is not None:
+        return pinned.name
+    from server.apps.huts.models import HutSource
+
+    osm = (
+        HutSource.objects.filter(hut=hut, organization__slug="osm", is_current=True)
+        .order_by("-created")
+        .only("name")
+        .first()
+    )
+    if osm is not None and osm.name.strip():
+        return osm.name.strip()
+    return hut.name
+
+
+def pin_review_name(hut: Hut) -> str:
+    """Pin the resolved name on the first review write (idempotent)."""
+    name = resolve_review_name(hut)
+    HutReviewSubject.objects.get_or_create(hut=hut, defaults={"name": name})
+    return name
+
+
+def build_geo_subject(lat: float, lon: float, q: str) -> str:
+    """``geo:{lat:.6f},{lon:.6f}?q={q}&u={u}`` for an arbitrary ``q``."""
+    return "geo:{:.6f},{:.6f}?{}&u={}".format(
+        lat, lon, urlencode({"q": q}), settings.MANGROVE_U_RADIUS
+    )
+
+
+def subject_for_hut(hut: Hut) -> str:
+    """The hut's Mangrove subject with the resolved review name as ``q``."""
+    return build_geo_subject(hut.location.y, hut.location.x, resolve_review_name(hut))
+
+
+def subject_for_q(q: str) -> str:
+    """A subject built from a bare name (my-reviews annotation lookups)."""
+    return build_geo_subject(0.0, 0.0, q)
+
+
 # ── hut / caller resolution ──────────────────────────────────────────
 
 
@@ -77,7 +140,7 @@ def resolve_hut(slug: str) -> Hut:
     """The public active hut or 404 (no subject leakage)."""
     hut = (
         Hut.objects.filter(is_active=True, is_public=True, slug=slug)
-        .only("slug", "location")
+        .only("slug", "location", "name")
         .first()
     )
     if hut is None:
@@ -166,11 +229,19 @@ def _encrypt(jwk_json: str) -> str:
 
 
 def _decrypt_key_jwk(key: ReviewerKey) -> dict[str, t.Any]:
+    from cryptography.fernet import InvalidToken
+
     from .models import decrypt_private_jwk
 
-    return t.cast(
-        dict[str, t.Any], json.loads(decrypt_private_jwk(key.private_jwk_encrypted))
-    )
+    try:
+        raw = decrypt_private_jwk(key.private_jwk_encrypted)
+        return t.cast(dict[str, t.Any], json.loads(raw))
+    except (InvalidToken, ValueError, TypeError) as exc:
+        msg = (
+            "ReviewerKey cannot be decrypted - the encryption secret "
+            "was lost or rotated away (see AGENTS.md § Reviews)."
+        )
+        raise RuntimeError(msg) from exc
 
 
 # ── quota (design D5/O7) ─────────────────────────────────────────────
@@ -263,26 +334,29 @@ def osm_id_for_hut(hut: Hut) -> str | None:
     return osm_id if len(osm_id) <= 50 else None
 
 
-# ── cache (design D6) ────────────────────────────────────────────────
+# ── cache (design D6: 15 min TTL + write-through merge) ──────────────
 
 
 def _list_cache_key(subject: str) -> str:
     return f"reviews:list:{subject}"
 
 
+def _replies_cache_key(signature: str) -> str:
+    return f"reviews:replies:{signature}"
+
+
 def _invalidate_subject(subject: str) -> None:
     cache.delete(_list_cache_key(subject))
 
 
-def _cached_items(subject: str) -> list[ReviewItem]:
-    """Upstream list for a subject, cached raw; empty when disabled.
+def _cached_items(subject: str) -> list[ReviewItem] | None:
+    """Cached upstream list for a subject; ``None`` on miss (checked!).
 
     Upstream infra failures map to the sanitized 503 (design D6).
     """
     if not settings.MANGROVE_ENABLED:
         return []
-    key = _list_cache_key(subject)
-    cached = cache.get(key)
+    cached = cache.get(_list_cache_key(subject))
     if cached is not None:
         return [ReviewItem.model_validate(item) for item in cached]
     try:
@@ -290,16 +364,133 @@ def _cached_items(subject: str) -> list[ReviewItem]:
     except UpstreamUnavailable as exc:
         raise _upstream_unavailable() from exc
     items = [item for item in response.reviews if item.payload.action is None]
-    cache.set(key, [item.model_dump() for item in items], _LIST_TTL)
+    cache.set(
+        _list_cache_key(subject), [item.model_dump() for item in items], _LIST_TTL
+    )
     return items
 
 
-def _visible_items(subject: str) -> list[ReviewItem]:
+def _store_items(subject: str, items: list[ReviewItem]) -> None:
+    cache.set(
+        _list_cache_key(subject), [item.model_dump() for item in items], _LIST_TTL
+    )
+
+
+def _item_from_own_jwt(jwt: str, target_signature: str) -> ReviewItem | None:
+    """Rebuild a ReviewItem from a JWT Wodore just signed (cache merge).
+
+    Best-effort: the JWT is our own construction — an unparseable one
+    skips the cache merge (logged) instead of failing a relay that
+    already succeeded upstream.
+    """
+    try:
+        payload = t.cast(
+            dict[str, t.Any],
+            json.loads(
+                base64.urlsafe_b64decode(
+                    jwt.split(".")[1] + "=" * ((4 - len(jwt.split(".")[1]) % 4) % 4)
+                )
+            ),
+        )
+    except (ValueError, TypeError) as exc:
+        logger.warning("reviews_own_jwt_unparsable", error=type(exc).__name__)
+        return None
+    return ReviewItem(
+        jwt=jwt,
+        kid=_header_kid(jwt),
+        payload=ReviewPayload(
+            iat=int(payload.get("iat", 0)),
+            sub=str(payload.get("sub", "")),
+            rating=payload.get("rating"),
+            opinion=payload.get("opinion"),
+            images=None,
+            metadata=payload.get("metadata"),
+        ),
+        signature=signing.jwt_signature(jwt),
+        original_sub=target_signature or None,
+    )
+
+
+def _header_kid(jwt: str) -> str:
+    try:
+        header = t.cast(
+            dict[str, t.Any],
+            json.loads(
+                base64.urlsafe_b64decode(
+                    jwt.split(".")[0] + "=" * ((4 - len(jwt.split(".")[0]) % 4) % 4)
+                )
+            ),
+        )
+    except (ValueError, TypeError):
+        return ""
+    return str(header.get("kid", ""))
+
+
+def _merge_into_cache(subject: str, item: ReviewItem | None) -> None:
+    """Write-through merge: the author's own review is immediately visible.
+
+    Prepends the item to the cached list when a cache entry exists (no
+    entry → the next read fetches fresh; unparseable item → skip).
+    Immune to upstream indexing lag, which a plain invalidation is not.
+    """
+    if item is None:
+        return
+    cached = cache.get(_list_cache_key(subject))
+    if cached is None:
+        return
+    items = [item] + [
+        i
+        for i in (ReviewItem.model_validate(i) for i in cached)
+        if i.signature != item.signature
+    ]
+    _store_items(subject, items)
+
+
+def _update_cached_item(
+    subject: str, signature: str, rating: int | None, opinion: str | None
+) -> None:
+    """Write-through edit: update the cached copy of the edited review."""
+    cached = cache.get(_list_cache_key(subject))
+    if cached is None:
+        return
+    items: list[ReviewItem] = []
+    for raw in cached:
+        item = ReviewItem.model_validate(raw)
+        if item.signature == signature:
+            item = item.model_copy(
+                update={
+                    "payload": item.payload.model_copy(
+                        update={"rating": rating, "opinion": opinion}
+                    )
+                }
+            )
+        items.append(item)
+    _store_items(subject, items)
+
+
+def _remove_cached_item(subject: str, signature: str) -> None:
+    """Write-through delete: drop the deleted review from the cache."""
+    cached = cache.get(_list_cache_key(subject))
+    if cached is None:
+        return
+    items = [
+        item
+        for item in (ReviewItem.model_validate(i) for i in cached)
+        if item.signature != signature
+    ]
+    _store_items(subject, items)
+
+
+def _visible_items(
+    subject: str, blacklisted: "set[str] | None" = None
+) -> list[ReviewItem]:
     """Cached list, blacklist- and geo-filtered, newest first."""
-    blacklisted = set(ReviewBlacklist.objects.values_list("signature", flat=True))
+    items = _cached_items(subject) or []
+    if blacklisted is None:
+        blacklisted = set(ReviewBlacklist.objects.values_list("signature", flat=True))
     visible = [
         item
-        for item in _cached_items(subject)
+        for item in items
         if item.signature not in blacklisted
         and subject_geo_matches(item.payload.sub, subject)
     ]
@@ -319,7 +510,7 @@ def _filtered_images(item: ReviewItem) -> list[ReviewImageOut]:
 
 
 def serialize_review(item: ReviewItem) -> ReviewOut:
-    """Upstream item → response DTO."""
+    """Upstream item → response DTO (Mangrove source)."""
     metadata = item.payload.metadata or {}
     return ReviewOut(
         signature=item.signature,
@@ -334,6 +525,9 @@ def serialize_review(item: ReviewItem) -> ReviewOut:
         created=datetime.datetime.fromtimestamp(
             item.payload.iat, tz=datetime.UTC
         ).isoformat(),
+        source="mangrove",
+        license=LICENSE,
+        link=None,
     )
 
 
@@ -344,46 +538,93 @@ def _str_or_none(value: t.Any) -> str | None:
 # ── read services ────────────────────────────────────────────────────
 
 
-def list_reviews(hut: Hut, limit: int, offset: int) -> ReviewsEnvelope:
-    """The hut's visible reviews, locally paginated."""
+def _refuge_reviews(hut: Hut, blacklisted: "set[str] | None" = None) -> list[ReviewOut]:
+    """Read-only refuges.info comments as reviews (source-attributed).
+
+    The same signature blacklist applies (provider ids hide too).
+    """
+    from . import refuges_info
+
+    point_id = refuges_info.point_id_for_hut(hut)
+    if point_id is None:
+        return []
+    if blacklisted is None:
+        blacklisted = set(ReviewBlacklist.objects.values_list("signature", flat=True))
+    try:
+        comments = refuges_info.comments_for_hut(hut)
+    except Exception:
+        logger.warning("refuges_info_failed", hut=hut.slug)
+        return []
+    link = refuges_info.point_url(point_id)
+    return [
+        ReviewOut(
+            signature=comment.signature,
+            rating=None,
+            opinion=comment.text,
+            nickname=comment.author,
+            language=None,
+            experience_context=None,
+            is_personal_experience=False,
+            is_affiliated=False,
+            images=[],
+            created=comment.created.isoformat(),
+            source=refuges_info.SOURCE,
+            license=refuges_info.LICENSE,
+            link=link,
+        )
+        for comment in comments
+        if comment.signature not in blacklisted
+    ]
+
+
+def visible_reviews(hut: Hut) -> list[ReviewOut]:
+    """All visible reviews of the hut (Mangrove + refuges.info), newest first."""
+    blacklisted = set(ReviewBlacklist.objects.values_list("signature", flat=True))
     subject = subject_for_hut(hut)
-    visible = _visible_items(subject)
+    dtos = [serialize_review(item) for item in _visible_items(subject, blacklisted)]
+    dtos.extend(_refuge_reviews(hut, blacklisted))
+    dtos.sort(key=lambda review: review.created, reverse=True)
+    return dtos
+
+
+def list_reviews(hut: Hut, limit: int, offset: int) -> ReviewsEnvelope:
+    """The hut's visible reviews, locally paginated across both sources."""
+    visible = visible_reviews(hut)
     page = visible[offset : offset + limit]
     return ReviewsEnvelope(
-        data=[serialize_review(item) for item in page],
+        data=page,
         count=len(visible),
         license=LICENSE,
         attribution=ATTRIBUTION,
     )
 
 
-def summarize(subject: str, slug: str) -> ReviewSummaryOut:
-    """Locally computed aggregate over the visible list (design D6)."""
-    visible = _visible_items(subject)
-    ratings = [i.payload.rating for i in visible if i.payload.rating is not None]
-    opinions = [i for i in visible if i.payload.opinion is not None]
+def _summarize(slug: str, reviews: list[ReviewOut]) -> ReviewSummaryOut:
+    """Locally computed aggregate over the merged visible list (design D6)."""
+    ratings = [r.rating for r in reviews if r.rating is not None]
+    opinions = [r for r in reviews if r.opinion is not None]
     return ReviewSummaryOut(
         slug=slug,
-        count=len(visible),
+        count=len(reviews),
         rating_count=len(ratings),
         rating_mean=round(statistics.fmean(ratings), 1) if ratings else None,
-        positive_count=sum(1 for r in ratings if r > 50),
+        positive_count=sum(1 for rating in ratings if rating > 50),
         opinion_count=len(opinions),
     )
 
 
 def summary_for_hut(hut: Hut) -> ReviewSummaryOut:
-    return summarize(subject_for_hut(hut), hut.slug)
+    return _summarize(hut.slug, visible_reviews(hut))
 
 
 def batch_summary(slugs: list[str]) -> BatchSummaryEnvelope:
     """One aggregate per slug (≤50, canonicalized: sorted, deduplicated)."""
     canonical = sorted({slug.strip() for slug in slugs if slug.strip()})
     summaries = [
-        summarize(subject_for_hut(hut), hut.slug)
+        _summarize(hut.slug, visible_reviews(hut))
         for hut in Hut.objects.filter(
             is_active=True, is_public=True, slug__in=canonical
-        ).only("slug", "location")
+        ).only("slug", "location", "name")
     ]
     known = {s.slug for s in summaries}
     summaries.extend(
@@ -402,51 +643,51 @@ def batch_summary(slugs: list[str]) -> BatchSummaryEnvelope:
     return BatchSummaryEnvelope(data=summaries, count=len(summaries))
 
 
+def hut_for_review_name(name: str) -> Hut | None:
+    """The public hut whose resolved review name is ``name`` (my-reviews)."""
+    pinned = HutReviewSubject.objects.filter(name=name).select_related("hut").first()
+    if pinned is not None and pinned.hut.is_active and pinned.hut.is_public:
+        return pinned.hut
+    from server.apps.huts.models import HutSource
+
+    osm = (
+        HutSource.objects.filter(
+            hut__is_active=True,
+            hut__is_public=True,
+            organization__slug="osm",
+            is_current=True,
+            name=name,
+        )
+        .select_related("hut")
+        .first()
+    )
+    if osm is not None:
+        return osm.hut
+    return (
+        Hut.objects.filter(is_active=True, is_public=True, name=name)
+        .only("slug", "location", "name")
+        .first()
+    )
+
+
 def my_reviews(user: t.Any) -> list[MyReviewOut]:
     """The caller's reviews (upstream kid listing) with hut annotation."""
     key = ReviewerKey.objects.filter(user=user).first()
     if key is None:
         return []
     response = client().list_reviews_by_kid(key.kid)
-    from server.apps.huts.models import Hut as HutModel
-
     items = [i for i in response.reviews if i.payload.action is None]
     items.sort(key=lambda i: i.payload.iat, reverse=True)
-    subjects = [parse_geo_subject(i.payload.sub) for i in items]
-    slug_by_subject: dict[str, str] = {}
-    wanted = {s.q for s in subjects if s is not None}
-    if wanted:
-        huts = HutModel.objects.filter(
-            is_active=True, is_public=True, slug__in=wanted
-        ).values_list("slug", flat=True)
-        slug_by_subject = {_subject_q_of_slug(slug): slug for slug in huts}
     out: list[MyReviewOut] = []
-    for item, subject in zip(items, subjects, strict=True):
+    for item in items:
         base = serialize_review(item)
-        hut_slug = slug_by_subject.get(subject.q) if subject is not None else None
+        subject = parse_geo_subject(item.payload.sub)
+        hut_slug: str | None = None
+        if subject is not None:
+            hut = hut_for_review_name(subject.q)
+            hut_slug = hut.slug if hut is not None else None
         out.append(MyReviewOut(**base.model_dump(), hut_slug=hut_slug))
     return out
-
-
-def subject_for_slug(slug: str) -> str:
-    """A subject built from the slug alone (my-reviews annotation)."""
-    from django.contrib.gis.geos import Point
-
-    return subject_for_hut(_FakeHut(slug, Point(0, 0)))
-
-
-def _subject_q_of_slug(slug: str) -> str:
-    """The ``q`` component of a slug-built subject (the slug itself)."""
-    parsed = parse_geo_subject(subject_for_slug(slug))
-    return parsed.q if parsed is not None else slug
-
-
-class _FakeHut:
-    """Minimal hut stand-in for subject construction (slug-keyed)."""
-
-    def __init__(self, slug: str, location: t.Any) -> None:
-        self.slug = slug
-        self.location = location
 
 
 # ── ownership / target checks (design D4/D5) ─────────────────────────
@@ -512,7 +753,7 @@ def _relay(
             return signature
         row.state = SubmittedReview.State.failed
         row.save(update_fields=["state"])
-        raise _upstream_rejected(exc) from exc
+        raise _upstream_rejected() from exc
     except UpstreamUnavailable as exc:
         row.state = SubmittedReview.State.failed
         row.save(update_fields=["state"])
@@ -532,7 +773,7 @@ def _upstream_unavailable() -> APIError:
     )
 
 
-def _upstream_rejected(_exc: UpstreamRejected) -> APIError:
+def _upstream_rejected() -> APIError:
     return APIError(
         {
             "code": ErrorCode.service_unavailable,
@@ -545,11 +786,12 @@ def _upstream_rejected(_exc: UpstreamRejected) -> APIError:
 def submit_review(
     user: t.Any, hut: Hut, dto: ReviewSubmitIn, language: str
 ) -> ReviewOut:
-    """Validate → enrich → sign → relay → invalidate (design D5)."""
+    """Validate → pin name → enrich → sign → relay → cache-merge."""
     enforce_enabled()
     key, profile = get_or_mint_key(user)
     enforce_quota(user, "submit")
-    subject = subject_for_hut(hut)
+    name = pin_review_name(hut)
+    subject = build_geo_subject(hut.location.y, hut.location.x, name)
     metadata: dict[str, t.Any] = {
         "nickname": dto.nickname or profile.nickname,
         "client_id": settings.MANGROVE_CLIENT_ID,
@@ -580,7 +822,7 @@ def submit_review(
         metadata=metadata,
     )
     _relay(user, hut, subject, SubmittedReview.Action.review, jwt, target="")
-    _invalidate_subject(subject)
+    _merge_into_cache(subject, _item_from_own_jwt(jwt, ""))
     return ReviewOut(
         signature=signing.jwt_signature(jwt),
         rating=dto.rating,
@@ -594,6 +836,9 @@ def submit_review(
             ReviewImageOut(src=img.src, label=img.label) for img in (dto.images or [])
         ],
         created=timezone.now().isoformat(),
+        source="mangrove",
+        license=LICENSE,
+        link=None,
     )
 
 
@@ -615,7 +860,7 @@ def edit_review(user: t.Any, hut: Hut, signature: str, dto: ReviewEditIn) -> Rev
         opinion=dto.opinion,
     )
     _relay(user, hut, subject, SubmittedReview.Action.edit, jwt, target=signature)
-    _invalidate_subject(subject)
+    _update_cached_item(subject, signature, dto.rating, dto.opinion)
     return ReviewOut(
         signature=signature,
         rating=dto.rating,
@@ -627,6 +872,9 @@ def edit_review(user: t.Any, hut: Hut, signature: str, dto: ReviewEditIn) -> Rev
         is_affiliated=False,
         images=[],
         created=timezone.now().isoformat(),
+        source="mangrove",
+        license=LICENSE,
+        link=None,
     )
 
 
@@ -646,7 +894,7 @@ def delete_review(user: t.Any, hut: Hut, signature: str) -> None:
         target_signature=signature,
     )
     _relay(user, hut, subject, SubmittedReview.Action.delete, jwt, target=signature)
-    _invalidate_subject(subject)
+    _remove_cached_item(subject, signature)
 
 
 def report_review(
@@ -668,6 +916,83 @@ def report_review(
         user, hut, subject, SubmittedReview.Action.report_abuse, jwt, target=signature
     )
     return ReportOut(status="reported")
+
+
+def reply_review(
+    user: t.Any, hut: Hut, signature: str, dto: ReviewReplyIn
+) -> ReviewOut:
+    """Reply to a review: a signed review with an ``urn:maresi`` subject."""
+    enforce_enabled()
+    key, profile = get_or_mint_key(user)
+    _refuse_foreign_target(hut, signature)
+    enforce_quota(user, "submit")
+    maresi = f"urn:maresi:{signature}"
+    metadata: dict[str, t.Any] = {
+        "nickname": profile.nickname,
+        "client_id": settings.MANGROVE_CLIENT_ID,
+        "license": LICENSE,
+    }
+    jwt = signing.build_review_jwt(
+        key.kid,
+        _decrypt_key_jwk(key),
+        subject=maresi,
+        rating=dto.rating,
+        opinion=dto.opinion,
+        images=None,
+        metadata=metadata,
+    )
+    _relay(user, hut, maresi, SubmittedReview.Action.review, jwt, target=signature)
+    cache.delete(_replies_cache_key(signature))
+    return ReviewOut(
+        signature=signing.jwt_signature(jwt),
+        rating=dto.rating,
+        opinion=dto.opinion,
+        nickname=metadata["nickname"],
+        language=None,
+        experience_context=None,
+        is_personal_experience=False,
+        is_affiliated=False,
+        images=[],
+        created=timezone.now().isoformat(),
+        source="mangrove",
+        license=LICENSE,
+        link=None,
+    )
+
+
+def list_replies(hut: Hut, signature: str) -> ReviewsEnvelope:
+    """Replies to one review (``urn:maresi`` listing, cached per signature)."""
+    _refuse_foreign_target(hut, signature)
+    maresi = f"urn:maresi:{signature}"
+    key = _replies_cache_key(signature)
+    cached = cache.get(key)
+    if cached is not None:
+        items = [ReviewItem.model_validate(item) for item in cached]
+    else:
+        try:
+            response = client().list_reviews(maresi)
+        except UpstreamUnavailable as exc:
+            raise _upstream_unavailable() from exc
+        items = [item for item in response.reviews if item.payload.action is None]
+        cache.set(key, [item.model_dump() for item in items], _LIST_TTL)
+    blacklisted = set(ReviewBlacklist.objects.values_list("signature", flat=True))
+    visible = [item for item in items if item.signature not in blacklisted]
+    visible.sort(key=lambda item: item.payload.iat, reverse=True)
+    return ReviewsEnvelope(
+        data=[serialize_review(item) for item in visible],
+        count=len(visible),
+        license=LICENSE,
+        attribution=ATTRIBUTION,
+    )
+
+
+def create_merge_request(
+    user: t.Any, hut: Hut, target: str, note: str, link: str
+) -> ReviewMergeRequest:
+    """File a merge request for staff (admin files equivalence later)."""
+    return ReviewMergeRequest.objects.create(
+        hut=hut, target=target, note=note, link=link, created_by=user
+    )
 
 
 def _not_owner() -> APIError:

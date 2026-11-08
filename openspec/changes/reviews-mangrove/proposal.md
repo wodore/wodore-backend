@@ -18,12 +18,11 @@ use.
   (0.4.1) for reading *and* writing — anonymous visitors read, Wodore
   accounts write. No review content is owned solely by Wodore: the upstream
   dataset is the source of truth, Wodore relays, caches and moderates.
-- **Deterministic subject URI recipe**: every hut's Mangrove subject is
-  `geo:<lat>,<lon>?q=<hut-slug>&u=<radius>` — coordinates from
-  `Hut.location`, `q` is the **Wodore slug** (byte-stable, unique,
-  multilingual-proof; uniqueness verified under upstream's normalized
-  matching), deliberately forgoing name matching with other clients
-  (existing hut review stock ≈ 0, so nothing to match against).
+- **Subject URI recipe with review names**: every hut's Mangrove
+  subject is `geo:<lat>,<lon>?q=<review-name>&u=<radius>` — the review
+  name resolves as **OSM name → hut name** and is **pinned on the hut's
+  first review** so renames never fork the subject. OSM-name `q`s make
+  Wodore subjects cross-client matchable with MapComplete.
 - **Server-held reviewer identity**: one ES256 (P-256) Mangrove keypair per
   user account, encrypted at rest; the backend signs and submits all review
   JWTs via `POST /submit` (the standard explicitly supports "a review
@@ -40,8 +39,15 @@ use.
   `GET /v1/my/reviews`. Standard dmr conventions, error contract and
   Api-Version middleware apply automatically.
 - **Moderation**: OIDC auth gate on writes, per-user submission quota,
-  server-side signature blacklist (hidden from our listings), abuse reports
-  relayed as signed `report_abuse` actions.
+  server-side signature blacklist (admin delete, covers both sources),
+  abuse reports relayed as signed `report_abuse` actions, and a staff
+  queue for user-filed review **merge requests**.
+- **Replies**: signed replies to reviews (`urn:maresi` subjects) with an
+  optional helpfulness rating, served by a per-review replies endpoint.
+- **Read-only provider merge**: hut listings merge refuges.info
+  community comments (CC BY-SA 2.0 FR) with per-review
+  `source`/`license`/`link` attribution — never re-published into
+  Mangrove; provider outages degrade to Mangrove-only.
 - **OSM metadata from the existing linkage**: review submissions stamp
   `metadata.osm_id` (`node/ID` / `way/ID` form) from the hut's existing
   `HutSource` linkage (org `osm`, fed by the hut import pipeline) — no new
@@ -61,7 +67,8 @@ use.
 ### New Capabilities
 
 - `hut-reviews`: public review read API and authenticated write API on huts
-  (list, summary/batch aggregates, submit, edit/delete/report, my-reviews),
+  (list with provider merge, summary/batch aggregates, submit,
+  edit/delete/report/reply/replies, merge requests, my-reviews),
   moderation gates (auth, quota, signature blacklist), caching behavior.
 - `mangrove-client`: the upstream integration service — subject URI recipe,
   httpx client with timeouts/retries/observability, 0.4.1 contract pinning,

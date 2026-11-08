@@ -37,7 +37,9 @@ MANGROVE_GET_RETRIES: int = config("MANGROVE_GET_RETRIES", cast=int, default=2)
 MANGROVE_U_RADIUS: int = config("MANGROVE_U_RADIUS", cast=int, default=30)
 
 #: Local cache TTLs (seconds) for the proxied list / summary payloads.
-MANGROVE_CACHE_TTL_LIST: int = config("MANGROVE_CACHE_TTL_LIST", cast=int, default=300)
+#: Lists default to 15 minutes; write-through merging keeps a fresh
+#: author's own review visible immediately regardless of the TTL.
+MANGROVE_CACHE_TTL_LIST: int = config("MANGROVE_CACHE_TTL_LIST", cast=int, default=900)
 MANGROVE_CACHE_TTL_SUMMARY: int = config(
     "MANGROVE_CACHE_TTL_SUMMARY", cast=int, default=900
 )
@@ -81,6 +83,20 @@ MANGROVE_THROTTLE_READ_DAILY: int = config(
 #: Batch-summary throttle (per client IP, per minute) — map-badge loads.
 MANGROVE_THROTTLE_BATCH_PER_MIN: int = config(
     "MANGROVE_THROTTLE_BATCH_PER_MIN", cast=int, default=30
+)
+
+# ── Read-only provider: refuges.info ────────────────────────────────
+#
+# Comments API (``GET /api/commentaires?id_point=…``) — verified live
+# 2026-11-08: 19–54 text comments on sampled refuges; every response
+# carries ``copyright … CC By-Sa 2.0``. Served with per-review source +
+# license + link; never re-published into Mangrove (BY-SA relicensing).
+
+MANGROVE_REFUGES_INFO_ENABLED: bool = config(
+    "MANGROVE_REFUGES_INFO_ENABLED", cast=bool, default=True
+)
+MANGROVE_REFUGES_INFO_API_BASE: str = config(
+    "MANGROVE_REFUGES_INFO_API_BASE", default="https://www.refuges.info"
 )
 
 # ── Reviewer key custody ─────────────────────────────────────────────

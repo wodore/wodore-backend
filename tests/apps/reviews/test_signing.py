@@ -11,7 +11,7 @@ pytestmark = pytest.mark.django_db
 
 
 def _decode_segment(segment: str) -> dict[str, object]:
-    padded = segment + "=" * (-len(segment) % 4)
+    padded = segment + "=" * ((4 - len(segment) % 4) % 4)
     return json.loads(base64.urlsafe_b64decode(padded))
 
 

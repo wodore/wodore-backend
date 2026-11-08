@@ -10,7 +10,27 @@ from django.utils.translation import gettext_lazy as _
 
 from server.apps.manager.admin import ModelAdmin
 
-from .models import ReviewBlacklist, ReviewerKey, ReviewerProfile, SubmittedReview
+from .models import (
+    HutReviewSubject,
+    ReviewBlacklist,
+    ReviewerKey,
+    ReviewerProfile,
+    ReviewMergeRequest,
+    SubmittedReview,
+)
+
+
+@admin.register(HutReviewSubject)
+class HutReviewSubjectAdmin(ModelAdmin):
+    """Pinned review names (set on first review write)."""
+
+    list_display = ("hut", "name", "created")
+    search_fields = ("name", "hut__slug")
+    readonly_fields = ("hut", "name", "created", "modified")
+
+    @override
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False  # pinned by the write path only
 
 
 @admin.register(ReviewerKey)
@@ -109,6 +129,29 @@ class SubmittedReviewAdmin(ModelAdmin):
             'attachment; filename="reviews-submissions.jsonl"'
         )
         return response
+
+
+@admin.register(ReviewMergeRequest)
+class ReviewMergeRequestAdmin(ModelAdmin):
+    """Staff queue for user-filed merge/relink requests (design D7).
+
+    Reviewing is manual: verify the target, then file the actual
+    Mangrove equivalence claims once Wodore's reviewer identity is
+    credible."""
+
+    list_display = ("hut", "target", "state", "created_by", "created")
+    list_filter = ("state", "created")
+    search_fields = ("target", "note", "hut__slug")
+    readonly_fields = ("created", "modified", "created_by")
+    actions = ("mark_done", "mark_rejected")
+
+    @admin.action(description=_("Mark merge requests as done"))
+    def mark_done(self, _request: HttpRequest, queryset: t.Any) -> None:
+        queryset.update(state=ReviewMergeRequest.State.done)
+
+    @admin.action(description=_("Mark merge requests as rejected"))
+    def mark_rejected(self, _request: HttpRequest, queryset: t.Any) -> None:
+        queryset.update(state=ReviewMergeRequest.State.rejected)
 
 
 @admin.register(ReviewBlacklist)

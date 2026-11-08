@@ -9,8 +9,8 @@ from django.core.management import call_command
 
 from server.apps.accounts.models import User
 from server.apps.reviews import services
-from server.apps.reviews.client import subject_for_hut
 from server.apps.reviews.models import ReviewerKey, ReviewerProfile, SubmittedReview
+from server.apps.reviews.services import subject_for_hut
 
 from .conftest import log_row
 
