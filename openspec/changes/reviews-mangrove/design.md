@@ -438,6 +438,16 @@ link submit without the field.
 
 - **Images**: the DTO accepts `https` URLs only (≤5, `{src, label ≤50}`);
   replies accept the same optional `images` list as submissions.
+- **Photo upload relay** (round 5): `POST /v1/reviews/images`
+  (authenticated, throttled) relays multipart photos to Mangrove's
+  open upload server (`PUT https://upload.mangrove.reviews`, ≤5
+  photos, ≤4.5 MB, JPEG/PNG/GIF/WebP). Wodore stores NOTHING — the
+  response returns `files.mangrove.reviews/<hash>` URLs
+  (content-addressed, immutable, 1-year cache; unlisted photos
+  auto-deleted after a day) for the client to include in the review's
+  `images[].src`. After a submit WITH images, the MangroveProvider's
+  gallery cache for the hut's coordinates is invalidated (otherwise
+  the 24 h TTL delays new photos in the gallery).
 - **Gallery provider** (round 3): `MangroveProvider`
   (`server/apps/reviews/images.py`) feeds the hut's review photos into
   the standard geometries image pipeline — registered beside the other

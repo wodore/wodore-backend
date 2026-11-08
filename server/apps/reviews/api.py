@@ -34,6 +34,7 @@ from .schemas import (
     BatchSummaryQuery,
     MergeRequestOut,
     MyReviewOut,
+    PhotoUploadResponse,
     ReportOut,
     ReviewEditIn,
     ReviewListQuery,
@@ -397,12 +398,58 @@ class MyReviewsController(ReviewsWriteController):
         return services.my_reviews(self.caller)
 
 
+class ReviewPhotoUploadController(ReviewsWriteController):
+    """Upload review photos to the Mangrove file server (relay, no storage)."""
+
+    @modify(
+        operation_id="upload_review_photos",
+        status_code=HTTPStatus.CREATED,
+        throttling=[_REVIEWS_BATCH_THROTTLE],
+        extra_responses=[_UPSTREAM_503],
+    )
+    def post(self) -> PhotoUploadResponse:
+        """Upload photos for a review.
+
+        Relays JPEG/PNG/GIF/WebP images to the Mangrove file server
+        (≤5 photos, ≤4.5 MB total). Returns the public
+        ``files.mangrove.reviews`` URLs to include in the review's
+        ``images[].src``. Wodore stores nothing — photos are
+        content-addressed and immutable upstream; unlisted photos are
+        deleted after a day.
+        """
+        from . import services
+        from .schemas import PhotoUploadOut
+
+        files: list[tuple[str, bytes, str]] = []
+        for field_name, uploaded in self.request.FILES.items():
+            if not field_name.startswith("files"):
+                continue
+            raw_items: list[Any] = (
+                uploaded if isinstance(uploaded, list) else [uploaded]
+            )
+            for item in raw_items:
+                files.append(
+                    (
+                        str(item.name or "photo"),  # type: ignore[union-attr]  # UploadedFile protocol
+                        item.read(),  # type: ignore[union-attr]  # UploadedFile protocol
+                        str(item.content_type or ""),  # type: ignore[union-attr]  # UploadedFile protocol
+                    )
+                )
+        urls = services.upload_review_photos(files)
+        return PhotoUploadResponse(images=[PhotoUploadOut(src=url) for url in urls])
+
+
 #: Top-level routes — mounted under ``reviews/`` by ``api_v1.py``.
 paths = [
     path(
         "summary",
         ReviewsBatchSummaryController.as_view(),
         name="get_reviews_summary_batch",
+    ),
+    path(
+        "images",
+        ReviewPhotoUploadController.as_view(),
+        name="upload_review_photos",
     ),
 ]
 

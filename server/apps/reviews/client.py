@@ -35,6 +35,20 @@ MANGROVE_API_VERSION = "0.4.1"
 #: Upstream list default; >3500 is refused upstream, 1000 is the default.
 _UPSTREAM_LIST_LIMIT = 1000
 
+#: Mangrove photo upload server (open — any app, any key; verified live).
+#: PUT multipart/form-data, field ``files``, ≤5 photos, ≤4.5 MB total,
+#: JPEG/PNG/GIF/WebP. Response: base64url SHA-256 hashes in upload
+#: order; ``https://files.mangrove.reviews/<hash>`` serves the photo
+#: (content-addressed, immutable, 1-year cache). Unlisted photos are
+#: deleted after a day.
+_UPLOAD_BASE_URL = "https://upload.mangrove.reviews"
+_FILES_BASE_URL = "https://files.mangrove.reviews"
+
+#: Upload limits (documented upstream; enforced before the relay).
+UPLOAD_MAX_PHOTOS = 5
+UPLOAD_MAX_TOTAL_BYTES = 4_500_000
+UPLOAD_ALLOWED_TYPES = ("image/jpeg", "image/png", "image/gif", "image/webp")
+
 _geo_uri_re = re.compile(
     r"^geo:(?P<lat>-?\d+(?:\.\d+)?),(?P<lon>-?\d+(?:\.\d+)?)(?:\?(?P<query>.*))?$"
 )
@@ -349,6 +363,51 @@ class MangroveClient:
             return None
         return t.cast(IssuerStats, _parse_model(IssuerStats, response.json()))
 
+    def upload_photos(self, files: "list[tuple[str, bytes, str]]") -> "list[str]":
+        """Upload photos to the Mangrove file server, return their hashes.
+
+        Args:
+            files: ``(filename, content, content_type)`` tuples — the
+                multipart parts to relay. The caller validates limits
+                (count, size, types) before calling.
+
+        Returns:
+            Base64url SHA-256 hashes in upload order; use
+            ``photo_url(hash)`` for the public URL.
+
+        Raises:
+            UpstreamRejected: the upload service refused (4xx).
+            UpstreamUnavailable: network/timeout/5xx.
+        """
+
+        parts: list[t.Any] = []
+        for filename, content, content_type in files:
+            parts.append(("files", (filename, content, content_type)))
+        started = time.monotonic()
+        try:
+            with httpx.Client(timeout=self._timeout) as http:
+                response = http.put(_UPLOAD_BASE_URL, files=parts)
+        except (httpx.TimeoutException, httpx.TransportError) as exc:
+            raise UpstreamUnavailable(f"upload server unreachable: {exc}") from exc
+        duration_ms = int((time.monotonic() - started) * 1000)
+        logger.info(
+            "mangrove_upload",
+            photos=len(files),
+            status=response.status_code,
+            duration_ms=duration_ms,
+        )
+        if response.status_code >= 400:
+            logger.warning(
+                "mangrove_upload_rejected",
+                status=response.status_code,
+                body=response.text[:300],
+            )
+            raise UpstreamRejected(response.text[:200])
+        hashes = response.json()
+        if not isinstance(hashes, list):
+            raise UpstreamUnavailable("upload server returned a non-list response")
+        return [str(h) for h in hashes]
+
     def submit(self, jwt: str) -> None:
         """Relay a signed JWT via ``POST /submit`` (text/plain body).
 
@@ -362,6 +421,11 @@ class MangroveClient:
             content=jwt,
             headers={"Content-Type": "text/plain"},
         )
+
+
+def photo_url(hash_: str) -> str:
+    """The public URL of an uploaded photo (content-addressed, immutable)."""
+    return f"{_FILES_BASE_URL}/{hash_}"
 
 
 def sentry_span(path: str) -> "t.Any":

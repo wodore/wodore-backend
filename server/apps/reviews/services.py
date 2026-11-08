@@ -959,6 +959,8 @@ def submit_review(
     )
     _relay(user, hut, subject, SubmittedReview.Action.review, jwt, target="")
     _merge_into_cache(subject, _item_from_own_jwt(jwt, ""))
+    if dto.images:
+        invalidate_image_provider_cache(hut)
     return ReviewOut(
         signature=signing.jwt_signature(jwt),
         rating=dto.rating,
@@ -1151,6 +1153,97 @@ def create_merge_request(
     return ReviewMergeRequest.objects.create(
         hut=hut, target=target, note=note, link=link, created_by=user
     )
+
+
+def upload_review_photos(files: "list[tuple[str, bytes, str]]") -> "list[str]":
+    """Relay photos to the Mangrove upload server, return public src URLs.
+
+    Wodore stores NOTHING locally (owner decision): the backend is a
+    relay to ``upload.mangrove.reviews`` — content-addressed, immutable,
+    auto-deleted if no review lists them within a day. The returned
+    ``src`` URLs go into the review's ``images[].src``.
+
+    Raises:
+        APIError (400): too many photos, oversized, or wrong type.
+        APIError (503): upload server unreachable or rejected.
+    """
+    from .client import (
+        UPLOAD_ALLOWED_TYPES,
+        UPLOAD_MAX_PHOTOS,
+        UPLOAD_MAX_TOTAL_BYTES,
+        photo_url,
+    )
+
+    if not files:
+        raise APIError(
+            {
+                "code": ErrorCode.validation_error,
+                "detail": "At least one photo is required.",
+            },
+            status_code=HTTPStatus.BAD_REQUEST,
+        )
+    if len(files) > UPLOAD_MAX_PHOTOS:
+        raise APIError(
+            {
+                "code": ErrorCode.validation_error,
+                "detail": f"At most {UPLOAD_MAX_PHOTOS} photos per upload.",
+            },
+            status_code=HTTPStatus.BAD_REQUEST,
+        )
+    total = sum(len(content) for _name, content, _type in files)
+    if total > UPLOAD_MAX_TOTAL_BYTES:
+        raise APIError(
+            {
+                "code": ErrorCode.validation_error,
+                "detail": f"Total upload size exceeds {UPLOAD_MAX_TOTAL_BYTES // 1_000_000} MB.",
+            },
+            status_code=HTTPStatus.BAD_REQUEST,
+        )
+    for _name, _content, content_type in files:
+        if content_type not in UPLOAD_ALLOWED_TYPES:
+            raise APIError(
+                {
+                    "code": ErrorCode.validation_error,
+                    "detail": f"Unsupported image type '{content_type}'. "
+                    f"Allowed: {', '.join(UPLOAD_ALLOWED_TYPES)}.",
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+    try:
+        hashes = client().upload_photos(files)
+    except UpstreamRejected as exc:
+        raise APIError(
+            {
+                "code": ErrorCode.service_unavailable,
+                "detail": "The photo upload service rejected the upload.",
+            },
+            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+        ) from exc
+    except UpstreamUnavailable as exc:
+        raise APIError(
+            {
+                "code": ErrorCode.service_unavailable,
+                "detail": "The photo upload service is temporarily unavailable.",
+            },
+            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+        ) from exc
+    return [photo_url(hash_) for hash_ in hashes]
+
+
+def invalidate_image_provider_cache(hut: Hut) -> None:
+    """Invalidate the MangroveProvider cache for the hut's coordinates.
+
+    Called after a successful submit with images: the gallery provider
+    caches by (lat, lon, radius) for 24 h — without this, newly uploaded
+    photos take a day to appear in the hut gallery.
+    """
+    from .images import MangroveProvider
+
+    provider = MangroveProvider()
+    lat = round(hut.location.y, 6)
+    lon = round(hut.location.x, 6)
+    for radius in (100, 300, 500, 1000, 2000):
+        provider.invalidate_cache(lat, lon, radius)
 
 
 def _not_owner() -> APIError:

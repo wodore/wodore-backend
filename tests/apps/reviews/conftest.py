@@ -113,6 +113,9 @@ class FakeClient:
                 return item
         return None
 
+    def upload_photos(self, files: "list[tuple[str, bytes, str]]") -> "list[str]":
+        return [f"fakehash{i}" for i in range(len(files))]
+
     def submit(self, jwt: str) -> None:
         from server.apps.reviews.client import UpstreamRejected, UpstreamUnavailable
 

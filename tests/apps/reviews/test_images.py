@@ -172,3 +172,105 @@ def _payload(jwt: str) -> dict[str, t.Any]:
         dict[str, t.Any],
         json.loads(base64.urlsafe_b64decode(part + "=" * ((4 - len(part) % 4) % 4))),
     )
+
+
+class TestPhotoUpload:
+    """Photo upload relay: validation, relay, provider cache invalidation."""
+
+    def test_upload_relayed_to_mangrove(self) -> None:
+        from django.test import Client
+
+        from server.apps.accounts.models import User
+
+        user = User.objects.create_user(  # type: ignore  # custom manager/queryset inference gap
+            email="photo@example.com", password="x"
+        )
+        client = Client(SERVER_NAME="localhost")
+        client.force_login(user)
+
+        from server.apps.reviews import services
+
+        services._client.upload_photos = lambda files: [  # type: ignore[method-assign]
+            "abc123hash",
+            "def456hash",
+        ]
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        response = client.post(
+            "/v1/reviews/images",
+            data={"files": SimpleUploadedFile("photo1.jpg", b"fake-jpeg-bytes", "image/jpeg")},
+        )
+        assert response.status_code == 201, response.content
+        body = response.json()
+        assert len(body["images"]) == 2
+        assert body["images"][0]["src"] == "https://files.mangrove.reviews/abc123hash"
+        assert body["images"][1]["src"] == "https://files.mangrove.reviews/def456hash"
+
+    def test_upload_requires_auth(self) -> None:
+        from django.test import Client
+
+        response = Client().post("/v1/reviews/images", data={})
+        assert response.status_code == 401
+
+    def test_upload_validation_service(self) -> None:
+        from dmr import APIError
+
+        from server.apps.reviews import services
+
+        # Empty
+        with __import__("pytest").raises(APIError):
+            services.upload_review_photos([])
+        # Too many
+        too_many = [("p.jpg", b"x", "image/jpeg")] * 6
+        with __import__("pytest").raises(APIError):
+            services.upload_review_photos(too_many)
+        # Oversized
+        oversized = [("big.jpg", b"x" * 4_600_000, "image/jpeg")]
+        with __import__("pytest").raises(APIError):
+            services.upload_review_photos(oversized)
+        # Bad type
+        bad_type = [("p.txt", b"x", "text/plain")]
+        with __import__("pytest").raises(APIError):
+            services.upload_review_photos(bad_type)
+
+    def test_provider_cache_invalidated_after_submit_with_images(
+        self, hut: Any
+    ) -> None:
+        from tests.apps.reviews.test_services import _user
+
+        from django.core.cache import caches
+
+        from server.apps.reviews import services
+        from server.apps.reviews.schemas import ReviewSubmitIn
+
+        user = _user("cache@example.com")
+        # Seed the provider cache
+        from server.apps.reviews.images import MangroveProvider
+
+        provider = MangroveProvider()
+        asyncio.run(
+            provider._set_cached_results(
+                provider._get_cache_key(hut.location.y, hut.location.x, 300), []
+            )
+        )
+        assert (
+            caches["persistent"].get(
+                provider._get_cache_key(hut.location.y, hut.location.x, 300)
+            )
+            is not None
+        )
+        # Submit with images → cache invalidated
+        services.submit_review(
+            user,
+            hut,
+            ReviewSubmitIn.model_validate(
+                {"rating": 50, "images": [{"src": "https://files.mangrove.reviews/x"}]}
+            ),
+            "de",
+        )
+        assert (
+            caches["persistent"].get(
+                provider._get_cache_key(hut.location.y, hut.location.x, 300)
+            )
+            is None
+        )

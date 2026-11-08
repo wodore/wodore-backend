@@ -275,6 +275,24 @@ are decided but sequenced after the first release cut.
       names; Opus N11), specs/design/AGENTS wording aligned (Opus B8),
       116 reviews tests green
 
+## 8e. Round 5 — photo upload relay + provider cache invalidation (2026-11-08)
+
+- [x] 8e.1 `MangroveClient.upload_photos()`: PUT multipart to
+      `upload.mangrove.reviews` (verified live 200), returns
+      base64url SHA-256 hashes; `photo_url(hash)` builds the public
+      `files.mangrove.reviews/<hash>` URL
+- [x] 8e.2 `POST /v1/reviews/images` endpoint (authenticated,
+      throttled): relays multipart files, validates count (≤5), total
+      size (≤4.5 MB), types (JPEG/PNG/GIF/WebP); Wodore stores
+      NOTHING — pure relay to the Mangrove file server
+- [x] 8e.3 Provider cache invalidation after submit with images:
+      `invalidate_image_provider_cache(hut)` clears the
+      MangroveProvider's `(lat, lon, radius)` entries (24 h TTL
+      otherwise delays new photos in the gallery)
+- [x] 8e.4 FakeClient gains `upload_photos()` for testing; 4 new
+      tests (relay, auth gate, validation service, cache
+      invalidation); 120 reviews tests green
+
 ## 9. Pre-release verification (manual, staging)
 
 - [ ] 9.1 Re-verify upstream contract against live 0.4.x at release time

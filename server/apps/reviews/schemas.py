@@ -220,3 +220,15 @@ class ReportOut(pydantic.BaseModel):
 class MergeRequestOut(pydantic.BaseModel):
     id: int = Field(description="Merge request id")
     state: str = Field(description="Review state (new/done/rejected)")
+
+
+class PhotoUploadOut(pydantic.BaseModel):
+    """Uploaded photo: the src to include in the review's images[]."""
+
+    src: str = Field(
+        description="Public URL on files.mangrove.reviews (content-addressed, immutable)"
+    )
+
+
+class PhotoUploadResponse(pydantic.BaseModel):
+    images: list[PhotoUploadOut] = Field(description="Uploaded photos, upload order")
