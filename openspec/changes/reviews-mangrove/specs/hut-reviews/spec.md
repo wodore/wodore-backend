@@ -167,9 +167,9 @@ The system SHALL serve `POST /v1/huts/{slug}/reviews/{signature}/delete`
 requiring authentication and local ownership (same rules as edit), then
 sign an `action: "delete"` JWT against `urn:maresi:{signature}` and relay
 it, treating an upstream refusal for an already-deleted target as
-success (idempotent). Success SHALL return 204, record a `delete` action
-row in the submission log (the log is append-only — deletion never
-mutates existing rows), and invalidate the hut's caches.
+success (idempotent). Success SHALL return 204 and record a `delete` action
+row in the submission log (append-only); the hut's next read drops the
+deleted review via the own-write overlay.
 
 #### Scenario: Owner deletes
 
@@ -223,7 +223,8 @@ edited reviews shown with their latest edit.
 ### Requirement: Replies to reviews
 The system SHALL serve `POST /v1/huts/{slug}/reviews/{signature}/reply`
 requiring authentication with a body of `rating` (helpfulness, 0–100)
-and/or `opinion` (≤1000). The reply SHALL be signed as an ordinary
+and/or `opinion` (≤1000), plus optional `images` (≤5 × `{src: https
+URL, label?: ≤50}` — same validation as submissions). The reply SHALL be signed as an ordinary
 Mangrove review whose subject is `urn:maresi:{signature}`, counted
 against the submission quota, and logged with the parent signature as
 its target. The public `GET /v1/huts/{slug}/reviews/{signature}/replies`
@@ -240,6 +241,31 @@ path SHALL answer 404.
 
 - **WHEN** a reply body carries neither rating nor opinion
 - **THEN** the response is 400 with the standard validation error
+
+#### Scenario: Replies may carry images
+
+- **WHEN** a reply body carries an opinion and one https image URL
+- **THEN** the signed reply JWT includes the images and the response echoes them
+
+### Requirement: Review photos in the image gallery
+The system SHALL expose the images attached to a hut's Mangrove reviews
+through the standard image-provider pipeline (the same gallery endpoint
+and fan-out as the other providers): each review photo becomes a gallery
+feature with the review's license (CC-BY-4.0 by default), the reviewer
+nickname as author, Mangrove provider attribution, and imagor-served
+display variants. Photos of blacklisted reviews SHALL be excluded;
+provider failures SHALL degrade to an empty result; the
+`MANGROVE_ENABLED` kill-switch SHALL disable the source.
+
+#### Scenario: Review photo appears in the hut gallery
+
+- **WHEN** a hut has a visible Mangrove review carrying an image on the allowlisted host
+- **THEN** the hut's image gallery fan-out includes that photo with CC-BY-4.0 license, reviewer attribution and imagor display URLs
+
+#### Scenario: Blacklisted review photo hidden
+
+- **WHEN** the only review carrying a photo is blacklisted
+- **THEN** the gallery does not include the photo
 
 ### Requirement: Review merge requests
 The system SHALL serve
@@ -288,10 +314,15 @@ contract. Hut detail endpoints and their ETags SHALL NOT change as a
 function of review state. Anonymous reads SHALL be rate-throttled and
 the batch endpoint bounded (≤50 slugs).
 
-#### Scenario: Write-through invalidation
+#### Scenario: Own-write overlay
 
-- **WHEN** a review is submitted for a hut whose list response is cached locally
-- **THEN** the next origin list request re-fetches from upstream rather than serving the pre-write cache entry
+- **WHEN** a review is submitted for a hut and the upstream listing does not yet include it (indexing lag)
+- **THEN** the hut's next read still shows it (prepended from the submission log), cold cache or not
+
+#### Scenario: Deleted stays hidden under lag
+
+- **WHEN** a review is deleted but the upstream listing still returns it
+- **THEN** the hut's next read hides it (the delete action row drops it via the overlay)
 
 #### Scenario: Hut ETags stay review-blind
 

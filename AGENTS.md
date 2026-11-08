@@ -359,8 +359,9 @@ the **lane** database (the main checkout's `app` targets dev).
 
 Open decentralized hut reviews via [Mangrove Reviews](https://docs.mangrove.reviews)
 (openspec: `reviews-mangrove`; app `server.apps/reviews`). Every hut's
-subject is `geo:{lat:.6f},{lon:.6f}?q={slug}&u=30` (slug `q`, never a
-name). All upstream traffic goes through `MangroveClient`
+subject is `geo:{lat:.6f},{lon:.6f}?q={review-name}&u=30` — the
+review name (OSM name → hut name fallback, PINNED on the hut's first
+review). All upstream traffic goes through `MangroveClient`
 (`client.py` — the ONLY module talking to `api.mangrove.reviews`,
 API 0.4.1, contract-pinned via `fixtures/mangrove/`). Anonymous reads
 are proxied/cached/filterred (blacklist + geo-match); writes require

@@ -24,15 +24,37 @@ def _clear_caches():
     """Local review cache + throttle counters must not leak between tests."""
     caches["default"].clear()
     caches["throttling"].clear()
+    caches["shared"].clear()
+    caches["persistent"].clear()  # image-provider caches (MangroveProvider)
     yield
 
 
+def _ensure_category_tree() -> None:
+    """The amenity→accommodation tree ``HutFactory`` needs (idempotent).
+
+    On a truly fresh test DB the seed loader's categories land root-level
+    (its accommodation fallback); CI avoids this via cached pgdata. Tests
+    that use ``HutFactory`` must ensure the tree themselves.
+    """
+    from server.apps.categories.models import Category
+
+    amenity, _created = Category.objects.get_or_create(
+        slug="amenity", defaults={"name": "Amenity", "is_active": True}
+    )
+    Category.objects.get_or_create(
+        slug="accommodation",
+        parent=amenity,
+        defaults={"name": "Accommodation", "is_active": True},
+    )
+
+
 @pytest.fixture
-def hut():
+def hut(seed_data: object):
     """A public active hut with OSM and refuges.info sources (stand-ins)."""
     from server.apps.huts.models import HutSource
     from server.apps.organizations.models import Organization
 
+    _ensure_category_tree()
     made = HutFactory()
     org_osm, _created = Organization.objects.get_or_create(
         slug="osm", defaults={"name": "OpenStreetMap"}
@@ -144,15 +166,24 @@ def fake_refuges(_stub_refuges_provider: FakeRefugesClient) -> FakeRefugesClient
     return _stub_refuges_provider
 
 
-@pytest.fixture
-def use_fake_client(
-    fake_client: FakeClient, monkeypatch: pytest.MonkeyPatch
-) -> FakeClient:
-    """Route every service call through the fake upstream."""
+@pytest.fixture(autouse=True)
+def _stub_mangrove_client(monkeypatch: pytest.MonkeyPatch) -> FakeClient:
+    """Never hit the live Mangrove API from tests — AUTOUSE.
+
+    Opus review B5: a listing test without an explicit fake reached
+    api.mangrove.reviews with the test hut's subject.
+    """
     from server.apps.reviews import services
 
-    monkeypatch.setattr(services, "_client", fake_client)
-    return fake_client
+    fake = FakeClient()
+    monkeypatch.setattr(services, "_client", fake)
+    return fake
+
+
+@pytest.fixture
+def use_fake_client(_stub_mangrove_client: FakeClient) -> FakeClient:
+    """The autouse Mangrove stub, requestable when a test sets items."""
+    return _stub_mangrove_client
 
 
 def review_item(

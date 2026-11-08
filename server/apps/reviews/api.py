@@ -387,7 +387,7 @@ class ReviewMergeRequestController(ReviewsWriteController):
 class MyReviewsController(ReviewsWriteController):
     """The caller's own reviews (private, never cached)."""
 
-    @modify(operation_id="get_my_reviews")
+    @modify(operation_id="get_my_reviews", extra_responses=[_UPSTREAM_503])
     def get(self) -> list[MyReviewOut]:
         """List my reviews.
 

@@ -191,7 +191,11 @@ class SubmittedReview(TimeStampedModel):
     hut_slug = models.CharField(
         max_length=50, db_index=True, verbose_name=_("Hut slug")
     )
-    subject = models.CharField(max_length=255, verbose_name=_("Mangrove subject URI"))
+    subject = models.CharField(
+        max_length=1024,
+        verbose_name=_("Mangrove subject URI"),
+        # 1024: a percent-encoded 100-char name yields ~600 chars (Opus N11)
+    )
     action = models.CharField(
         max_length=20,
         choices=Action.choices,
@@ -280,6 +284,12 @@ class HutReviewSubject(TimeStampedModel):
         return f"{self.hut}: {self.name}"
 
 
+class _MergeStateChoices(models.TextChoices):
+    new = "new", _("new")
+    done = "done", _("done")
+    rejected = "rejected", _("rejected")
+
+
 class ReviewMergeRequest(TimeStampedModel):
     """User-filed request to merge/relink a hut's reviews (admin queue).
 
@@ -288,12 +298,7 @@ class ReviewMergeRequest(TimeStampedModel):
     Mangrove equivalence claims manually.
     """
 
-    class State(models.TextChoices):
-        new = "new", _("new")
-        done = "done", _("done")
-        rejected = "rejected", _("rejected")
-
-    State = State
+    State = _MergeStateChoices
 
     hut = models.ForeignKey(
         "huts.Hut",
@@ -338,6 +343,12 @@ class ReviewMergeRequest(TimeStampedModel):
         verbose_name = _("Review merge request")
         verbose_name_plural = _("Review merge requests")
         ordering = ("-created",)
+        constraints = (
+            models.CheckConstraint(
+                name="%(app_label)s_%(class)s_state_valid",
+                condition=models.Q(state__in=_MergeStateChoices.values),
+            ),
+        )
 
     def __str__(self) -> str:
         return f"{self.hut} → {self.target[:40]} ({self.state})"

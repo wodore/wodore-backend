@@ -190,7 +190,10 @@ class TestReplies:
         ]
         listing = client.get(f"/v1/huts/{hut.slug}/reviews/parent-1/replies")
         assert listing.status_code == 200
-        assert [r["signature"] for r in listing.json()["data"]] == ["reply-x"]
+        served = [r["signature"] for r in listing.json()["data"]]
+        # The upstream reply (reply-x) AND our just-written reply (overlay).
+        assert "reply-x" in served
+        assert created.json()["signature"] in served
 
     def test_reply_requires_rating_or_opinion(
         self, hut: Any, use_fake_client: Any

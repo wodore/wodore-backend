@@ -1,6 +1,7 @@
 """The only code path to api.mangrove.reviews (openspec: reviews-mangrove D2).
 
-* ``subject_for_hut`` — the deterministic hut subject recipe (D1).
+* ``subject_for_hut`` lives in ``services`` (name-based, D1); this
+  module only parses and matches geo subjects.
 * ``subject_geo_matches`` — upstream's geo rule, used as the local
   anti-injection filter (D6): normalized-``q`` equality AND coordinates
   within the sum of both ``u`` radii. Verified live 2026-11-08: ``q``
@@ -17,7 +18,7 @@ import re
 import time
 import typing as t
 import unicodedata
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 import pydantic
@@ -91,21 +92,6 @@ def parse_geo_subject(subject: str) -> GeoSubject | None:
         lon=float(match.group("lon")),
         q=q_values[0],
         u=u,
-    )
-
-
-def subject_for_hut(hut: "t.Any") -> str:
-    """The deterministic Mangrove subject of a hut (design D1).
-
-    ``geo:{lat:.6f},{lon:.6f}?q={slug}&u={u}`` — a pure function of the
-    hut row; byte-stable for an unchanged row, multilingual-proof.
-    """
-    location = hut.location
-    return "geo:{:.6f},{:.6f}?{}&u={}".format(
-        location.y,
-        location.x,
-        urlencode({"q": hut.slug}),
-        settings.MANGROVE_U_RADIUS,
     )
 
 

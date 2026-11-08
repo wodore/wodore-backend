@@ -230,6 +230,51 @@ are decided but sequenced after the first release cut.
       + attribution + kill-switch + parsing units, replies, merge
       requests (97 reviews tests green)
 
+## 8c. Round 3 — image gallery provider + reply images (2026-11-08)
+
+- [x] 8c.1 `MangroveProvider` (`server/apps/reviews/images.py`): review
+      photos into the standard image pipeline (imagor variants, CC-BY-4.0
+      license rows, reviewer attribution, provider fallback entry,
+      24 h cache, geo-match + blacklist filters, kill-switched,
+      never-raises) — registered in `api_images.py`
+- [x] 8c.2 Reply images: `ReviewReplyIn.images` (≤5, https, same
+      validation) wired through signing + response DTO
+- [x] 8c.3 Spec + design updated (hut-reviews: reply images scenario,
+      gallery-provider requirement; design D9)
+- [x] 8c.4 Tests: provider unit tests + reply-images test
+
+## 8d. Round 4 — Opus review fixes (2026-11-08)
+
+- [x] 8d.1 Own-write overlay on every list build (log-based, worker- and
+      cache-state-independent) + shared DB cache alias — the round-2
+      write-through merge was LocMem/per-process and skipped on cold
+      cache (Opus B1)
+- [x] 8d.2 Upstream-failure guards everywhere (edit/delete/report/reply/
+      replies/my-reviews never 500 while upstream is down — 503 instead;
+      Opus B2)
+- [x] 8d.3 Edit-row handling per live probe: default listings serve the
+      EDIT row (action=edit, own signature, original_sub=geo) — kept
+      with stable original-signature identity, both-signature
+      blacklist, geo-match on original_sub; fixture recorded
+      (`reviews_list_edited.json`); edited reviews no longer vanish and
+      blacklist escapes via edits are closed (Opus B3)
+- [x] 8d.4 `q` encoding verified live: plus-spaces required at submit,
+      %20 refused, matching normalizes both, accents percent-encoded
+      and not folded — byte-level tests pin the encoder (Opus B4)
+- [x] 8d.5 Tests isolated from the live upstream (autouse Mangrove
+      stub; Opus B5)
+- [x] 8d.6 refuges.info back-pressure: 2.5 s provider timeout,
+      60 s negative cache, shared alias, batch = cached-only provider
+      data (Opus B6)
+- [x] 8d.7 Image-src strictness: backslash/`@`/whitespace/control/port
+      rejected before parsing (parser-confusion bypass closed; Opus B7)
+- [x] 8d.8 Gate via the hut's visible list (no upstream call; blacklist
+      + provider ids 404), keys minted only on actual writes, pin
+      returns the stored name, replies overlay (Opus N1/N3a/N3c/N4/N6)
+- [x] 8d.9 `SubmittedReview.subject` widened to 1024 (percent-encoded
+      names; Opus N11), specs/design/AGENTS wording aligned (Opus B8),
+      116 reviews tests green
+
 ## 9. Pre-release verification (manual, staging)
 
 - [ ] 9.1 Re-verify upstream contract against live 0.4.x at release time

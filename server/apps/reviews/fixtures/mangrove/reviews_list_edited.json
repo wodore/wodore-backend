@@ -1,0 +1,48 @@
+{
+ "status": 200,
+ "body": {
+  "reviews": [
+   {
+    "signature": "Mk7hzYu8f15TYaIR0-1mvj1FRa9KSB7TyeFR_Lsy1mSPdgkMLhnz5xKV0LbksLO04jHdjltReVcCqb-vATJ1Yg",
+    "jwt": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Ii0tLS0tQkVHSU4gUFVCTElDIEtFWS0tLS0tTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FFMHNJa0pTeXNLYkYzeG1wcXIvY3RwSVB4WlA1WGJGUE1mZHE0Y2JvUXpva2w2WStiSmFpMHUzK1NPMlg1NUN1SFp2TlFoTnFBUHQ0d3VBNFprOFU0Q2c9PS0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLSIsImp3ayI6IntcImNydlwiOlwiUC0yNTZcIixcImt0eVwiOlwiRUNcIixcInhcIjpcIjBzSWtKU3lzS2JGM3htcHFyX2N0cElQeFpQNVhiRlBNZmRxNGNib1F6b2tcIixcInlcIjpcIkplbVBteVdvdEx0X2tqdGwtZVFyaDJielVJVGFnRDdlTUxnT0daUEZPQW9cIixcImtleV9vcHNcIjpbXCJ2ZXJpZnlcIl0sXCJleHRcIjp0cnVlfSJ9.eyJpYXQiOjE3OTQxNDc1ODAsInN1YiI6InVybjptYXJlc2k6VFJod1UtUTNJVGRQU3prR3pHc0RHUjY5TVVnekl6MXgwWVVnd2w4a2dnbkhnOHdmajROeGJGaEUtSEFkbmdIWXNRUWlHSWVVR255Tno1QXBMaU5Yc1EiLCJhY3Rpb24iOiJlZGl0IiwicmF0aW5nIjo4MCwib3BpbmlvbiI6ImFmdGVyIiwibWV0YWRhdGEiOnsibmlja25hbWUiOiJ3b2RvcmUtcHJvYmUiLCJjbGllbnRfaWQiOiJodHRwczovL3dvZG9yZS5jb20ifX0.Mk7hzYu8f15TYaIR0-1mvj1FRa9KSB7TyeFR_Lsy1mSPdgkMLhnz5xKV0LbksLO04jHdjltReVcCqb-vATJ1Yg",
+    "kid": "-----BEGIN PUBLIC KEY-----MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE0sIkJSysKbF3xmpqr/ctpIPxZP5XbFPMfdq4cboQzokl6Y+bJai0u3+SO2X55CuHZvNQhNqAPt4wuA4Zk8U4Cg==-----END PUBLIC KEY-----",
+    "payload": {
+     "iat": 1794147580,
+     "sub": "urn:maresi:TRhwU-Q3ITdPSzkGzGsDGR69MUgzIz1x0YUgwl8kggnHg8wfj4NxbFhE-HAdngHYsQQiGIeUGnyNz5ApLiNXsQ",
+     "rating": 80,
+     "opinion": "after",
+     "metadata": {
+      "client_id": "https://wodore.com",
+      "nickname": "wodore-probe"
+     },
+     "action": "edit"
+    },
+    "scheme": "urn:maresi",
+    "geo": {
+     "coordinates": null,
+     "uncertainty": null
+    },
+    "original_sub": "geo:0.0005,0?q=TestEdit&u=100"
+   },
+   {
+    "signature": "fbW_J_kiKr-dIWXciykv1zxeOl_zdTH8boQP4c9JPUyQs46Uah_pURRYQYibCDRcYyyicMGfE9TU24bv64MM3w",
+    "jwt": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Ii0tLS0tQkVHSU4gUFVCTElDIEtFWS0tLS0tTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FFQUhic2JUNElYTVNNTHBTMjhXMWh3dVVxemJRSjdrbnBMVkNyNk1zM1A5UmFjS2toTjVlanlzMC8vVVROVVpxZjVtRWNMbEhZb3JkSXRwQ3VYT1RRZFE9PS0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLSIsImp3ayI6IntcImNydlwiOlwiUC0yNTZcIixcImt0eVwiOlwiRUNcIixcInhcIjpcIkFIYnNiVDRJWE1TTUxwUzI4VzFod3VVcXpiUUo3a25wTFZDcjZNczNQOVFcIixcInlcIjpcIlduQ3BJVGVYbzhyTlBfMUV6Vkdhbi1aaEhDNVIyS0szU0xhUXJsemswSFVcIixcImtleV9vcHNcIjpbXCJ2ZXJpZnlcIl0sXCJleHRcIjp0cnVlfSJ9.eyJpYXQiOjE3OTQxNDcwMzMsInN1YiI6InVybjptYXJlc2k6WGdwUldoV2djclVaTHFnbEJGeXpvQVVPRXRPOXVIWTNac3dQVlJ0X0pSUGljTnZDaklid3ZvQW5rdUtPdW5HeW5oTUZMaGxmN2djNHI0cmdaRkdqb3ciLCJhY3Rpb24iOiJlZGl0IiwicmF0aW5nIjo4MCwib3BpbmlvbiI6ImFmdGVyIn0.fbW_J_kiKr-dIWXciykv1zxeOl_zdTH8boQP4c9JPUyQs46Uah_pURRYQYibCDRcYyyicMGfE9TU24bv64MM3w",
+    "kid": "-----BEGIN PUBLIC KEY-----MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEAHbsbT4IXMSMLpS28W1hwuUqzbQJ7knpLVCr6Ms3P9RacKkhN5ejys0//UTNUZqf5mEcLlHYordItpCuXOTQdQ==-----END PUBLIC KEY-----",
+    "payload": {
+     "iat": 1794147033,
+     "sub": "urn:maresi:XgpRWhWgcrUZLqglBFyzoAUOEtO9uHY3ZswPVRt_JRPicNvCjIbwvoAnkuKOunGynhMFLhlf7gc4r4rgZFGjow",
+     "rating": 80,
+     "opinion": "after",
+     "action": "edit"
+    },
+    "scheme": "urn:maresi",
+    "geo": {
+     "coordinates": null,
+     "uncertainty": null
+    },
+    "original_sub": "geo:0.0004,0?q=TestEdit&u=100"
+   }
+  ]
+ },
+ "note": "Edited review under default latest_edits_only: the EDIT row is served (action=edit, own signature, original_sub=geo subject) — Opus B3 shape."
+}

@@ -171,6 +171,12 @@ subject(hut) = "geo:{lat:.6f},{lon:.6f}?q={urlencode(q)}&u={u}"
   become cross-client matchable (same normalized `q` + coordinates within
   the radius sum) instead of deliberately isolated. The slug recipe
   (round 1) is superseded.
+- **`q` encoding rule (live-verified 2026-11-08, round 3)**: spaces
+  MUST be plus-encoded at submit (`q=Test+Hut` accepted, `q=Test%20Hut`
+  refused upstream with 400); matching accepts both forms; accents are
+  percent-encoded UTF-8 (`café` → `caf%C3%A9`) and accents do NOT fold
+  in matching. `urlencode` — exactly what `build_geo_subject` uses —
+  is the correct encoder (MapComplete-compatible).
 - Trade-off (accepted): hut names are not unique — two huts with the same
   normalized name within 2·u (60 m) would share reviews. Rare in the
   corpus; the normalized-name collision check stays as an operator
@@ -345,6 +351,19 @@ moderation.
 
 ### D6 — Read path, caching, aggregates, CDN
 
+- **Edit rows (live-verified, round 3)**: with the default
+  `latest_edits_only`, upstream listings serve the EDIT row —
+  `action: "edit"`, the edit's own `signature`, `original_sub` carrying
+  the geo subject. Wodore keeps such rows (identity = the ORIGINAL
+  signature parsed from the `urn:maresi` sub; blacklist checks BOTH
+  signatures; geo-match on `original_sub`) — dropping them would make
+  every edited review vanish (Opus B3).
+- **Visibility overlay (Opus B1, round 3)**: every list build overlays
+  the subject's recent accepted submission-log rows — own submits
+  prepended, deleted targets dropped, edited targets patched from the
+  logged JWTs — regardless of cache state or worker. All review caches
+  live on the **`shared` DB cache alias** (LocMem is per-process; the
+  overlay must survive gunicorn's worker fan-out).
 - **Local cache** (Django cache framework): list payload keyed by
   subject, summary keyed by subject, refuges.info comments keyed by
   point id — all 15-minute TTLs (owner decision). Successful local
@@ -417,7 +436,15 @@ link submit without the field.
 
 ### D9 — Images, legal, data sovereignty
 
-- **Images**: the DTO accepts `https` URLs only (≤5, `{src, label ≤50}`).
+- **Images**: the DTO accepts `https` URLs only (≤5, `{src, label ≤50}`);
+  replies accept the same optional `images` list as submissions.
+- **Gallery provider** (round 3): `MangroveProvider`
+  (`server/apps/reviews/images.py`) feeds the hut's review photos into
+  the standard geometries image pipeline — registered beside the other
+  providers, so review photos get imagor variants, license rows
+  (CC-BY-4.0 from review metadata), reviewer-nickname attribution and
+  dedup scoring like any external source. Geo-match + blacklist filters
+  mirror the listings; 24 h provider cache; `MANGROVE_ENABLED` gates it.
   Served lists pass an image through only when its `src` host is on
   `MANGROVE_IMAGE_HOST_ALLOWLIST` (default `["files.mangrove.reviews"]` —
   1022 of 1025 persisted image URLs in the 2026-11-08 dump live there);

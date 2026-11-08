@@ -5,8 +5,6 @@ from typing import Any
 
 import pytest
 
-from django.core.cache import cache
-
 from server.apps.accounts.models import User
 from server.apps.reviews import services
 from server.apps.reviews.models import SubmittedReview
@@ -193,13 +191,16 @@ class TestSubmitRelay:
         Even when the upstream listing does not (yet) include it — the
         cache entry is merged, not invalidated (design D6).
         """
+        from django.core.cache import caches
+
         from server.apps.reviews.services import _list_cache_key
 
+        shared = caches["shared"]
         subject = subject_for_hut(hut)
-        cache.set(_list_cache_key(subject), [], 60)  # pre-existing entry
+        shared.set(_list_cache_key(subject), [], 60)  # pre-existing entry
         user = _user()
         out = services.submit_review(user, hut, _dto(rating=50), "de")
-        cached = cache.get(_list_cache_key(subject))
+        cached = shared.get(_list_cache_key(subject))
         assert cached is not None, "cache entry must survive (merged, not dropped)"
         assert any(item["signature"] == out.signature for item in cached)
         # And the served list reflects it without any upstream change:
@@ -224,6 +225,7 @@ class TestSubmitRelay:
         self, hut: Any, fake_client: Any, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         user = _user()
+        services.get_or_mint_key(user)  # delete requires an existing key (N4)
         subject = subject_for_hut(hut)
         log_row(user, hut.slug, subject, "target-sig")
         fake_client.reject_submit = True
@@ -255,12 +257,22 @@ class TestOwnership:
 
     @pytest.mark.usefixtures("use_fake_client")
     def test_target_must_belong_to_hut(self, hut: Any) -> None:
+        """The 404 gate checks the hut's visible list (own overlay incl.)."""
+        from dmr import APIError
+
         user = _user()
         subject = subject_for_hut(hut)
         log_row(user, hut.slug, subject, "own-sig")
         log_row(user, "otherhut", "geo:0,0?q=otherhut&u=30", "other-sig")
-        assert services.target_belongs_to_hut(hut, "own-sig")
-        assert not services.target_belongs_to_hut(hut, "other-sig")
+        # Own review: visible via the own-write overlay → gate passes.
+        services._refuse_foreign_target(hut, "own-sig")
+        # Foreign-hut target: not in this hut's visible list → 404.
+        with pytest.raises(APIError) as excinfo:
+            services._refuse_foreign_target(hut, "other-sig")
+        assert excinfo.value.status_code == 404
+        # Provider ids are never actionable.
+        with pytest.raises(APIError):
+            services._refuse_foreign_target(hut, "refuges-info:123")
 
 
 def _payload(jwt: str) -> dict[str, t.Any]:

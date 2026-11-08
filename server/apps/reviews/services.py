@@ -27,7 +27,7 @@ import structlog
 from dmr import APIError
 
 from django.conf import settings
-from django.core.cache import cache
+from django.core.cache import caches
 from django.db import IntegrityError
 from django.http import HttpRequest
 from django.utils import timezone
@@ -74,6 +74,11 @@ logger = structlog.get_logger(__name__)
 
 _QUOTA_WINDOW = datetime.timedelta(hours=24)
 
+#: Cross-process cache (DB-backed) — the write-through overlay must
+#: survive LocMem's per-process silos and gunicorn's worker fan-out
+#: (Opus review B1). All review caches live here.
+_cache = caches["shared"]
+
 #: How long cached upstream list payloads live (seconds).
 _LIST_TTL = settings.MANGROVE_CACHE_TTL_LIST
 
@@ -110,10 +115,15 @@ def resolve_review_name(hut: Hut) -> str:
 
 
 def pin_review_name(hut: Hut) -> str:
-    """Pin the resolved name on the first review write (idempotent)."""
-    name = resolve_review_name(hut)
-    HutReviewSubject.objects.get_or_create(hut=hut, defaults={"name": name})
-    return name
+    """Pin the resolved name on the first review write (idempotent).
+
+    Returns the STORED name — under concurrent first writes the row that
+    won the OneToOne race defines the subject (Opus review N1).
+    """
+    obj, _created = HutReviewSubject.objects.get_or_create(
+        hut=hut, defaults={"name": resolve_review_name(hut)}
+    )
+    return obj.name
 
 
 def build_geo_subject(lat: float, lon: float, q: str) -> str:
@@ -346,7 +356,7 @@ def _replies_cache_key(signature: str) -> str:
 
 
 def _invalidate_subject(subject: str) -> None:
-    cache.delete(_list_cache_key(subject))
+    _cache.delete(_list_cache_key(subject))
 
 
 def _cached_items(subject: str) -> list[ReviewItem] | None:
@@ -356,27 +366,29 @@ def _cached_items(subject: str) -> list[ReviewItem] | None:
     """
     if not settings.MANGROVE_ENABLED:
         return []
-    cached = cache.get(_list_cache_key(subject))
+    cached = _cache.get(_list_cache_key(subject))
     if cached is not None:
         return [ReviewItem.model_validate(item) for item in cached]
     try:
         response = client().list_reviews(subject)
-    except UpstreamUnavailable as exc:
+    except (UpstreamUnavailable, UpstreamRejected) as exc:
         raise _upstream_unavailable() from exc
-    items = [item for item in response.reviews if item.payload.action is None]
-    cache.set(
+    items = [item for item in response.reviews if item.payload.action in (None, "edit")]
+    _cache.set(
         _list_cache_key(subject), [item.model_dump() for item in items], _LIST_TTL
     )
     return items
 
 
 def _store_items(subject: str, items: list[ReviewItem]) -> None:
-    cache.set(
+    _cache.set(
         _list_cache_key(subject), [item.model_dump() for item in items], _LIST_TTL
     )
 
 
-def _item_from_own_jwt(jwt: str, target_signature: str) -> ReviewItem | None:
+def _item_from_own_jwt(
+    jwt: str, target_signature: str, original_subject: str | None = None
+) -> ReviewItem | None:
     """Rebuild a ReviewItem from a JWT Wodore just signed (cache merge).
 
     Best-effort: the JWT is our own construction — an unparseable one
@@ -403,11 +415,12 @@ def _item_from_own_jwt(jwt: str, target_signature: str) -> ReviewItem | None:
             sub=str(payload.get("sub", "")),
             rating=payload.get("rating"),
             opinion=payload.get("opinion"),
-            images=None,
+            action=payload.get("action"),
+            images=payload.get("images"),
             metadata=payload.get("metadata"),
         ),
         signature=signing.jwt_signature(jwt),
-        original_sub=target_signature or None,
+        original_sub=original_subject or target_signature or None,
     )
 
 
@@ -435,7 +448,7 @@ def _merge_into_cache(subject: str, item: ReviewItem | None) -> None:
     """
     if item is None:
         return
-    cached = cache.get(_list_cache_key(subject))
+    cached = _cache.get(_list_cache_key(subject))
     if cached is None:
         return
     items = [item] + [
@@ -450,7 +463,7 @@ def _update_cached_item(
     subject: str, signature: str, rating: int | None, opinion: str | None
 ) -> None:
     """Write-through edit: update the cached copy of the edited review."""
-    cached = cache.get(_list_cache_key(subject))
+    cached = _cache.get(_list_cache_key(subject))
     if cached is None:
         return
     items: list[ReviewItem] = []
@@ -470,7 +483,7 @@ def _update_cached_item(
 
 def _remove_cached_item(subject: str, signature: str) -> None:
     """Write-through delete: drop the deleted review from the cache."""
-    cached = cache.get(_list_cache_key(subject))
+    cached = _cache.get(_list_cache_key(subject))
     if cached is None:
         return
     items = [
@@ -481,30 +494,145 @@ def _remove_cached_item(subject: str, signature: str) -> None:
     _store_items(subject, items)
 
 
+def _effective_signature(item: ReviewItem) -> str:
+    """The stable identity of a listed item — the ORIGINAL review's
+    signature for edit rows (upstream serves the edit row with its own
+    signature; probe 2026-11-08, Opus review B3)."""
+    if item.payload.action == "edit" and item.payload.sub.startswith("urn:maresi:"):
+        return item.payload.sub.removeprefix("urn:maresi:")
+    return item.signature
+
+
+def _effective_subject(item: ReviewItem) -> str:
+    """The geo subject a listed item belongs to (original_sub for edits)."""
+    return item.original_sub or item.payload.sub
+
+
+_OVERLAY_WINDOW = datetime.timedelta(seconds=_LIST_TTL)
+
+
+def _overlay_own_writes(
+    subject: str, items: list[ReviewItem], blacklisted: "set[str]"
+) -> list[ReviewItem]:
+    """Overlay recent accepted Wodore writes over the upstream list.
+
+    Worker- and cache-state-independent visibility (Opus review B1):
+    our users' submits are prepended while upstream indexing lags,
+    deleted targets are dropped, edited targets are patched from the
+    logged JWTs — regardless of which gunicorn worker served the write
+    or whether any cache entry exists. Window = list TTL; beyond it the
+    upstream must have caught up.
+    """
+    rows = list(
+        SubmittedReview.objects.filter(
+            subject=subject,
+            state=SubmittedReview.State.accepted,
+            created__gte=timezone.now() - _OVERLAY_WINDOW,
+        ).order_by("created")
+    )
+    deleted = {
+        row.target_signature
+        for row in rows
+        if row.action == SubmittedReview.Action.delete
+    }
+    edited: dict[str, t.Any] = {}
+    for row in rows:
+        if row.action == SubmittedReview.Action.edit:
+            edited[row.target_signature] = row
+
+    def _rebuild(row: t.Any) -> ReviewItem | None:
+        """Item from a logged JWT; synthetic fallback when unparseable."""
+        item = _item_from_own_jwt(row.jwt, row.target_signature)
+        if item is not None:
+            return item
+        return ReviewItem(
+            jwt=row.jwt,
+            kid="",
+            payload=ReviewPayload(iat=int(row.iat.timestamp()), sub=row.subject),
+            signature=row.signature,
+        )
+
+    def _patched(effective: str, item: ReviewItem) -> ReviewItem:
+        edit_row = edited.get(effective)
+        if edit_row is None:
+            return item
+        # original_subject = the hut's geo URI: the patched edit item's
+        # effective subject must geo-match like any listed review.
+        patched = _item_from_own_jwt(edit_row.jwt, effective, original_subject=subject)
+        return patched if patched is not None else item
+
+    out: list[ReviewItem] = []
+    seen: set[str] = set()
+    for item in items:
+        effective = _effective_signature(item)
+        seen.add(effective)
+        if effective in deleted or item.signature in deleted:
+            continue
+        out.append(_patched(effective, item))
+    for row in rows:
+        if row.action != SubmittedReview.Action.review or row.target_signature:
+            continue  # replies live under the maresi subject, not the hut list
+        if (
+            row.signature in deleted
+            or row.signature in seen
+            or row.signature in blacklisted
+        ):
+            continue
+        item = _rebuild(row)
+        if item is not None:
+            # A later edit of the same review replaces the stale submit state.
+            out.append(_patched(row.signature, item))
+    return out
+
+
 def _visible_items(
     subject: str, blacklisted: "set[str] | None" = None
 ) -> list[ReviewItem]:
-    """Cached list, blacklist- and geo-filtered, newest first."""
+    """Cached list + own-write overlay, blacklist- and geo-filtered, newest.
+
+    Edit rows are kept (B3): identity via ``_effective_signature``
+    (blacklist checks both signatures), geo-match via
+    ``_effective_subject``.
+    """
     items = _cached_items(subject) or []
     if blacklisted is None:
         blacklisted = set(ReviewBlacklist.objects.values_list("signature", flat=True))
-    visible = [
-        item
-        for item in items
-        if item.signature not in blacklisted
-        and subject_geo_matches(item.payload.sub, subject)
-    ]
+    items = _overlay_own_writes(subject, items, blacklisted)
+    visible = []
+    for item in items:
+        if item.signature in blacklisted or _effective_signature(item) in blacklisted:
+            continue
+        if not subject_geo_matches(_effective_subject(item), subject):
+            continue
+        visible.append(item)
     visible.sort(key=lambda item: item.payload.iat, reverse=True)
     return visible
 
 
+_IMAGE_SRC_FORBIDDEN = ("\\", "@", " ", "\t", "\r", "\n")
+
+
+def _image_src_allowed(src: str) -> bool:
+    """Strict src check: https, allowlisted host, no parser-confusion chars.
+
+    Rejects backslashes/``@``/whitespace/control chars and explicit ports
+    — WHATWG browsers and ``urlsplit`` disagree on ``\\`` and ``@``
+    (the `https://evil.com\\@files.mangrove.reviews/` bypass), so the raw
+    string is checked before any parsing (Opus review B7).
+    """
+    if any(ch in src for ch in _IMAGE_SRC_FORBIDDEN) or any(ord(ch) < 32 for ch in src):
+        return False
+    parsed = urlsplit(src)
+    if parsed.scheme != "https" or parsed.port is not None:
+        return False
+    return (parsed.hostname or "") in set(settings.MANGROVE_IMAGE_HOST_ALLOWLIST)
+
+
 def _filtered_images(item: ReviewItem) -> list[ReviewImageOut]:
-    """Images whose src is https AND on an allowlisted host (design D9)."""
-    allow = set(settings.MANGROVE_IMAGE_HOST_ALLOWLIST)
+    """Images whose src passes the strict allowlist check (design D9)."""
     out: list[ReviewImageOut] = []
     for image in item.payload.images or []:
-        parsed = urlsplit(image.src)
-        if parsed.scheme == "https" and (parsed.hostname or "") in allow:
+        if _image_src_allowed(image.src):
             out.append(ReviewImageOut(src=image.src, label=image.label))
     return out
 
@@ -513,7 +641,7 @@ def serialize_review(item: ReviewItem) -> ReviewOut:
     """Upstream item → response DTO (Mangrove source)."""
     metadata = item.payload.metadata or {}
     return ReviewOut(
-        signature=item.signature,
+        signature=_effective_signature(item),
         rating=item.payload.rating,
         opinion=item.payload.opinion,
         nickname=_str_or_none(metadata.get("nickname")),
@@ -538,7 +666,9 @@ def _str_or_none(value: t.Any) -> str | None:
 # ── read services ────────────────────────────────────────────────────
 
 
-def _refuge_reviews(hut: Hut, blacklisted: "set[str] | None" = None) -> list[ReviewOut]:
+def _refuge_reviews(
+    hut: Hut, blacklisted: "set[str] | None" = None, cached_only: bool = False
+) -> list[ReviewOut]:
     """Read-only refuges.info comments as reviews (source-attributed).
 
     The same signature blacklist applies (provider ids hide too).
@@ -551,7 +681,7 @@ def _refuge_reviews(hut: Hut, blacklisted: "set[str] | None" = None) -> list[Rev
     if blacklisted is None:
         blacklisted = set(ReviewBlacklist.objects.values_list("signature", flat=True))
     try:
-        comments = refuges_info.comments_for_hut(hut)
+        comments = refuges_info.comments_for_hut(hut, cached_only=cached_only)
     except Exception:
         logger.warning("refuges_info_failed", hut=hut.slug)
         return []
@@ -577,12 +707,12 @@ def _refuge_reviews(hut: Hut, blacklisted: "set[str] | None" = None) -> list[Rev
     ]
 
 
-def visible_reviews(hut: Hut) -> list[ReviewOut]:
+def visible_reviews(hut: Hut, provider_cached_only: bool = False) -> list[ReviewOut]:
     """All visible reviews of the hut (Mangrove + refuges.info), newest first."""
     blacklisted = set(ReviewBlacklist.objects.values_list("signature", flat=True))
     subject = subject_for_hut(hut)
     dtos = [serialize_review(item) for item in _visible_items(subject, blacklisted)]
-    dtos.extend(_refuge_reviews(hut, blacklisted))
+    dtos.extend(_refuge_reviews(hut, blacklisted, cached_only=provider_cached_only))
     dtos.sort(key=lambda review: review.created, reverse=True)
     return dtos
 
@@ -620,8 +750,11 @@ def summary_for_hut(hut: Hut) -> ReviewSummaryOut:
 def batch_summary(slugs: list[str]) -> BatchSummaryEnvelope:
     """One aggregate per slug (≤50, canonicalized: sorted, deduplicated)."""
     canonical = sorted({slug.strip() for slug in slugs if slug.strip()})
+    # Map badges must not fan out to the volunteer-run provider: cached
+    # provider data only, cold huts fall back to Mangrove-only counts
+    # (Opus review B6).
     summaries = [
-        _summarize(hut.slug, visible_reviews(hut))
+        _summarize(hut.slug, visible_reviews(hut, provider_cached_only=True))
         for hut in Hut.objects.filter(
             is_active=True, is_public=True, slug__in=canonical
         ).only("slug", "location", "name")
@@ -675,13 +808,16 @@ def my_reviews(user: t.Any) -> list[MyReviewOut]:
     key = ReviewerKey.objects.filter(user=user).first()
     if key is None:
         return []
-    response = client().list_reviews_by_kid(key.kid)
-    items = [i for i in response.reviews if i.payload.action is None]
+    try:
+        response = client().list_reviews_by_kid(key.kid)
+    except (UpstreamUnavailable, UpstreamRejected) as exc:
+        raise _upstream_unavailable() from exc
+    items = [i for i in response.reviews if i.payload.action in (None, "edit")]
     items.sort(key=lambda i: i.payload.iat, reverse=True)
     out: list[MyReviewOut] = []
     for item in items:
         base = serialize_review(item)
-        subject = parse_geo_subject(item.payload.sub)
+        subject = parse_geo_subject(_effective_subject(item))
         hut_slug: str | None = None
         if subject is not None:
             hut = hut_for_review_name(subject.q)
@@ -697,29 +833,29 @@ def owns_review(user: t.Any, key: ReviewerKey, signature: str) -> bool:
     """Log-first ownership; upstream kid fallback for foreign keys."""
     if SubmittedReview.objects.filter(user=user, signature=signature).exists():
         return True
-    item = client().review(signature)
+    try:
+        item = client().review(signature)
+    except UpstreamUnavailable as exc:
+        raise _upstream_unavailable() from exc
     if item is None:
         return False
     return "".join(item.kid.split()) == key.kid
 
 
-def target_belongs_to_hut(hut: Hut, signature: str) -> bool:
-    """The targeted review's subject matches the hut in the path (404 gate)."""
-    subject = subject_for_hut(hut)
-    row = SubmittedReview.objects.filter(signature=signature).first()
-    if row is not None:
-        return row.subject == subject or subject_geo_matches(row.subject, subject)
-    item = client().review(signature)
-    if item is None:
-        return False
-    target = item.original_sub or item.payload.sub
-    return target == subject or subject_geo_matches(target, subject)
-
-
 def _refuse_foreign_target(hut: Hut, signature: str) -> None:
-    if not target_belongs_to_hut(hut, signature):
-        msg = "Review not found for this hut."
-        raise_not_found(msg)
+    """404 gate: the target must be one of the hut's visible reviews.
+
+    Checked against the locally visible list (upstream cache + own-write
+    overlay) — no upstream call (Opus review N6). Blacklisted targets,
+    provider ids (``refuges-info:*``) and foreign-hut reviews all 404;
+    provider items are never actionable.
+    """
+    subject = subject_for_hut(hut)
+    for item in _visible_items(subject):
+        if _effective_signature(item) == signature:
+            return
+    msg = "Review not found for this hut."
+    raise_not_found(msg)
 
 
 # ── write services ───────────────────────────────────────────────────
@@ -845,9 +981,11 @@ def submit_review(
 def edit_review(user: t.Any, hut: Hut, signature: str, dto: ReviewEditIn) -> ReviewOut:
     """Ownership + hut gate → signed ``edit`` action (design D5)."""
     enforce_enabled()
-    key, _profile = get_or_mint_key(user)
     _refuse_foreign_target(hut, signature)
-    if not owns_review(user, key, signature):
+    # No premature mint (Opus N4): an edit target implies a prior submit,
+    # so a user without a key cannot own it — 403, and no PROTECT rows.
+    key = ReviewerKey.objects.filter(user=user).first()
+    if key is None or not owns_review(user, key, signature):
         raise _not_owner()
     enforce_quota(user, "edit")
     subject = subject_for_hut(hut)
@@ -881,9 +1019,9 @@ def edit_review(user: t.Any, hut: Hut, signature: str, dto: ReviewEditIn) -> Rev
 def delete_review(user: t.Any, hut: Hut, signature: str) -> None:
     """Ownership + hut gate → signed ``delete`` action (idempotent)."""
     enforce_enabled()
-    key, _profile = get_or_mint_key(user)
     _refuse_foreign_target(hut, signature)
-    if not owns_review(user, key, signature):
+    key = ReviewerKey.objects.filter(user=user).first()
+    if key is None or not owns_review(user, key, signature):
         raise _not_owner()
     enforce_quota(user, "edit")
     subject = subject_for_hut(hut)
@@ -902,8 +1040,8 @@ def report_review(
 ) -> ReportOut:
     """Hut gate (no ownership) → signed ``report_abuse`` action."""
     enforce_enabled()
-    key, _profile = get_or_mint_key(user)
     _refuse_foreign_target(hut, signature)
+    key, _profile = get_or_mint_key(user)
     subject = subject_for_hut(hut)
     jwt = signing.build_action_jwt(
         key.kid,
@@ -923,26 +1061,30 @@ def reply_review(
 ) -> ReviewOut:
     """Reply to a review: a signed review with an ``urn:maresi`` subject."""
     enforce_enabled()
-    key, profile = get_or_mint_key(user)
     _refuse_foreign_target(hut, signature)
     enforce_quota(user, "submit")
+    key, profile = get_or_mint_key(user)
     maresi = f"urn:maresi:{signature}"
     metadata: dict[str, t.Any] = {
         "nickname": profile.nickname,
         "client_id": settings.MANGROVE_CLIENT_ID,
         "license": LICENSE,
     }
+    images = (
+        [img.model_dump(exclude_none=True) for img in dto.images]
+        if dto.images
+        else None
+    )
     jwt = signing.build_review_jwt(
         key.kid,
         _decrypt_key_jwk(key),
         subject=maresi,
         rating=dto.rating,
         opinion=dto.opinion,
-        images=None,
+        images=images,
         metadata=metadata,
     )
     _relay(user, hut, maresi, SubmittedReview.Action.review, jwt, target=signature)
-    cache.delete(_replies_cache_key(signature))
     return ReviewOut(
         signature=signing.jwt_signature(jwt),
         rating=dto.rating,
@@ -952,7 +1094,9 @@ def reply_review(
         experience_context=None,
         is_personal_experience=False,
         is_affiliated=False,
-        images=[],
+        images=[
+            ReviewImageOut(src=img.src, label=img.label) for img in (dto.images or [])
+        ],
         created=timezone.now().isoformat(),
         source="mangrove",
         license=LICENSE,
@@ -965,16 +1109,30 @@ def list_replies(hut: Hut, signature: str) -> ReviewsEnvelope:
     _refuse_foreign_target(hut, signature)
     maresi = f"urn:maresi:{signature}"
     key = _replies_cache_key(signature)
-    cached = cache.get(key)
+    cached = _cache.get(key)
     if cached is not None:
         items = [ReviewItem.model_validate(item) for item in cached]
     else:
         try:
             response = client().list_reviews(maresi)
-        except UpstreamUnavailable as exc:
+        except (UpstreamUnavailable, UpstreamRejected) as exc:
             raise _upstream_unavailable() from exc
         items = [item for item in response.reviews if item.payload.action is None]
-        cache.set(key, [item.model_dump() for item in items], _LIST_TTL)
+        _cache.set(key, [item.model_dump() for item in items], _LIST_TTL)
+    # Overlay own replies (same lag rationale as the hut list, Opus N3a).
+    reply_rows = SubmittedReview.objects.filter(
+        target_signature=signature,
+        action=SubmittedReview.Action.review,
+        state=SubmittedReview.State.accepted,
+        created__gte=timezone.now() - _OVERLAY_WINDOW,
+    ).order_by("created")
+    seen = {item.signature for item in items}
+    for row in reply_rows:
+        if row.signature in seen:
+            continue
+        item = _item_from_own_jwt(row.jwt, signature)
+        if item is not None:
+            items.append(item)
     blacklisted = set(ReviewBlacklist.objects.values_list("signature", flat=True))
     visible = [item for item in items if item.signature not in blacklisted]
     visible.sort(key=lambda item: item.payload.iat, reverse=True)

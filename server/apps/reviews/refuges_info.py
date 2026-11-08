@@ -29,9 +29,13 @@ import httpx
 import structlog
 
 from django.conf import settings
-from django.core.cache import cache
+from django.core.cache import caches
 
 logger = structlog.get_logger(__name__)
+
+#: Shared cross-worker cache (Opus review B6) + failure back-pressure.
+_cache = caches["shared"]
+_NEGATIVE_TTL = 60  # seconds a failing provider stays "down" for this point
 
 #: Served per review (user-facing license + source attribution).
 SOURCE = "refuges.info"
@@ -89,7 +93,7 @@ class RefugesInfoClient:
     def list_comments(self, point_id: str) -> list[RefugeComment]:
         """The point's comments, oldest→newest; ``[]`` on any failure."""
         key = f"reviews:refuges:{point_id}"
-        cached = cache.get(key)
+        cached = _cache.get(key)
         if cached is not None:
             return [
                 RefugeComment(
@@ -100,6 +104,8 @@ class RefugesInfoClient:
                 )
                 for c in cached
             ]
+        if _cache.get(f"{key}:down"):
+            return []  # recent failure — negative-cached (Opus B6)
         started = time.monotonic()
         try:
             response = httpx.get(
@@ -120,9 +126,10 @@ class RefugesInfoClient:
                 error=type(exc).__name__,
                 duration_ms=int((time.monotonic() - started) * 1000),
             )
+            _cache.set(f"{key}:down", True, _NEGATIVE_TTL)
             return []
         comments = parse_comments(payload)
-        cache.set(
+        _cache.set(
             key,
             [(c.signature, c.author, c.created.isoformat(), c.text) for c in comments],
             settings.MANGROVE_CACHE_TTL_LIST,
@@ -188,12 +195,18 @@ def point_id_for_hut(hut: "t.Any") -> str | None:
     return str(source.source_id).strip()
 
 
-def comments_for_hut(hut: "t.Any") -> list[RefugeComment]:
-    """The hut's refuges.info comments (cached, failure-tolerant)."""
+def comments_for_hut(hut: "t.Any", cached_only: bool = False) -> list[RefugeComment]:
+    """The hut's refuges.info comments (cached, failure-tolerant).
+
+    ``cached_only`` skips a cold fetch (map-badge batches — no provider
+    fan-out on the hot path, Opus review B6).
+    """
     if not settings.MANGROVE_REFUGES_INFO_ENABLED:
         return []
     point_id = point_id_for_hut(hut)
     if point_id is None:
+        return []
+    if cached_only and _cache.get(f"reviews:refuges:{point_id}") is None:
         return []
     return refuges_client().list_comments(point_id)
 

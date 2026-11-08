@@ -97,7 +97,7 @@ class ReviewReportIn(pydantic.BaseModel):
 
 
 class ReviewReplyIn(pydantic.BaseModel):
-    """Reply body: rating (helpfulness) and/or opinion (text)."""
+    """Reply body: rating (helpfulness) and/or opinion (text) + images."""
 
     model_config = pydantic.ConfigDict(extra="forbid")
 
@@ -105,6 +105,9 @@ class ReviewReplyIn(pydantic.BaseModel):
         None, ge=0, le=100, description="Helpfulness rating of the parent review"
     )
     opinion: str | None = Field(None, max_length=1000, description="Reply text")
+    images: list[ReviewImageIn] | None = Field(
+        None, max_length=5, description="Up to 5 images (https URLs)"
+    )
 
     @pydantic.model_validator(mode="after")
     def _rating_or_opinion(self) -> "ReviewReplyIn":
