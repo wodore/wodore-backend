@@ -157,10 +157,11 @@ class AmenityStyleContractTests(SimpleTestCase):
             for value in values:
                 assert value[0] == "*", (subtree, value)
                 count_scale = value[2]
-                # count scale: 2 → 1.1, 12 → 1.8 (MapLibre clamps beyond)
+                # count scale: 1 → 1.0 (singles), 2 → 1.1,
+                # 12 → 1.8 (MapLibre clamps beyond)
                 assert count_scale[2] == ["get", "count"], subtree
-                assert count_scale[3::2] == [2, 12], subtree
-                assert count_scale[4::2] == [1.1, 1.8], subtree
+                assert count_scale[3::2] == [1, 2, 12], subtree
+                assert count_scale[4::2] == [1.0, 1.1, 1.8], subtree
 
     def test_no_zoom_outside_toplevel_interpolate(self) -> None:
         """MapLibre's expression spec: ["zoom"] may ONLY be the input
@@ -193,11 +194,78 @@ class AmenityStyleContractTests(SimpleTestCase):
             **lib.AMENITY_OVERLAY_STYLES,
             **{f"{k}-subset": v for k, v in lib.AMENITY_OVERLAY_STYLES_SUBSET.items()},
         }
+        # LAYOUT only: zoom is legal there exclusively as the input of
+        # a TOP-LEVEL step/interpolate (the incident class). PAINT
+        # allows broader zoom usage (case-wrapped camera expressions
+        # are valid) — the authoritative validator in CI covers paint.
         for name, style in documents.items():
             for layer in style["layers"]:
-                for section in ("layout", "paint"):
-                    for key, expr in (layer.get(section) or {}).items():
-                        assert_zoom_legal(expr, True, f"{name}:{layer['id']}.{key}")
+                for key, expr in (layer.get("layout") or {}).items():
+                    assert_zoom_legal(expr, True, f"{name}:{layer['id']}.{key}")
+
+    def test_marker_interaction_contract(self) -> None:
+        """Design-review contract (2026-11-07): decluttering sorts
+        ASCENDING (importance NEGATED), hover lives in PAINT props only
+        (feature-state is illegal in layout like icon-size), the
+        selection plate is a white circle with a category ring, and a
+        declutter-proof selected-icon twin sits on top."""
+        for subtree in EXPECTED_BANDS:
+            style = lib.AMENITY_OVERLAY_STYLES[subtree]
+            by_id = {layer["id"]: layer for layer in style["layers"]}
+            for layer_id in (f"wd-{subtree}-clusters", f"wd-{subtree}"):
+                layer = by_id[layer_id]
+                layout = layer["layout"]
+                # collision-aware: no forced overlap; importance negated
+                assert "icon-allow-overlap" not in layout, (subtree, layer_id)
+                assert layout["symbol-sort-key"] == [
+                    "-",
+                    0,
+                    ["get", "importance"],
+                ], (subtree, layer_id)
+                # hover: paint-only feature-state. Clusters wrap a
+                # constant in one case; the raw layer's zoom ladder
+                # rebuilds PER-STOP (zoom may only feed a top-level
+                # interpolate — a case around the ladder is invalid).
+                opacity = layer["paint"]["icon-opacity"]
+                if layer_id.endswith("-clusters"):
+                    assert opacity[0] == "case", subtree
+                else:
+                    assert opacity[0] == "interpolate", subtree
+                    for value in opacity[4::2]:
+                        assert value[0] == "case", subtree
+                assert layer["paint"]["icon-halo-width"][0] == "interpolate"
+            # selection plate
+            plate = by_id[f"wd-{subtree}-selected"]
+            paint = plate["paint"]
+            assert paint["circle-color"] == "#ffffff", subtree
+            assert paint["circle-blur"] == 0, subtree
+            assert paint["circle-opacity"][0] == "case", subtree
+            assert paint["circle-stroke-color"][0] == "case", subtree
+            # radius per-stop values scale by the count factor
+            radius = paint["circle-radius"]
+            assert radius[2] == ["zoom"], subtree
+            assert radius[4][0] == "*", subtree
+            # declutter-proof selected icon on top
+            sel_icon = by_id[f"wd-{subtree}-selected-icon"]
+            assert sel_icon["filter"] == ["==", ["get", "slug"], ""], subtree
+            assert sel_icon["layout"]["icon-allow-overlap"] is True, subtree
+
+    def test_accommodations_overlap_exemption_from_z11(self) -> None:
+        """The owner exemption: accommodations always visible from z11
+        (``icon-overlap`` zoom step), everywhere else collision-aware."""
+        style = lib.ACCOMMODATIONS_STYLE
+        by_id = {layer["id"]: layer for layer in style["layers"]}
+        for layer_id in (
+            "wd-accommodations-clusters",
+            "wd-accommodations",
+        ):
+            assert by_id[layer_id]["layout"]["icon-overlap"] == [
+                "step",
+                ["zoom"],
+                "never",
+                11,
+                "always",
+            ], layer_id
 
     def test_subset_cluster_icons_oversize_raw_ladder(self) -> None:
         """Subset twins: static-sprite cluster icons at a strictly

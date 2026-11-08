@@ -826,6 +826,8 @@ _CLUSTER_COUNT_SCALE: list[Any] = [
     "interpolate",
     ["linear"],
     ["get", "count"],
+    1,
+    1.0,
     2,
     1.1,
     12,
@@ -863,6 +865,51 @@ def _cluster_icon_size(
 _AMENITY_CLUSTER_ICON_SIZE_STOPS: list[tuple[int, float]] = [
     (zoom, round(size * 1.35, 3)) for zoom, size in _AMENITY_ICON_SIZE_STOPS
 ]
+
+
+#: feature-state hover condition (boolean type-assertion with a
+#: False default — the expression form ``["case"]`` conditions use)
+_HOVER_STATE: list[Any] = [
+    "boolean",
+    ["feature-state", "hovered"],
+    False,
+]
+
+
+def _hover_halo_ladder(stops: list[tuple[int, float]]) -> list[Any]:
+    """Halo ladder with +1px on hover (paint prop — feature-state is
+    legal here, unlike layout props like icon-size)."""
+    flat: list[Any] = []
+    for zoom, width in stops:
+        flat.extend((zoom, ["+", width, ["case", _HOVER_STATE, 1, 0]]))
+    return ["interpolate", ["linear"], ["zoom"], *flat]
+
+
+#: Raw-layer icon opacity by zoom (the pre-hover ladder).
+_AMENITY_OPACITY_STOPS: list[tuple[int, float]] = [
+    (5, 0.7),
+    (10, 0.8),
+    (13, 0.9),
+    (16, 1.0),
+]
+
+
+def _hover_opacity(base: Any) -> list[Any]:
+    """Full opacity on hover, the base value otherwise.
+
+    ``["zoom"]`` may ONLY feed a TOP-LEVEL interpolate/step — a case
+    AROUND a zoom ladder is invalid (the 2026-11-06 incident class,
+    paint props included). A zoom ladder therefore rebuilds per-stop
+    (each stop value becomes the hover case); a plain constant wraps
+    in a single case.
+    """
+    if isinstance(base, list) and base[:1] == ["interpolate"]:
+        flat: list[Any] = []
+        for index in range(3, len(base), 2):
+            flat.append(base[index])
+            flat.append(["case", _HOVER_STATE, 1, base[index + 1]])
+        return ["interpolate", *base[1:3], *flat]
+    return ["case", _HOVER_STATE, 1, base]
 
 
 def _size_ladder(stops: list[tuple[int, float]]) -> list[Any]:
@@ -1014,49 +1061,98 @@ def accommodations_style() -> dict[str, Any]:
                         _AMENITY_ICON_SIZE_STOPS,
                         multiplier="{{accommodations.icon_scale}}",
                     ),
-                    "icon-allow-overlap": True,
-                    "icon-overlap": "always",
-                    "symbol-sort-key": ["get", "importance"],
+                    # Collision-aware declutter EXCEPT from z11: the
+                    # accommodations overlay is the owner-exempted
+                    # category (fully visible around z11/12 — always
+                    # wins against other POIs). sort-key ASCENDING →
+                    # importance negated.
+                    "icon-overlap": ["step", ["zoom"], "never", 11, "always"],
+                    "symbol-sort-key": ["-", 0, ["get", "importance"]],
                 },
                 "paint": {
                     "icon-color": ["coalesce", ["get", "color"], "#718096"],
                     "icon-halo-color": "#ffffff",
-                    "icon-halo-width": 1.5,
+                    # Halo LADDER (absolute px, #478) + hover bump
+                    "icon-halo-width": _hover_halo_ladder(_AMENITY_HALO_STOPS),
                     "icon-halo-blur": 0,
-                    "icon-opacity": 0.85,
+                    "icon-opacity": _hover_opacity(0.85),
                 },
             },
             {
-                # Selection halo (app-driven feature-state, same shape as
-                # wd-huts-selected).
+                # SELECTION PLATE (design review; see the amenity
+                # overlay twin for the rationale) — white plate,
+                # category ring, hover-faint/selected-solid.
                 "id": "wd-accommodations-selected",
                 "type": "circle",
                 "source": ACCOMMODATIONS_SOURCE_ID,
                 "source-layer": GEOPLACES_SOURCE,
                 "layout": {"visibility": "visible"},
                 "paint": {
-                    "circle-blur": 0.7,
-                    "circle-color": [
+                    "circle-blur": 0,
+                    "circle-color": "#ffffff",
+                    "circle-opacity": [
+                        "case",
+                        ["boolean", ["feature-state", "selected"], False],
+                        1,
+                        ["boolean", ["feature-state", "hovered"], False],
+                        0.85,
+                        0,
+                    ],
+                    "circle-stroke-color": [
                         "case",
                         ["boolean", ["feature-state", "color"], False],
                         ["feature-state", "color"],
                         "#2673bf",
                     ],
-                    "circle-opacity": [
-                        "case",
-                        ["boolean", ["feature-state", "selected"], False],
-                        0.7,
-                        0,
+                    "circle-stroke-width": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        7,
+                        1.5,
+                        16,
+                        2.5,
                     ],
                     "circle-radius": [
                         "interpolate",
                         ["linear"],
                         ["zoom"],
                         7,
-                        10,
-                        15,
-                        40,
+                        ["*", 5.4, _CLUSTER_COUNT_SCALE],
+                        9,
+                        ["*", 10, _CLUSTER_COUNT_SCALE],
+                        11,
+                        ["*", 16, _CLUSTER_COUNT_SCALE],
+                        13,
+                        ["*", 21, _CLUSTER_COUNT_SCALE],
+                        16,
+                        ["*", 27, _CLUSTER_COUNT_SCALE],
+                        20,
+                        ["*", 33, _CLUSTER_COUNT_SCALE],
                     ],
+                },
+            },
+            {
+                # SELECTED ICON on top of the plate (declutter-proof).
+                # Frontend sets the filter to the selected slug on click.
+                "id": "wd-accommodations-selected-icon",
+                "type": "symbol",
+                "source": ACCOMMODATIONS_SOURCE_ID,
+                "source-layer": GEOPLACES_SOURCE,
+                "filter": ["==", ["get", "slug"], ""],
+                "layout": {
+                    "icon-image": icon_ladder,
+                    "icon-size": _cluster_icon_size(
+                        _AMENITY_ICON_SIZE_STOPS,
+                        multiplier="{{accommodations.icon_scale}}",
+                    ),
+                    "icon-allow-overlap": True,
+                },
+                "paint": {
+                    "icon-color": ["coalesce", ["get", "color"], "#718096"],
+                    "icon-halo-color": "#ffffff",
+                    "icon-halo-width": _size_ladder(_AMENITY_HALO_STOPS),
+                    "icon-halo-blur": 0,
                 },
             },
             {
@@ -1084,12 +1180,16 @@ def accommodations_style() -> dict[str, Any]:
                     ],
                     "text-font": ["Barlow Semi Condensed SemiBold", "Noto Sans Bold"],
                     "text-anchor": "bottom",
-                    "icon-allow-overlap": True,
+                    # Collision-aware declutter EXCEPT from z11
+                    # (accommodations always visible — owner exemption).
+                    # sort-key ASCENDING → importance negated.
                     "text-allow-overlap": False,
-                    "symbol-sort-key": ["get", "importance"],
-                    "icon-overlap": "always",
+                    "symbol-sort-key": ["-", 0, ["get", "importance"]],
                     "text-overlap": "never",
                     "text-optional": True,
+                    "text-variable-anchor": ["bottom", "top", "right", "left"],
+                    "text-radial-offset": 0.6,
+                    "icon-overlap": ["step", ["zoom"], "never", 11, "always"],
                     "icon-image": icon_ladder,
                     "icon-size": [
                         "interpolate",
@@ -1112,26 +1212,11 @@ def accommodations_style() -> dict[str, Any]:
                 },
                 "paint": {
                     # SDF runtime tinting: category color from the tiles,
-                    # white border around it (huts parity).
+                    # white border around it (huts parity). Hover (paint
+                    # only — feature-state is illegal in layout props).
                     "icon-color": ["coalesce", ["get", "color"], "#718096"],
                     "icon-halo-color": "#ffffff",
-                    "icon-halo-width": [
-                        "interpolate",
-                        ["linear"],
-                        ["zoom"],
-                        7,
-                        0.5,
-                        9,
-                        0.75,
-                        11,
-                        1.0,
-                        13,
-                        1.5,
-                        16,
-                        2.0,
-                        20,
-                        2.5,
-                    ],
+                    "icon-halo-width": _hover_halo_ladder(_AMENITY_HALO_STOPS),
                     "icon-halo-blur": 0,
                     "icon-opacity": [
                         "interpolate",
@@ -1166,6 +1251,7 @@ def accommodations_style() -> dict[str, Any]:
             "wd:slot_layers": [
                 "wd-accommodations-clusters",
                 "wd-accommodations-selected",
+                "wd-accommodations-selected-icon",
                 "wd-accommodations",
             ],
         },
@@ -1610,49 +1696,106 @@ def amenity_overlay_style(spec: AmenityOverlaySpec) -> dict[str, Any]:
                 "layout": {
                     "icon-image": icon_ladder,
                     "icon-size": _cluster_icon_size(_AMENITY_ICON_SIZE_STOPS),
-                    "icon-allow-overlap": True,
-                    "icon-overlap": "always",
-                    "symbol-sort-key": ["get", "importance"],
+                    # NO allow-overlap: MapLibre declutters; sort-key is
+                    # ASCENDING (lower wins) so importance is NEGATED —
+                    # the most-important cluster survives collisions.
+                    "symbol-sort-key": ["-", 0, ["get", "importance"]],
                 },
                 "paint": {
                     "icon-color": ["coalesce", ["get", "color"], "#718096"],
                     "icon-halo-color": "#ffffff",
-                    "icon-halo-width": 1.5,
+                    # HALO LADDER, not a constant: halo width is ABSOLUTE
+                    # pixels and does NOT scale with icon-size (#478) —
+                    # a constant on the small low-zoom cluster icons
+                    # rendered as a solid white plate behind the glyph.
+                    # +1px on hover (paint prop: feature-state is legal).
+                    "icon-halo-width": _hover_halo_ladder(_AMENITY_HALO_STOPS),
                     "icon-halo-blur": 0,
-                    "icon-opacity": 0.85,
+                    "icon-opacity": _hover_opacity(0.85),
                 },
             },
             {
-                # Selection halo (app-driven feature-state, same shape as
-                # wd-accommodations-selected).
+                # SELECTION PLATE (design review): solid white plate with
+                # a category-color ring — the Leaflet active-shield
+                # equivalent. Doubles as the hover affordance (faint
+                # plate; the frontend drives hover/selected feature
+                # states). Circles never collide, so the plate can sit
+                # above the symbol layers and lift the marker visually.
                 "id": f"{source_id}-selected",
                 "type": "circle",
                 "source": source_id,
                 "source-layer": GEOPLACES_SOURCE,
                 "layout": {"visibility": "visible"},
                 "paint": {
-                    "circle-blur": 0.7,
-                    "circle-color": [
+                    "circle-blur": 0,
+                    "circle-color": "#ffffff",
+                    "circle-opacity": [
+                        "case",
+                        ["boolean", ["feature-state", "selected"], False],
+                        1,
+                        ["boolean", ["feature-state", "hovered"], False],
+                        0.85,
+                        0,
+                    ],
+                    "circle-stroke-color": [
                         "case",
                         ["boolean", ["feature-state", "color"], False],
                         ["feature-state", "color"],
                         "#2673bf",
                     ],
-                    "circle-opacity": [
-                        "case",
-                        ["boolean", ["feature-state", "selected"], False],
-                        0.7,
-                        0,
+                    "circle-stroke-width": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        7,
+                        1.5,
+                        16,
+                        2.5,
                     ],
+                    # radius ≈ rendered glyph half + 3px (24 × the icon
+                    # size ladder + 3); × count scale so selected
+                    # clusters plate correctly (count=1 → 1.0)
                     "circle-radius": [
                         "interpolate",
                         ["linear"],
                         ["zoom"],
                         7,
-                        10,
-                        15,
-                        40,
+                        ["*", 5.4, _CLUSTER_COUNT_SCALE],
+                        9,
+                        ["*", 10, _CLUSTER_COUNT_SCALE],
+                        11,
+                        ["*", 16, _CLUSTER_COUNT_SCALE],
+                        13,
+                        ["*", 21, _CLUSTER_COUNT_SCALE],
+                        16,
+                        ["*", 27, _CLUSTER_COUNT_SCALE],
+                        20,
+                        ["*", 33, _CLUSTER_COUNT_SCALE],
                     ],
+                },
+            },
+            {
+                # SELECTED ICON on top of the plate: decluttering could
+                # otherwise hide the selected icon behind an empty
+                # plate. Allow-overlap + a filter that matches nothing
+                # by default (raw features always carry a non-empty
+                # slug); the frontend sets it to
+                # ["==", ["get", "slug"], "<selected>"] on click.
+                "id": f"{source_id}-selected-icon",
+                "type": "symbol",
+                "source": source_id,
+                "source-layer": GEOPLACES_SOURCE,
+                "filter": ["==", ["get", "slug"], ""],
+                "layout": {
+                    "icon-image": icon_ladder,
+                    "icon-size": _cluster_icon_size(_AMENITY_ICON_SIZE_STOPS),
+                    "icon-allow-overlap": True,
+                },
+                "paint": {
+                    "icon-color": ["coalesce", ["get", "color"], "#718096"],
+                    "icon-halo-color": "#ffffff",
+                    "icon-halo-width": ladder(_AMENITY_HALO_STOPS),
+                    "icon-halo-blur": 0,
                 },
             },
             {
@@ -1670,36 +1813,43 @@ def amenity_overlay_style(spec: AmenityOverlaySpec) -> dict[str, Any]:
                     "text-size": ladder(_AMENITY_TEXT_SIZE_STOPS),
                     "text-font": ["Barlow Semi Condensed SemiBold", "Noto Sans Bold"],
                     "text-anchor": "bottom",
-                    "icon-allow-overlap": True,
+                    # NO allow-overlap: collision-aware declutter;
+                    # sort-key ASCENDING → importance negated
                     "text-allow-overlap": False,
-                    "symbol-sort-key": ["get", "importance"],
-                    "icon-overlap": "always",
+                    "symbol-sort-key": ["-", 0, ["get", "importance"]],
                     "text-overlap": "never",
                     "text-optional": True,
+                    # labels relocate instead of dropping when crowded
+                    "text-variable-anchor": ["bottom", "top", "right", "left"],
+                    "text-radial-offset": 0.6,
                     "icon-image": icon_ladder,
                     "icon-size": ladder(_AMENITY_ICON_SIZE_STOPS),
                     "visibility": "visible",
                 },
                 "paint": {
                     # SDF runtime tinting: category color from the tiles,
-                    # white border around it (huts parity).
+                    # white border around it (huts parity). Hover (paint
+                    # props only — feature-state is illegal in layout):
+                    # full opacity + halo +1px.
                     "icon-color": ["coalesce", ["get", "color"], "#718096"],
                     "icon-halo-color": "#ffffff",
-                    "icon-halo-width": ladder(_AMENITY_HALO_STOPS),
+                    "icon-halo-width": _hover_halo_ladder(_AMENITY_HALO_STOPS),
                     "icon-halo-blur": 0,
-                    "icon-opacity": [
-                        "interpolate",
-                        ["linear"],
-                        ["zoom"],
-                        5,
-                        0.7,
-                        10,
-                        0.8,
-                        13,
-                        0.9,
-                        16,
-                        1,
-                    ],
+                    "icon-opacity": _hover_opacity(
+                        [
+                            "interpolate",
+                            ["linear"],
+                            ["zoom"],
+                            5,
+                            0.7,
+                            10,
+                            0.8,
+                            13,
+                            0.9,
+                            16,
+                            1,
+                        ]
+                    ),
                     "text-opacity": ["step", ["zoom"], 0, spec.max_label_zoom, 1],
                     "text-color": "#224E3B",
                     "text-halo-width": 1.2,
@@ -1720,6 +1870,7 @@ def amenity_overlay_style(spec: AmenityOverlaySpec) -> dict[str, Any]:
             "wd:slot_layers": [
                 f"{source_id}-clusters",
                 f"{source_id}-selected",
+                f"{source_id}-selected-icon",
                 source_id,
             ],
         },
