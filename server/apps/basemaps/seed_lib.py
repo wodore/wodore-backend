@@ -798,8 +798,13 @@ ACCOMMODATIONS_SOURCE_ID = "wd-accommodations"
 #: frontend, a shared id would let whichever pack loads first shadow the
 #: other (transport lesson, see TRANSPORT_SPRITE_ID).
 ACCOMMODATIONS_SPRITE_ID = "wd-sdf-accommodations"
+#: Full profile (SDF pack, runtime-tinted)
 ACCOMMODATIONS_ICON_FALLBACK = (
     "wd-sdf-accommodations:mono/amenity.accommodation.unknown"
+)
+#: Subset twin (REGULAR pack — Leaflet rasterizes sheets as images)
+ACCOMMODATIONS_ICON_FALLBACK_SUBSET = (
+    "wd-accommodations:mono/amenity.accommodation.unknown"
 )
 
 #: Flat primary-category props the tiles carry (mirror of the function's
@@ -876,40 +881,17 @@ _HOVER_STATE: list[Any] = [
 ]
 
 
-def _hover_halo_ladder(stops: list[tuple[int, float]]) -> list[Any]:
-    """Halo ladder with +1px on hover (paint prop — feature-state is
-    legal here, unlike layout props like icon-size)."""
-    flat: list[Any] = []
-    for zoom, width in stops:
-        flat.extend((zoom, ["+", width, ["case", _HOVER_STATE, 1, 0]]))
-    return ["interpolate", ["linear"], ["zoom"], *flat]
-
-
-#: Raw-layer icon opacity by zoom (the pre-hover ladder).
-_AMENITY_OPACITY_STOPS: list[tuple[int, float]] = [
-    (5, 0.7),
-    (10, 0.8),
-    (13, 0.9),
-    (16, 1.0),
-]
-
-
-def _hover_opacity(base: Any) -> list[Any]:
-    """Full opacity on hover, the base value otherwise.
-
-    ``["zoom"]`` may ONLY feed a TOP-LEVEL interpolate/step — a case
-    AROUND a zoom ladder is invalid (the 2026-11-06 incident class,
-    paint props included). A zoom ladder therefore rebuilds per-stop
-    (each stop value becomes the hover case); a plain constant wraps
-    in a single case.
-    """
-    if isinstance(base, list) and base[:1] == ["interpolate"]:
-        flat: list[Any] = []
-        for index in range(3, len(base), 2):
-            flat.append(base[index])
-            flat.append(["case", _HOVER_STATE, 1, base[index + 1]])
-        return ["interpolate", *base[1:3], *flat]
-    return ["case", _HOVER_STATE, 1, base]
+def _hover_halo_color() -> list[Any]:
+    """Halo color on hover: the marker's own category color instead of
+    white (owner 2026-11-08: hover must be clearly distinct from the
+    selected state — selected shows the white plate + ring; hover ONLY
+    recolors the halo: no plate, no size change, no opacity change)."""
+    return [
+        "case",
+        _HOVER_STATE,
+        ["coalesce", ["get", "color"], "#718096"],
+        "#ffffff",
+    ]
 
 
 def _size_ladder(stops: list[tuple[int, float]]) -> list[Any]:
@@ -1071,11 +1053,12 @@ def accommodations_style() -> dict[str, Any]:
                 },
                 "paint": {
                     "icon-color": ["coalesce", ["get", "color"], "#718096"],
-                    "icon-halo-color": "#ffffff",
-                    # Halo LADDER (absolute px, #478) + hover bump
-                    "icon-halo-width": _hover_halo_ladder(_AMENITY_HALO_STOPS),
+                    # Halo LADDER (absolute px, #478); hover recolors
+                    # ONLY the halo (category color) — no plate
+                    "icon-halo-color": _hover_halo_color(),
+                    "icon-halo-width": _size_ladder(_AMENITY_HALO_STOPS),
                     "icon-halo-blur": 0,
-                    "icon-opacity": _hover_opacity(0.85),
+                    "icon-opacity": 0.85,
                 },
             },
             {
@@ -1090,12 +1073,12 @@ def accommodations_style() -> dict[str, Any]:
                 "paint": {
                     "circle-blur": 0,
                     "circle-color": "#ffffff",
+                    # selected-ONLY (owner: hover must not look like
+                    # active — hover lives in the icon halo alone)
                     "circle-opacity": [
                         "case",
                         ["boolean", ["feature-state", "selected"], False],
                         1,
-                        ["boolean", ["feature-state", "hovered"], False],
-                        0.85,
                         0,
                     ],
                     # stroke opacity MUST be gated separately — it
@@ -1107,8 +1090,6 @@ def accommodations_style() -> dict[str, Any]:
                         "case",
                         ["boolean", ["feature-state", "selected"], False],
                         1,
-                        ["boolean", ["feature-state", "hovered"], False],
-                        0.9,
                         0,
                     ],
                     "circle-stroke-color": [
@@ -1228,8 +1209,8 @@ def accommodations_style() -> dict[str, Any]:
                     # white border around it (huts parity). Hover (paint
                     # only — feature-state is illegal in layout props).
                     "icon-color": ["coalesce", ["get", "color"], "#718096"],
-                    "icon-halo-color": "#ffffff",
-                    "icon-halo-width": _hover_halo_ladder(_AMENITY_HALO_STOPS),
+                    "icon-halo-color": _hover_halo_color(),
+                    "icon-halo-width": _size_ladder(_AMENITY_HALO_STOPS),
                     "icon-halo-blur": 0,
                     "icon-opacity": [
                         "interpolate",
@@ -1298,7 +1279,14 @@ def _accommodations_style_subset() -> dict[str, Any]:
                 if key != "promoteId"
             }
         },
-        "sprite": deepcopy(accommodations_style()["sprite"]),
+        # REGULAR pack (Leaflet renders sprite sheets as plain images;
+        # SDF packs are distance fields — see the amenity subset twin)
+        "sprite": [
+            {
+                "id": "wd-accommodations",
+                "url": "{{env:MARTIN_TILE_URL}}/sprite/accommodation",
+            }
+        ],
         "glyphs": GLYPHS,
         "layers": [
             {
@@ -1312,7 +1300,7 @@ def _accommodations_style_subset() -> dict[str, Any]:
                 "minzoom": 5,
                 "filter": _ACCOMMODATION_CLUSTER_FILTER,
                 "layout": {
-                    "icon-image": ACCOMMODATIONS_ICON_FALLBACK,
+                    "icon-image": ACCOMMODATIONS_ICON_FALLBACK_SUBSET,
                     "icon-size": _size_ladder(_AMENITY_CLUSTER_ICON_SIZE_STOPS),
                     "icon-allow-overlap": True,
                 },
@@ -1334,7 +1322,7 @@ def _accommodations_style_subset() -> dict[str, Any]:
                 "minzoom": 5,
                 "filter": _ACCOMMODATION_COUNT_FILTER,
                 "layout": {
-                    "icon-image": ACCOMMODATIONS_ICON_FALLBACK,
+                    "icon-image": ACCOMMODATIONS_ICON_FALLBACK_SUBSET,
                     "icon-size": [
                         "interpolate",
                         ["linear"],
@@ -1716,15 +1704,15 @@ def amenity_overlay_style(spec: AmenityOverlaySpec) -> dict[str, Any]:
                 },
                 "paint": {
                     "icon-color": ["coalesce", ["get", "color"], "#718096"],
-                    "icon-halo-color": "#ffffff",
                     # HALO LADDER, not a constant: halo width is ABSOLUTE
                     # pixels and does NOT scale with icon-size (#478) —
                     # a constant on the small low-zoom cluster icons
                     # rendered as a solid white plate behind the glyph.
-                    # +1px on hover (paint prop: feature-state is legal).
-                    "icon-halo-width": _hover_halo_ladder(_AMENITY_HALO_STOPS),
+                    "icon-halo-width": ladder(_AMENITY_HALO_STOPS),
                     "icon-halo-blur": 0,
-                    "icon-opacity": _hover_opacity(0.85),
+                    # hover: ONLY the halo recolors (category color)
+                    "icon-halo-color": _hover_halo_color(),
+                    "icon-opacity": 0.85,
                 },
             },
             {
@@ -1742,12 +1730,12 @@ def amenity_overlay_style(spec: AmenityOverlaySpec) -> dict[str, Any]:
                 "paint": {
                     "circle-blur": 0,
                     "circle-color": "#ffffff",
+                    # selected-ONLY (owner: hover must not look like
+                    # active — hover lives in the icon halo alone)
                     "circle-opacity": [
                         "case",
                         ["boolean", ["feature-state", "selected"], False],
                         1,
-                        ["boolean", ["feature-state", "hovered"], False],
-                        0.85,
                         0,
                     ],
                     # stroke opacity MUST be gated separately — it
@@ -1759,8 +1747,6 @@ def amenity_overlay_style(spec: AmenityOverlaySpec) -> dict[str, Any]:
                         "case",
                         ["boolean", ["feature-state", "selected"], False],
                         1,
-                        ["boolean", ["feature-state", "hovered"], False],
-                        0.9,
                         0,
                     ],
                     "circle-stroke-color": [
@@ -1858,24 +1844,22 @@ def amenity_overlay_style(spec: AmenityOverlaySpec) -> dict[str, Any]:
                     # props only — feature-state is illegal in layout):
                     # full opacity + halo +1px.
                     "icon-color": ["coalesce", ["get", "color"], "#718096"],
-                    "icon-halo-color": "#ffffff",
-                    "icon-halo-width": _hover_halo_ladder(_AMENITY_HALO_STOPS),
+                    "icon-halo-color": _hover_halo_color(),
+                    "icon-halo-width": _size_ladder(_AMENITY_HALO_STOPS),
                     "icon-halo-blur": 0,
-                    "icon-opacity": _hover_opacity(
-                        [
-                            "interpolate",
-                            ["linear"],
-                            ["zoom"],
-                            5,
-                            0.7,
-                            10,
-                            0.8,
-                            13,
-                            0.9,
-                            16,
-                            1,
-                        ]
-                    ),
+                    "icon-opacity": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        5,
+                        0.7,
+                        10,
+                        0.8,
+                        13,
+                        0.9,
+                        16,
+                        1,
+                    ],
                     "text-opacity": ["step", ["zoom"], 0, spec.max_label_zoom, 1],
                     "text-color": "#224E3B",
                     "text-halo-width": 1.2,
@@ -1915,7 +1899,12 @@ def amenity_overlay_style_subset(spec: AmenityOverlaySpec) -> dict[str, Any]:
     """
     subtree = spec.subtree
     source_id = f"wd-{subtree}"
-    sprite_id = f"wd-sdf-{subtree}"
+    # REGULAR pack id (not wd-sdf-*): the subset consumer is
+    # Leaflet-class — it rasterizes sprite sheets as plain images, and
+    # SDF packs are distance fields that render as noise there. The
+    # regular /sprite/<subtree> pack carries the same icon names
+    # (mono/amenity.<subtree> root fallback included).
+    sprite_id = f"wd-{subtree}"
     fallback = f"{sprite_id}:mono/amenity.{subtree}"
     count_filter: list[Any] = ["==", ["get", "count"], 1]
     cluster_filter: list[Any] = [">", ["get", "count"], 1]
@@ -1937,7 +1926,12 @@ def amenity_overlay_style_subset(spec: AmenityOverlaySpec) -> dict[str, Any]:
                 if key != "promoteId"
             }
         },
-        "sprite": deepcopy(full["sprite"]),
+        "sprite": [
+            {
+                "id": sprite_id,
+                "url": f"{{{{env:MARTIN_TILE_URL}}}}/sprite/{subtree}",
+            }
+        ],
         "glyphs": GLYPHS,
         "layers": [
             {

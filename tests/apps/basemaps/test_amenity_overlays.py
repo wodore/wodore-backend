@@ -222,30 +222,44 @@ class AmenityStyleContractTests(SimpleTestCase):
                     0,
                     ["get", "importance"],
                 ], (subtree, layer_id)
-                # hover: paint-only feature-state. Clusters wrap a
-                # constant in one case; the raw layer's zoom ladder
-                # rebuilds PER-STOP (zoom may only feed a top-level
-                # interpolate — a case around the ladder is invalid).
-                opacity = layer["paint"]["icon-opacity"]
-                if layer_id.endswith("-clusters"):
-                    assert opacity[0] == "case", subtree
-                else:
-                    assert opacity[0] == "interpolate", subtree
-                    for value in opacity[4::2]:
-                        assert value[0] == "case", subtree
+                # hover = halo COLOR change only (owner 2026-11-08):
+                # the halo recolors to the category color; NO plate,
+                # NO size change, NO opacity change
+                halo_color = layer["paint"]["icon-halo-color"]
+                assert halo_color[0] == "case", subtree
+                assert halo_color[1][1] == ["feature-state", "hovered"], subtree
+                assert halo_color[2] == [
+                    "coalesce",
+                    ["get", "color"],
+                    "#718096",
+                ], subtree
+                assert halo_color[3] == "#ffffff", subtree
+                # halo WIDTH back to the plain zoom ladder
                 assert layer["paint"]["icon-halo-width"][0] == "interpolate"
             # selection plate
             plate = by_id[f"wd-{subtree}-selected"]
             paint = plate["paint"]
             assert paint["circle-color"] == "#ffffff", subtree
             assert paint["circle-blur"] == 0, subtree
-            assert paint["circle-opacity"][0] == "case", subtree
+            # selected-ONLY: no hover branch (hover must not look
+            # active — it lives in the icon halo alone)
+            assert paint["circle-opacity"] == [
+                "case",
+                ["boolean", ["feature-state", "selected"], False],
+                1,
+                0,
+            ], subtree
             assert paint["circle-stroke-color"][0] == "case", subtree
             # the ring storm regression: stroke opacity MUST be gated —
             # it defaults to 1 and renders for EVERY feature regardless
             # of circle-opacity (2026-11-07 staging incident)
             assert paint["circle-stroke-opacity"][0] == "case", subtree
-            assert paint["circle-stroke-opacity"][5] == 0, subtree
+            assert paint["circle-stroke-opacity"] == [
+                "case",
+                ["boolean", ["feature-state", "selected"], False],
+                1,
+                0,
+            ], subtree
             # radius per-stop values scale by the count factor
             radius = paint["circle-radius"]
             assert radius[2] == ["zoom"], subtree
@@ -271,6 +285,26 @@ class AmenityStyleContractTests(SimpleTestCase):
                 11,
                 "always",
             ], layer_id
+
+    def test_subset_sprites_are_regular_packs(self) -> None:
+        """Leaflet rasterizes sprite sheets as plain images — SDF packs
+        (distance fields) render as noise. The subset twins must
+        reference the REGULAR /sprite/<subtree> packs (same icon
+        names, incl. the mono/amenity.<subtree> root fallback)."""
+        for subtree in EXPECTED_BANDS:
+            sub = lib.AMENITY_OVERLAY_STYLES_SUBSET[subtree]
+            (sprite,) = sub["sprite"]
+            assert sprite["id"] == f"wd-{subtree}", subtree
+            assert sprite["url"].endswith(f"/sprite/{subtree}"), subtree
+            cluster_icon = sub["layers"][0]["layout"]["icon-image"]
+            assert cluster_icon == f"wd-{subtree}:mono/amenity.{subtree}", subtree
+        acc = lib.ACCOMMODATIONS_STYLE_SUBSET
+        (sprite,) = acc["sprite"]
+        assert sprite["url"].endswith("/sprite/accommodation")
+        raw = next(l for l in acc["layers"] if l["id"] == "wd-accommodations")
+        assert raw["layout"]["icon-image"] == (
+            "wd-accommodations:mono/amenity.accommodation.unknown"
+        )
 
     def test_subset_cluster_icons_oversize_raw_ladder(self) -> None:
         """Subset twins: static-sprite cluster icons at a strictly
