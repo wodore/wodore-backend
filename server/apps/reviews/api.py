@@ -426,6 +426,20 @@ class ReviewPhotoUploadController(ReviewsWriteController):
 
         files: list[tuple[str, bytes, str]] = []
         for uploaded in self.request.FILES.getlist("files"):
+            # Size check before reading into memory (Opus R10).
+            from .client import UPLOAD_MAX_TOTAL_BYTES
+
+            if uploaded.size and uploaded.size > UPLOAD_MAX_TOTAL_BYTES:
+                from dmr import APIError
+
+                raise APIError(
+                    {
+                        "code": "validation_error",
+                        "detail": f"File '{uploaded.name}' exceeds "
+                        f"{UPLOAD_MAX_TOTAL_BYTES // 1_000_000} MB.",
+                    },
+                    status_code=HTTPStatus.BAD_REQUEST,
+                )
             files.append(
                 (uploaded.name or "photo", uploaded.read(), uploaded.content_type or "")
             )

@@ -37,10 +37,7 @@ def _review_image_results(slug: str, limit: int) -> list[ImageResult]:
     """Sync core: the hut's review photos as ImageResults (never raises)."""
     from server.apps.huts.models import Hut
 
-    from .models import (  # noqa: F401  (kept for symmetry)
-        ReviewBlacklist,
-        SubmittedReview,
-    )
+    from .models import ReviewBlacklist
     from .services import build_geo_subject, resolve_review_name
 
     hut = (
@@ -69,7 +66,12 @@ def _review_image_results(slug: str, limit: int) -> list[ImageResult]:
 
     results: list[ImageResult] = []
     for item in response.reviews:
-        if item.payload.action not in (None, "edit") or item.signature in blacklisted:
+        from .services import _effective_signature as _eff_sig
+
+        _effective = _eff_sig(item)
+        if item.payload.action not in (None, "edit"):
+            continue
+        if item.signature in blacklisted or _effective in blacklisted:
             continue
         if not subject_geo_matches(_effective_subject(item), subject):
             continue

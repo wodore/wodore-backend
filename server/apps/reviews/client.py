@@ -227,6 +227,21 @@ def _parse_model(model_cls: type[pydantic.BaseModel], data: t.Any) -> t.Any:
         ) from exc
 
 
+def _safe_json(response: httpx.Response) -> t.Any:
+    """Parse JSON, degrading non-JSON 2xx bodies (CDN/maintenance pages).
+
+    A 2xx HTML body (Cloudflare error page, maintenance banner) would
+    otherwise raise JSONDecodeError → 500 (Opus R9). This wraps it once
+    for every parse site in the client.
+    """
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise UpstreamUnavailable(
+            f"upstream returned non-JSON 2xx body ({response.headers.get('content-type', '?')})"
+        ) from exc
+
+
 class MangroveClient:
     """httpx client for the Original Mangrove Server (the only one)."""
 
@@ -340,12 +355,16 @@ class MangroveClient:
             "/reviews",
             params={"sub": subject, "limit": _UPSTREAM_LIST_LIMIT},
         )
-        return t.cast(ReviewsResponse, _parse_model(ReviewsResponse, response.json()))
+        return t.cast(
+            ReviewsResponse, _parse_model(ReviewsResponse, _safe_json(response))
+        )
 
     def list_reviews_by_kid(self, kid_pem: str) -> ReviewsResponse:
         """All reviews of one issuer identity."""
         response = self._request("GET", "/reviews", params={"kid": kid_pem})
-        return t.cast(ReviewsResponse, _parse_model(ReviewsResponse, response.json()))
+        return t.cast(
+            ReviewsResponse, _parse_model(ReviewsResponse, _safe_json(response))
+        )
 
     def review(self, signature: str) -> ReviewItem | None:
         """One review by signature; ``None`` when upstream 404s."""
@@ -353,7 +372,7 @@ class MangroveClient:
             response = self._request("GET", f"/review/{signature}")
         except UpstreamRejected:
             return None
-        return t.cast(ReviewItem, _parse_model(ReviewItem, response.json()))
+        return t.cast(ReviewItem, _parse_model(ReviewItem, _safe_json(response)))
 
     def issuer(self, pem: str) -> IssuerStats | None:
         """Issuer aggregate; ``None`` when upstream 404s."""
@@ -361,7 +380,7 @@ class MangroveClient:
             response = self._request("GET", f"/issuer/{pem}")
         except UpstreamRejected:
             return None
-        return t.cast(IssuerStats, _parse_model(IssuerStats, response.json()))
+        return t.cast(IssuerStats, _parse_model(IssuerStats, _safe_json(response)))
 
     def upload_photos(self, files: "list[tuple[str, bytes, str]]") -> "list[str]":
         """Upload photos to the Mangrove file server, return their hashes.
@@ -403,7 +422,7 @@ class MangroveClient:
                 body=response.text[:300],
             )
             raise UpstreamRejected(response.text[:200])
-        hashes = response.json()
+        hashes = _safe_json(response)
         if not isinstance(hashes, list):
             raise UpstreamUnavailable("upload server returned a non-list response")
         return [str(h) for h in hashes]

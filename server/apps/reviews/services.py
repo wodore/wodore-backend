@@ -197,7 +197,7 @@ def caller_from_request(request: HttpRequest) -> t.Any | None:
             )
             if email:
                 try:
-                    return user_model.objects.get(email=email)
+                    return user_model.objects.get(email__iexact=email)
                 except user_model.DoesNotExist:
                     pass
             logger.info("reviews_caller_unknown_sub")
@@ -1143,6 +1143,16 @@ def edit_review(user: t.Any, hut: Hut, signature: str, dto: ReviewEditIn) -> Rev
     # Images: DTO replaces if explicitly provided; None keeps originals.
     final_images: list[dict[str, t.Any]]
     if dto.images is not None:
+        for img in dto.images:
+            if not _image_src_allowed(img.src):
+                raise APIError(
+                    {
+                        "code": ErrorCode.validation_error,
+                        "detail": "Image src must be an https URL on an "
+                        "allowlisted host (use POST /v1/reviews/images to upload).",
+                    },
+                    status_code=HTTPStatus.BAD_REQUEST,
+                )
         final_images = [img.model_dump(exclude_none=True) for img in dto.images]
     else:
         final_images = original_images
@@ -1247,6 +1257,17 @@ def reply_review(
         "client_id": settings.ORA_CLIENT_ID,
         "license": LICENSE,
     }
+    if dto.images:
+        for img in dto.images:
+            if not _image_src_allowed(img.src):
+                raise APIError(
+                    {
+                        "code": ErrorCode.validation_error,
+                        "detail": "Image src must be an https URL on an "
+                        "allowlisted host (use POST /v1/reviews/images to upload).",
+                    },
+                    status_code=HTTPStatus.BAD_REQUEST,
+                )
     images = (
         [img.model_dump(exclude_none=True) for img in dto.images]
         if dto.images
@@ -1465,7 +1486,7 @@ def import_identity(user: t.Any, jwk_string: str) -> dict[str, t.Any]:
     try:
         jwk = json.loads(jwk_string)
         if not isinstance(jwk, dict):
-            raise ValueError("not a JSON object")
+            raise TypeError("not a JSON object")
     except (ValueError, TypeError) as exc:
         raise APIError(
             {
@@ -1475,58 +1496,28 @@ def import_identity(user: t.Any, jwk_string: str) -> dict[str, t.Any]:
             status_code=HTTPStatus.BAD_REQUEST,
         ) from exc
 
-    # Validate it's a usable EC P-256 private key.
-    required = {"kty", "crv", "x", "y", "d"}
-    if not required.issubset(jwk):
-        missing = required - set(jwk)
-        raise APIError(
-            {
-                "code": ErrorCode.validation_error,
-                "detail": f"JWK missing required fields: {', '.join(sorted(missing))}",
-            },
-            status_code=HTTPStatus.BAD_REQUEST,
-        )
-    if jwk.get("kty") != "EC" or jwk.get("crv") != "P-256":
-        raise APIError(
-            {
-                "code": ErrorCode.validation_error,
-                "detail": "JWK must be an EC P-256 key (kty='EC', crv='P-256').",
-            },
-            status_code=HTTPStatus.BAD_REQUEST,
-        )
-
-    # Derive the kid (PEM public key) from the JWK.
-    from cryptography.hazmat.primitives.asymmetric import ec as _ec
-
-    from .signing import mint_keypair  # noqa: F401  (validate via construction)
+    # Validate and canonicalize (derive x/y from d — Opus R4).
+    from .signing import canonicalize_jwk
 
     try:
-        d_bytes = base64.urlsafe_b64decode(
-            str(jwk["d"]) + "=" * (4 - len(str(jwk["d"])) % 4)
+        parsed_jwk = (
+            json.loads(jwk_string) if isinstance(jwk_string, str) else jwk_string
         )
-        d = int.from_bytes(d_bytes, "big")
-        private_key = _ec.derive_private_key(d, _ec.SECP256R1())
-        pem = (
-            private_key.public_key()
-            .public_bytes(
-                __import__(
-                    "cryptography.hazmat.primitives.serialization",
-                    fromlist=["Encoding", "PublicFormat"],
-                ).Encoding.PEM,
-                __import__(
-                    "cryptography.hazmat.primitives.serialization",
-                    fromlist=["Encoding", "PublicFormat"],
-                ).PublicFormat.SubjectPublicKeyInfo,
-            )
-            .decode()
-        )
-        kid = "".join(pem.splitlines())
+        if not isinstance(parsed_jwk, dict):
+            raise TypeError("not a JSON object")
     except (ValueError, TypeError) as exc:
         raise APIError(
             {
                 "code": ErrorCode.validation_error,
-                "detail": f"JWK is not a valid EC P-256 private key: {exc}",
+                "detail": f"Invalid JWK format: {exc}",
             },
+            status_code=HTTPStatus.BAD_REQUEST,
+        ) from exc
+    try:
+        kid, canonical = canonicalize_jwk(parsed_jwk)
+    except ValueError as exc:
+        raise APIError(
+            {"code": ErrorCode.validation_error, "detail": str(exc)},
             status_code=HTTPStatus.BAD_REQUEST,
         ) from exc
 
@@ -1540,7 +1531,9 @@ def import_identity(user: t.Any, jwk_string: str) -> dict[str, t.Any]:
         user=user,
         defaults={
             "kid": kid,
-            "private_jwk_encrypted": _encrypt(json.dumps(jwk, separators=(",", ":"))),
+            "private_jwk_encrypted": _encrypt(
+                json.dumps(canonical, separators=(",", ":"))
+            ),
         },
     )
     profile = ReviewerProfile.objects.filter(user=user).first()

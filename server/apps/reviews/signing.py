@@ -177,6 +177,54 @@ def build_action_jwt(
     return build_jwt(kid, private_jwk, payload)
 
 
+def canonicalize_jwk(jwk: dict[str, t.Any]) -> tuple[str, dict[str, t.Any]]:
+    """Validate and canonicalize an imported JWK.
+
+    Derives ``x``/``y`` from ``d`` (rejecting mismatched values),
+    returns ``(kid, canonical_jwk)`` with only the 5 standard fields.
+    This prevents broken identities from user-supplied x/y mismatches
+    (Opus R4).
+    """
+    required = {"kty", "crv", "x", "y", "d"}
+    if not required.issubset(jwk):
+        missing = required - set(jwk)
+        raise ValueError(f"JWK missing required fields: {', '.join(sorted(missing))}")
+    if jwk.get("kty") != "EC" or jwk.get("crv") != "P-256":
+        raise ValueError("JWK must be an EC P-256 key (kty='EC', crv='P-256')")
+    try:
+        d_bytes = _from_b64url(str(jwk["d"]))
+        d = int.from_bytes(d_bytes, "big")
+        private_key = ec.derive_private_key(d, ec.SECP256R1())
+        numbers = private_key.public_key().public_numbers()
+        derived_x = _b64url(numbers.x.to_bytes(32, "big"))
+        derived_y = _b64url(numbers.y.to_bytes(32, "big"))
+    except (ValueError, TypeError) as exc:
+        raise ValueError(f"JWK is not a valid EC P-256 private key: {exc}") from exc
+    # Reject mismatched x/y (would produce a broken identity).
+    if str(jwk["x"]) != derived_x or str(jwk["y"]) != derived_y:
+        raise ValueError(
+            "JWK x/y coordinates do not match the private key d — "
+            "the identity would be broken"
+        )
+    canonical = {
+        "kty": "EC",
+        "crv": "P-256",
+        "x": derived_x,
+        "y": derived_y,
+        "d": str(jwk["d"]),
+    }
+    pem = (
+        private_key.public_key()
+        .public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode()
+    )
+    kid = "".join(pem.splitlines())
+    return kid, canonical
+
+
 def _now_epoch() -> int:
     return int(datetime.datetime.now(tz=datetime.UTC).timestamp())
 
