@@ -50,7 +50,7 @@ def _ensure_category_tree() -> None:
 
 
 @pytest.fixture
-def hut(seed_data: object):  # pytest fixture dependency
+def hut(seed_data: object):  # noqa: ARG001  # pytest fixture dep (resolved by name)  # pytest fixture dependency
     """A public active hut with OSM and refuges.info sources (stand-ins)."""
     from server.apps.huts.models import HutSource
     from server.apps.organizations.models import Organization
