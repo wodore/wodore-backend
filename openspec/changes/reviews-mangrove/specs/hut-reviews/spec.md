@@ -2,7 +2,7 @@
 
 ### Requirement: Public review list per hut
 The system SHALL serve `GET /v1/huts/{slug}/reviews` returning the reviews
-of the hut's Mangrove subject in the generic collection envelope
+of the hut's Open Reviews subject in the generic collection envelope
 (`{"data": […], "count": N}`), anonymously readable, newest-first (upstream
 `latest_edits_only` already collapses edits), locally paginated
 (`limit` ≤100 default 20, `offset`). Huts that are not public or not
@@ -14,9 +14,9 @@ its `rating` (if present), `opinion` (if present), `nickname` (if present),
 `signature`, and per-review attribution: `source` (`mangrove` or the
 provider id), `license` (the review content's license) and `link` (the
 source page, when one exists); the envelope SHALL carry `license:
-"CC-BY-4.0"` and an attribution link to the Mangrove dataset. The
+"CC-BY-4.0"` and an attribution link to the Open Reviews dataset. The
 listing SHALL merge reviews from read-only providers (spec:
-mangrove-client D11 — refuges.info comments, per-review
+open-reviews-client D11 — refuges.info comments, per-review
 `source`/`license`/`link`), newest-first across all sources.
 
 #### Scenario: Anonymous read works
@@ -26,7 +26,7 @@ mangrove-client D11 — refuges.info comments, per-review
 
 #### Scenario: Hut without reviews
 
-- **WHEN** the hut's Mangrove subject has no reviews upstream
+- **WHEN** the hut's Open Reviews subject has no reviews upstream
 - **THEN** the response is 200 with `data: []` and `count: 0`
 
 #### Scenario: Non-public hut hides
@@ -42,12 +42,12 @@ mangrove-client D11 — refuges.info comments, per-review
 #### Scenario: Provider comments merge with attribution
 
 - **WHEN** the hut has a refuges.info HutSource with comments
-- **THEN** those comments appear in the listing carrying `source: "refuges.info"`, the CC BY-SA 2.0 FR license label and a link to the refuge page, merged newest-first with the Mangrove reviews
+- **THEN** those comments appear in the listing carrying `source: "refuges.info"`, the CC BY-SA 2.0 FR license label and a link to the refuge page, merged newest-first with the Open Reviews reviews
 
 #### Scenario: Provider outage degrades to Mangrove only
 
 - **WHEN** the refuges.info API fails
-- **THEN** the listing still serves Mangrove reviews (provider items absent, no error)
+- **THEN** the listing still serves Open Reviews reviews (provider items absent, no error)
 
 #### Scenario: Foreign subjects do not leak in
 
@@ -225,7 +225,7 @@ The system SHALL serve `POST /v1/huts/{slug}/reviews/{signature}/reply`
 requiring authentication with a body of `rating` (helpfulness, 0–100)
 and/or `opinion` (≤1000), plus optional `images` (≤5 × `{src: https
 URL, label?: ≤50}` — same validation as submissions). The reply SHALL be signed as an ordinary
-Mangrove review whose subject is `urn:maresi:{signature}`, counted
+Open Reviews review whose subject is `urn:maresi:{signature}`, counted
 against the submission quota, and logged with the parent signature as
 its target. The public `GET /v1/huts/{slug}/reviews/{signature}/replies`
 SHALL list a parent review's replies (cached per signature, blacklist-
@@ -248,18 +248,18 @@ path SHALL answer 404.
 - **THEN** the signed reply JWT includes the images and the response echoes them
 
 ### Requirement: Review photos in the image gallery
-The system SHALL expose the images attached to a hut's Mangrove reviews
+The system SHALL expose the images attached to a hut's Open Reviews reviews
 through the standard image-provider pipeline (the same gallery endpoint
 and fan-out as the other providers): each review photo becomes a gallery
 feature with the review's license (CC-BY-4.0 by default), the reviewer
 nickname as author, Mangrove provider attribution, and imagor-served
 display variants. Photos of blacklisted reviews SHALL be excluded;
 provider failures SHALL degrade to an empty result; the
-`MANGROVE_ENABLED` kill-switch SHALL disable the source.
+`ORA_ENABLED` kill-switch SHALL disable the source.
 
 #### Scenario: Review photo appears in the hut gallery
 
-- **WHEN** a hut has a visible Mangrove review carrying an image on the allowlisted host
+- **WHEN** a hut has a visible Open Reviews review carrying an image on the allowlisted host
 - **THEN** the hut's image gallery fan-out includes that photo with CC-BY-4.0 license, reviewer attribution and imagor display URLs
 
 #### Scenario: Blacklisted review photo hidden
@@ -287,7 +287,7 @@ Mangrove automatically.
 - **THEN** the response is 400 with the standard validation error
 
 ### Requirement: Signature blacklist moderation
-The system SHALL keep an admin-managed blacklist of Mangrove review
+The system SHALL keep an admin-managed blacklist of Open Reviews review
 signatures (with reason and author). Blacklisted signatures SHALL be
 excluded from all Wodore-served review lists, summaries and batch
 aggregates — covering both Mangrove signatures and read-only provider

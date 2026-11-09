@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Deterministic hut subject construction
-The system SHALL compute every hut's Mangrove subject as a function of
+The system SHALL compute every hut's Open Reviews subject as a function of
 the hut row and its **review name**: `geo:{lat},{lon}?q={name}&u={radius}`
 with coordinates from `Hut.location` (WGS84, 6 decimals) and `u` one
 configurable constant (default from settings). The review name SHALL
@@ -35,14 +35,14 @@ collision warning).
 - **THEN** the check reports the collision so operators can act before reviews are shared
 
 ### Requirement: Single upstream client
-All communication with the Mangrove API SHALL go through one client module
+All communication with the Open Reviews API SHALL go through one client module
 (`MangroveClient`) configured with the base URL from settings. It SHALL
 enforce explicit connect and read timeouts on every request, retry only
 idempotent GET requests with a bounded retry budget and backoff, and never
 retry write submissions. Writes SHALL use `POST /submit` with the JWT as a
 `text/plain` body (the deprecated `PUT /submit/{jwt}` path MUST NOT be
 used — it would leak review content into URL logs). No other code path
-SHALL issue requests to the Mangrove API.
+SHALL issue requests to the Open Reviews API.
 
 #### Scenario: Writes never retry
 
@@ -78,7 +78,7 @@ error.
 
 ### Requirement: Signed write relay with submission log
 Review writes (submit, edit, delete, report_abuse) SHALL be constructed as
-Mangrove Review Standard JWTs (`ES256`, header `kid` PEM + `jwk`,
+Open Reviews Standard (MaReSt) JWTs (`ES256`, header `kid` PEM + `jwk`,
 MaReSt-compliant claims) and relayed via `POST /submit`. The review
 signature SHALL be derived locally as the JWT's third base64url segment
 (the upstream submission response carries none). Every write SHALL be

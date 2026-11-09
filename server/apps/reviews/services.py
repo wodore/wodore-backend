@@ -81,7 +81,7 @@ _QUOTA_WINDOW = datetime.timedelta(hours=24)
 _cache = caches["shared"]
 
 #: How long cached upstream list payloads live (seconds).
-_LIST_TTL = settings.MANGROVE_CACHE_TTL_LIST
+_LIST_TTL = settings.ORA_CACHE_TTL_LIST
 
 _client: MangroveClient | None = None
 
@@ -130,7 +130,7 @@ def pin_review_name(hut: Hut) -> str:
 def build_geo_subject(lat: float, lon: float, q: str) -> str:
     """``geo:{lat:.6f},{lon:.6f}?q={q}&u={u}`` for an arbitrary ``q``."""
     return "geo:{:.6f},{:.6f}?{}&u={}".format(
-        lat, lon, urlencode({"q": q}), settings.MANGROVE_U_RADIUS
+        lat, lon, urlencode({"q": q}), settings.ORA_U_RADIUS
     )
 
 
@@ -290,10 +290,10 @@ def _quota_used(user: t.Any, actions: list[str]) -> int:
 def enforce_quota(user: t.Any, kind: str) -> None:
     """429 with ``review_quota_exceeded`` when the window is exhausted."""
     if kind == "submit":
-        limit = settings.MANGROVE_QUOTA_SUBMIT
+        limit = settings.ORA_QUOTA_SUBMIT
         actions = [SubmittedReview.Action.review.value]
     else:
-        limit = settings.MANGROVE_QUOTA_EDIT
+        limit = settings.ORA_QUOTA_EDIT
         actions = [
             SubmittedReview.Action.edit.value,
             SubmittedReview.Action.delete.value,
@@ -330,7 +330,7 @@ def enforce_enabled() -> None:
     OFF because there is no Mangrove sandbox; a test review would be
     published permanently to the open dataset, Opus review B5).
     """
-    if not settings.MANGROVE_ENABLED:
+    if not settings.ORA_ENABLED:
         raise APIError(
             {
                 "code": ErrorCode.service_unavailable,
@@ -338,7 +338,7 @@ def enforce_enabled() -> None:
             },
             status_code=HTTPStatus.SERVICE_UNAVAILABLE,
         )
-    if not settings.MANGROVE_WRITES_ENABLED:
+    if not settings.ORA_WRITES_ENABLED:
         raise APIError(
             {
                 "code": ErrorCode.service_unavailable,
@@ -408,7 +408,7 @@ def _cached_items(subject: str) -> list[ReviewItem] | None:
     down_key = f"reviews:list:{subject}:down"
     if _cache.get(down_key):
         raise _upstream_unavailable()  # recent failure — circuit open
-    if not settings.MANGROVE_ENABLED:
+    if not settings.ORA_ENABLED:
         return []
     cached = _cache.get(_list_cache_key(subject))
     if cached is not None:
@@ -673,7 +673,7 @@ def _image_src_allowed(src: str) -> bool:
     parsed = urlsplit(src)
     if parsed.scheme != "https" or parsed.port is not None:
         return False
-    return (parsed.hostname or "") in set(settings.MANGROVE_IMAGE_HOST_ALLOWLIST)
+    return (parsed.hostname or "") in set(settings.ORA_IMAGE_HOST_ALLOWLIST)
 
 
 def _filtered_images(item: ReviewItem) -> list[ReviewImageOut]:
@@ -701,7 +701,7 @@ def serialize_review(item: ReviewItem) -> ReviewOut:
         created=datetime.datetime.fromtimestamp(
             item.payload.iat, tz=datetime.UTC
         ).isoformat(),
-        source="mangrove",
+        source="open_reviews",
         license=LICENSE,
         link=None,
     )
@@ -1029,7 +1029,7 @@ def submit_review(
     subject = build_geo_subject(hut.location.y, hut.location.x, name)
     metadata: dict[str, t.Any] = {
         "nickname": dto.nickname or profile.nickname,
-        "client_id": settings.MANGROVE_CLIENT_ID,
+        "client_id": settings.ORA_CLIENT_ID,
         "license": LICENSE,
         "language": dto.language or profile.language or language,
     }
@@ -1087,7 +1087,7 @@ def submit_review(
             ReviewImageOut(src=img.src, label=img.label) for img in (dto.images or [])
         ],
         created=timezone.now().isoformat(),
-        source="mangrove",
+        source="open_reviews",
         license=LICENSE,
         link=None,
     )
@@ -1133,7 +1133,7 @@ def edit_review(user: t.Any, hut: Hut, signature: str, dto: ReviewEditIn) -> Rev
     if dto.is_affiliated:
         original_metadata["is_affiliated"] = True
     # Re-stamp the fields Wodore always controls.
-    original_metadata["client_id"] = settings.MANGROVE_CLIENT_ID
+    original_metadata["client_id"] = settings.ORA_CLIENT_ID
     original_metadata["license"] = LICENSE
     osm_id = osm_id_for_hut(hut)
     if osm_id:
@@ -1176,7 +1176,7 @@ def edit_review(user: t.Any, hut: Hut, signature: str, dto: ReviewEditIn) -> Rev
             for img in final_images
         ],
         created=timezone.now().isoformat(),
-        source="mangrove",
+        source="open_reviews",
         license=LICENSE,
         link=None,
     )
@@ -1244,7 +1244,7 @@ def reply_review(
     maresi = f"urn:maresi:{signature}"
     metadata: dict[str, t.Any] = {
         "nickname": profile.nickname,
-        "client_id": settings.MANGROVE_CLIENT_ID,
+        "client_id": settings.ORA_CLIENT_ID,
         "license": LICENSE,
     }
     images = (
@@ -1275,7 +1275,7 @@ def reply_review(
             ReviewImageOut(src=img.src, label=img.label) for img in (dto.images or [])
         ],
         created=timezone.now().isoformat(),
-        source="mangrove",
+        source="open_reviews",
         license=LICENSE,
         link=None,
     )

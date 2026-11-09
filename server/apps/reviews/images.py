@@ -95,7 +95,7 @@ def _review_image_results(slug: str, limit: int) -> list[ImageResult]:
             safe_author = _html.escape(author) if author else "Anonymous"
             results.append(
                 ImageResult(
-                    provider="mangrove",
+                    provider="open_reviews",
                     source_id=f"{item.signature}:{index}",
                     source_url=None,
                     image_type="flat",
@@ -127,7 +127,7 @@ def _review_image_results(slug: str, limit: int) -> list[ImageResult]:
 class MangroveProvider(ImageProvider):
     """Review photos from the open Mangrove dataset."""
 
-    source = "mangrove"
+    source = "open_reviews"
     cache_ttl = CACHE_SHORT  # reviews change; 24 h
     priority = 4
 
@@ -140,7 +140,7 @@ class MangroveProvider(ImageProvider):
         limit: int = 100,
         update_cache: bool = False,
     ) -> "list[ImageResult]":
-        if not settings.MANGROVE_ENABLED:
+        if not settings.ORA_ENABLED:
             return []
         cache_key = self._get_cache_key(lat, lon, radius)
         if not update_cache:

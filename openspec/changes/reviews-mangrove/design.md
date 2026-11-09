@@ -2,7 +2,7 @@
 
 ## Context
 
-**Mangrove Reviews** (Open Reviews Association, ORA) is a decentralized review
+**Open Reviews** (Open Reviews Association, ORA) is a decentralized review
 system: a review is an ES256-signed JWT (Mangrove Review Standard, MaReSt
 v0.7.0) stored on the Original Mangrove Server at `https://api.mangrove.reviews`
 (**Server API 0.4.1** — live, CORS-open, *not frozen*). The dataset is open
@@ -193,7 +193,7 @@ New Django app `server/apps/reviews`:
 ```text
 server/apps/reviews/
   models.py        # ReviewerKey, ReviewerProfile, SubmittedReview, ReviewBlacklist
-  client.py        # MangroveClient (httpx) + subject recipe + geo-match filter
+  client.py        # OpenReviewsClient (httpx) + subject recipe + geo-match filter
   signing.py       # ES256 JWT construction per MaReSt (cryptography, DER→raw)
   services.py      # read/write orchestration: validation, quota, cache, blacklist, aggregates
   cache.py         # subject-keyed read cache + write-through invalidation
@@ -202,8 +202,8 @@ server/apps/reviews/
   management/commands/reviews_erase_user.py
 ```
 
-`MangroveClient` is the **only** code allowed to talk to
-`api.mangrove.reviews` (base URL from `MANGROVE_API_BASE_URL`, default
+`OpenReviewsClient` is the **only** code allowed to talk to
+`api.mangrove.reviews` (base URL from `ORA_API_BASE_URL`, default
 production; overridable to a local/staging instance). httpx client with
 explicit connect/read timeouts (5 s / 10 s, O8), bounded retries **only
 for idempotent GETs** (never for submits), one structlog event per
@@ -265,7 +265,7 @@ language?: BCP 47 ≤35, experience_context?: ≤20
 is_affiliated?: true}` — MaReSt flag semantics: flags are sent **only
 when true**, never `false`. Edit DTO: same, at least one of
 rating/opinion. Report DTO: `{opinion: required ≤1000}`. Server-side
-enrichment: `client_id` = `MANGROVE_CLIENT_ID`, `license: CC-BY-4.0`,
+enrichment: `client_id` = `ORA_CLIENT_ID`, `license: CC-BY-4.0`,
 `osm_id` from the hut's OSM linkage when present (D8), `nickname`
 defaulting from the reviewer profile (DTO value overrides), `language`
 defaulting from the request language, `iat` = now.
@@ -278,7 +278,7 @@ are registered (additive changes need no snapshot in the PR).
 
 - `ReviewerKey` (1:1 with `User`, **`on_delete=PROTECT`**, created lazily
   on first write): ES256 P-256 keypair; **private JWK encrypted at rest**
-  (Fernet/`MultiFernet` under a dedicated `MANGROVE_KEY_ENCRYPTION_KEY`
+  (Fernet/`MultiFernet` under a dedicated `ORA_KEY_ENCRYPTION_KEY`
   env secret from Infisical — *not* the Django `SECRET_KEY`, so rotations
   stay independent); `kid` = single-line PEM public key
   (whitespace-normalized — upstream compares PEMs ignoring whitespace),
@@ -322,12 +322,12 @@ are registered (additive changes need no snapshot in the PR).
 
 ### D5 — Write path, quota, moderation
 
-1. `MANGROVE_ENABLED` kill-switch check (disabled → 503
+1. `ORA_ENABLED` kill-switch check (disabled → 503
    `service_unavailable` for writes).
 2. Caller resolution → lazy `ReviewerKey` mint.
 3. **Quota**: rolling 24 h window counted from `SubmittedReview` rows (no
    extra table): submissions default 5/day, edit+delete combined 20/day
-   (settings `MANGROVE_QUOTA_SUBMIT/EDIT`). Exceeded → 429
+   (settings `ORA_QUOTA_SUBMIT/EDIT`). Exceeded → 429
    `review_quota_exceeded` (new registered code) + `Retry-After` header +
    reset time in the body; nothing is signed or relayed. Reports are not
    quota-counted; they carry a dmr rate throttle instead.
@@ -445,18 +445,18 @@ link submit without the field.
   response returns `files.mangrove.reviews/<hash>` URLs
   (content-addressed, immutable, 1-year cache; unlisted photos
   auto-deleted after a day) for the client to include in the review's
-  `images[].src`. After a submit WITH images, the MangroveProvider's
+  `images[].src`. After a submit WITH images, the OpenReviewsProvider's
   gallery cache for the hut's coordinates is invalidated (otherwise
   the 24 h TTL delays new photos in the gallery).
-- **Gallery provider** (round 3): `MangroveProvider`
+- **Gallery provider** (round 3): `OpenReviewsProvider`
   (`server/apps/reviews/images.py`) feeds the hut's review photos into
   the standard geometries image pipeline — registered beside the other
   providers, so review photos get imagor variants, license rows
   (CC-BY-4.0 from review metadata), reviewer-nickname attribution and
   dedup scoring like any external source. Geo-match + blacklist filters
-  mirror the listings; 24 h provider cache; `MANGROVE_ENABLED` gates it.
+  mirror the listings; 24 h provider cache; `ORA_ENABLED` gates it.
   Served lists pass an image through only when its `src` host is on
-  `MANGROVE_IMAGE_HOST_ALLOWLIST` (default `["files.mangrove.reviews"]` —
+  `ORA_IMAGE_HOST_ALLOWLIST` (default `["files.open-reviews.net"]` —
   1022 of 1025 persisted image URLs in the 2026-11-08 dump live there);
   other hosts are dropped at serving (never mutated upstream). This keeps
   Wodore pages from loading arbitrary third-party hosts (tracking pixels,
@@ -468,7 +468,7 @@ link submit without the field.
   an envelope field `license: "CC-BY-4.0"` + `attribution` pointing at
   mangrove.reviews / the ORA, so frontends can attribute without
   hardcoding.
-- **ORA terms**: submitters publish into the Mangrove dataset under the
+- **ORA terms**: submitters publish into the Open Reviews dataset under the
   ORA Terms of Service; the submit endpoint description (OpenAPI) and the
   frontend form (informative task) must say so — Wodore relays a
   publication, it does not own the review. `nickname` is the only
@@ -482,13 +482,13 @@ link submit without the field.
 ### D10 — Settings, env, observability
 
 Settings component `server/settings/components/reviews.py` (Infisical-backed
-with safe defaults): `MANGROVE_API_BASE_URL`,
-`MANGROVE_ENABLED` (kill-switch: false → writes 503, reads serve empty
-collections), `MANGROVE_TIMEOUT_CONNECT/READ`, `MANGROVE_U_RADIUS` (30),
-`MANGROVE_CACHE_TTL_LIST/SUMMARY`, `MANGROVE_QUOTA_SUBMIT/EDIT`,
-`MANGROVE_CLIENT_ID`, `MANGROVE_IMAGE_HOST_ALLOWLIST`,
-`MANGROVE_THROTTLE_*` (read/batch burst+daily), and
-`MANGROVE_KEY_ENCRYPTION_KEY` — whose dev default is **hard-refused
+with safe defaults): `ORA_API_BASE_URL`,
+`ORA_ENABLED` (kill-switch: false → writes 503, reads serve empty
+collections), `ORA_TIMEOUT_CONNECT/READ`, `ORA_U_RADIUS` (30),
+`ORA_CACHE_TTL_LIST/SUMMARY`, `ORA_QUOTA_SUBMIT/EDIT`,
+`ORA_CLIENT_ID`, `ORA_IMAGE_HOST_ALLOWLIST`,
+`ORA_THROTTLE_*` (read/batch burst+daily), and
+`ORA_KEY_ENCRYPTION_KEY` — whose dev default is **hard-refused
 outside `DJANGO_ENV=development|test`** (mirroring `LOCAL_AUTH_ENABLED`).
 Sentry: spans around every upstream call, breadcrumbs on submit; PII rules
 apply (never log opinions or nicknames at info level). Local auth (dev)
@@ -521,7 +521,7 @@ Every envelope states the data license: **CC BY-SA 2.0 FR**.
   by their authors). Failures degrade to an empty provider list — the
   Mangrove listing never 503s because the secondary source is down.
   The signature blacklist hides provider comments too. Kill-switch:
-  `MANGROVE_REFUGES_INFO_ENABLED`.
+  `ORA_REFUGES_INFO_ENABLED`.
 - **Cache**: provider results cached per point id (15 min, like lists).
 
 **Future read sources (researched 2026-11-08, none in scope):**
@@ -608,7 +608,7 @@ these may be merged into our API responses.
 Purely additive: new app + tables (no changes to existing tables; PROTECT
 FKs only), new endpoints, env secrets. Rollout: deploy backend → seed
 nothing (subjects are computed from hut rows) → frontend later. Rollback:
-`MANGROVE_ENABLED=false` (writes 503, reads degrade to empty) or revert
+`ORA_ENABLED=false` (writes 503, reads degrade to empty) or revert
 the deploy — no data migration involved. Fixture recapture and erasure
 are ops-run commands, not deploy steps.
 

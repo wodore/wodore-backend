@@ -30,14 +30,14 @@ are decided but sequenced after the first release cut.
       `INSTALLED_APPS`, add the Unfold tab (models: ReviewerKey,
       ReviewerProfile, SubmittedReview, ReviewBlacklist)
 - [x] 1.2 Settings component `server/settings/components/reviews.py` +
-      include in the split-settings list: `MANGROVE_API_BASE_URL`,
-      `MANGROVE_ENABLED` kill-switch (false → writes 503
+      include in the split-settings list: `ORA_API_BASE_URL`,
+      `ORA_ENABLED` kill-switch (false → writes 503
       `service_unavailable`, reads serve empty collections),
-      `MANGROVE_TIMEOUT_CONNECT/READ`, `MANGROVE_U_RADIUS` (30),
-      `MANGROVE_CACHE_TTL_LIST/SUMMARY`, `MANGROVE_QUOTA_SUBMIT/EDIT`,
-      `MANGROVE_CLIENT_ID`, `MANGROVE_IMAGE_HOST_ALLOWLIST`
-      (default `["files.mangrove.reviews"]`), `MANGROVE_THROTTLE_*`
-      (read/batch burst+daily), `MANGROVE_KEY_ENCRYPTION_KEY` (dev default
+      `ORA_TIMEOUT_CONNECT/READ`, `ORA_U_RADIUS` (30),
+      `ORA_CACHE_TTL_LIST/SUMMARY`, `ORA_QUOTA_SUBMIT/EDIT`,
+      `ORA_CLIENT_ID`, `ORA_IMAGE_HOST_ALLOWLIST`
+      (default `["files.mangrove.reviews"]`), `ORA_THROTTLE_*`
+      (read/batch burst+daily), `ORA_KEY_ENCRYPTION_KEY` (dev default
       **hard-refused outside `DJANGO_ENV=development|test`**, mirroring
       `LOCAL_AUTH_ENABLED`)
 - [x] 1.3 Models + migration: `ReviewerKey` (1:1 User `on_delete=PROTECT`,
@@ -58,7 +58,7 @@ are decided but sequenced after the first release cut.
       `server/apps/api/error_codes.py` (`ErrorCode` + `PROBLEM_TITLES`);
       update the codes-completeness test
 
-## 2. MangroveClient: subject recipe + read calls
+## 2. Open ReviewsClient: subject recipe + read calls
 
 - [x] 2.1 `client.py`: `subject_for_hut(hut) -> str` pure function
       (`geo:{lat:.6f},{lon:.6f}?q={urlencode(slug)}&u={settings…}`,
@@ -67,7 +67,7 @@ are decided but sequenced after the first release cut.
       tests pin byte-stability, rename/translation invariance, and the
       normalized-uniqueness invariant (two huts within 2u whose slugs
       normalize equal → reported)
-- [x] 2.2 `MangroveClient` (httpx): base URL/timeout from settings;
+- [x] 2.2 `Open ReviewsClient` (httpx): base URL/timeout from settings;
       methods `list_reviews(sub)`, `review(signature)`,
       `issuer(pem)`, `submit(jwt)` (`POST /submit`, text/plain body);
       connect/read timeouts; GET-only bounded retries with backoff;
@@ -142,7 +142,7 @@ are decided but sequenced after the first release cut.
       existing HutSource linkage when present, nickname/language
       defaults), sign + relay, log row pending→accepted/failed, 201 with
       created review incl. derived signature, write-through
-      invalidation; OpenAPI description states Mangrove ToS/CC-BY-4.0
+      invalidation; OpenAPI description states Open Reviews ToS/CC-BY-4.0
       publication
 - [x] 5.2 `POST …/{signature}/edit` and `POST …/{signature}/delete`:
       target-belongs-to-hut check (sub/original_sub vs subject → 404),
@@ -195,7 +195,7 @@ are decided but sequenced after the first release cut.
       custody + rotation runbook, quota/blacklist pointers, kill-switch
       behavior); `docs/` note referencing the openspec change
 - [ ] 8.3 Infisical: register the new env vars (staging + prod), document
-      `MANGROVE_KEY_ENCRYPTION_KEY` rotation (MultiFernet
+      `ORA_KEY_ENCRYPTION_KEY` rotation (MultiFernet
       add-new-keep-old) in the runbook
 - [x] 8.4 Full suite green: `inv tests`, `inv check.types` (pyrefly
       strict — full annotations, no baseline), `inv lint`
@@ -214,8 +214,8 @@ are decided but sequenced after the first release cut.
       comments API client (dict-by-index/list, HTML-cleaned, UTC
       normalized), HutSource org `refuges` point-id linkage, per-review
       `source`/`license`/`link` fields on the merged listing, provider
-      failures degrade to Mangrove-only, blacklist covers provider ids,
-      `MANGROVE_REFUGES_INFO_ENABLED` kill-switch
+      failures degrade to Open Reviews-only, blacklist covers provider ids,
+      `ORA_REFUGES_INFO_ENABLED` kill-switch
 - [x] 8b.4 Replies: `POST …/{signature}/reply` (signed `urn:maresi`
       review, submit quota) + public `GET …/{signature}/replies`
       (per-signature cache, blacklist-filtered)
@@ -232,7 +232,7 @@ are decided but sequenced after the first release cut.
 
 ## 8c. Round 3 — image gallery provider + reply images (2026-11-08)
 
-- [x] 8c.1 `MangroveProvider` (`server/apps/reviews/images.py`): review
+- [x] 8c.1 `Open ReviewsProvider` (`server/apps/reviews/images.py`): review
       photos into the standard image pipeline (imagor variants, CC-BY-4.0
       license rows, reviewer attribution, provider fallback entry,
       24 h cache, geo-match + blacklist filters, kill-switched,
@@ -261,7 +261,7 @@ are decided but sequenced after the first release cut.
 - [x] 8d.4 `q` encoding verified live: plus-spaces required at submit,
       %20 refused, matching normalizes both, accents percent-encoded
       and not folded — byte-level tests pin the encoder (Opus B4)
-- [x] 8d.5 Tests isolated from the live upstream (autouse Mangrove
+- [x] 8d.5 Tests isolated from the live upstream (autouse Open Reviews
       stub; Opus B5)
 - [x] 8d.6 refuges.info back-pressure: 2.5 s provider timeout,
       60 s negative cache, shared alias, batch = cached-only provider
@@ -277,17 +277,17 @@ are decided but sequenced after the first release cut.
 
 ## 8e. Round 5 — photo upload relay + provider cache invalidation (2026-11-08)
 
-- [x] 8e.1 `MangroveClient.upload_photos()`: PUT multipart to
+- [x] 8e.1 `Open ReviewsClient.upload_photos()`: PUT multipart to
       `upload.mangrove.reviews` (verified live 200), returns
       base64url SHA-256 hashes; `photo_url(hash)` builds the public
       `files.mangrove.reviews/<hash>` URL
 - [x] 8e.2 `POST /v1/reviews/images` endpoint (authenticated,
       throttled): relays multipart files, validates count (≤5), total
       size (≤4.5 MB), types (JPEG/PNG/GIF/WebP); Wodore stores
-      NOTHING — pure relay to the Mangrove file server
+      NOTHING — pure relay to the Open Reviews file server
 - [x] 8e.3 Provider cache invalidation after submit with images:
       `invalidate_image_provider_cache(hut)` clears the
-      MangroveProvider's `(lat, lon, radius)` entries (24 h TTL
+      Open ReviewsProvider's `(lat, lon, radius)` entries (24 h TTL
       otherwise delays new photos in the gallery)
 - [x] 8e.4 FakeClient gains `upload_photos()` for testing; 4 new
       tests (relay, auth gate, validation service, cache
@@ -322,7 +322,7 @@ Any of these belongs to a frontend proposal of its own.
 
 - [ ] 11.1 Hut page (`/hut/:slug`): review list section (rating stars,
   opinion, nickname, date, images) + submit/edit/delete/report UI bound
-  to the new endpoints; CC-BY-4.0 attribution + Mangrove ToS notice in
+  to the new endpoints; CC-BY-4.0 attribution + Open Reviews ToS notice in
   the submit flow
 - [ ] 11.2 Star ↔ rating mapping UX: 5 stars ↔ 0/25/50/75/100
   (likelihood-to-recommend semantics in the tooltip copy); API stays

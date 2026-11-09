@@ -48,7 +48,7 @@ class TestMangroveProvider:
         results = images_module._review_image_results(hut.slug, 10)
         assert len(results) == 1
         result = results[0]
-        assert result.provider == "mangrove"
+        assert result.provider == "open_reviews"
         assert result.source_id == "img-r1:0"
         assert result.url_large == "https://files.mangrove.reviews/a.jpg"
         assert result.license_slug == "cc-by-4.0"
@@ -97,7 +97,7 @@ class TestMangroveProvider:
 
         from server.apps.reviews.images import MangroveProvider
 
-        with override_settings(MANGROVE_ENABLED=False):
+        with override_settings(ORA_ENABLED=False):
             results = asyncio.run(
                 MangroveProvider().fetch(
                     [_Place(hut.slug)], lat=46.5, lon=8.0, radius=300, limit=10

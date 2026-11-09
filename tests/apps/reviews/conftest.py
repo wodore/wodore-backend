@@ -172,8 +172,8 @@ def fake_refuges(_stub_refuges_provider: FakeRefugesClient) -> FakeRefugesClient
 
 @pytest.fixture(autouse=True)
 def _enable_writes(settings: Any):
-    """Enable writes for review tests (MANGROVE_WRITES_ENABLED defaults False)."""
-    settings.MANGROVE_WRITES_ENABLED = True
+    """Enable writes for review tests (ORA_WRITES_ENABLED defaults False)."""
+    settings.ORA_WRITES_ENABLED = True
 
 
 @pytest.fixture(autouse=True)

@@ -1,10 +1,10 @@
 ## ADDED Requirements
 
 ### Requirement: One reviewer keypair per account
-Each user account SHALL hold at most one Mangrove reviewer keypair (ES256
+Each user account SHALL hold at most one Open Reviews reviewer keypair (ES256
 P-256), minted lazily on the account's first review write action. The
 private key SHALL be stored encrypted at rest under a dedicated key
-(`MANGROVE_KEY_ENCRYPTION_KEY`, independent of the Django secret; its
+(`ORA_KEY_ENCRYPTION_KEY`, independent of the Django secret; its
 insecure default SHALL be refused outside development/test environments)
 and SHALL NOT be served by any endpoint of this change. The public key
 (`kid` PEM, whitespace-normalized single-line form) SHALL be stored for
@@ -44,7 +44,7 @@ string with `key_ops: ["verify"]`) and claims.
 #### Scenario: Standard-compliant JWT
 
 - **WHEN** a signed review JWT is decoded
-- **THEN** it verifies against its embedded `kid`/`jwk` and satisfies the Mangrove Review Standard claims rules
+- **THEN** it verifies against its embedded `kid`/`jwk` and satisfies the Open Reviews Review Standard claims rules
 
 ### Requirement: Ownership enforcement before signing
 Edit and delete actions SHALL be signed only after the backend verifies

@@ -6,7 +6,7 @@ nested `Meta` classes follow the repo-wide TimeStampedModel idiom.)
 
 * One ES256 keypair per user account, minted lazily on first write. The
   private JWK is stored Fernet-encrypted under
-  ``settings.MANGROVE_KEY_ENCRYPTION_KEYS`` (MultiFermint-style
+  ``settings.ORA_KEY_ENCRYPTION_KEYS`` (MultiFermint-style
   add-new-keep-old rotation). ``kid`` is the whitespace-normalized
   single-line PEM the Mangrove standard compares by.
 * All user foreign keys are ``PROTECT`` — deleting an account that owns
@@ -42,7 +42,7 @@ def _fernet_keys() -> list[Fernet]:
     import hashlib
 
     ferns: list[Fernet] = []
-    for secret in settings.MANGROVE_KEY_ENCRYPTION_KEYS:
+    for secret in settings.ORA_KEY_ENCRYPTION_KEYS:
         digest = hashlib.sha256(secret.encode()).digest()
         key = base64.urlsafe_b64encode(digest)
         ferns.append(Fernet(key))

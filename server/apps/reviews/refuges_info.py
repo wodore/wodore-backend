@@ -88,7 +88,7 @@ class RefugesInfoClient:
     """Sync httpx client for the commentaires endpoint (the only one)."""
 
     def __init__(self, base_url: str | None = None) -> None:
-        self._base_url = base_url or settings.MANGROVE_REFUGES_INFO_API_BASE
+        self._base_url = base_url or settings.ORA_REFUGES_INFO_API_BASE
 
     def list_comments(self, point_id: str) -> list[RefugeComment]:
         """The point's comments, oldest→newest; ``[]`` on any failure."""
@@ -112,8 +112,8 @@ class RefugesInfoClient:
                 f"{self._base_url}/api/commentaires",
                 params={"id_point": point_id, "format": "json"},
                 timeout=httpx.Timeout(
-                    settings.MANGROVE_TIMEOUT_READ,
-                    connect=settings.MANGROVE_TIMEOUT_CONNECT,
+                    settings.ORA_TIMEOUT_READ,
+                    connect=settings.ORA_TIMEOUT_CONNECT,
                 ),
                 headers={"User-Agent": "wodore-backend (reviews integration)"},
             )
@@ -132,7 +132,7 @@ class RefugesInfoClient:
         _cache.set(
             key,
             [(c.signature, c.author, c.created.isoformat(), c.text) for c in comments],
-            settings.MANGROVE_CACHE_TTL_LIST,
+            settings.ORA_CACHE_TTL_LIST,
         )
         logger.info(
             "refuges_info_request",
@@ -201,7 +201,7 @@ def comments_for_hut(hut: "t.Any", cached_only: bool = False) -> list[RefugeComm
     ``cached_only`` skips a cold fetch (map-badge batches — no provider
     fan-out on the hot path, Opus review B6).
     """
-    if not settings.MANGROVE_REFUGES_INFO_ENABLED:
+    if not settings.ORA_REFUGES_INFO_ENABLED:
         return []
     point_id = point_id_for_hut(hut)
     if point_id is None:
@@ -213,4 +213,4 @@ def comments_for_hut(hut: "t.Any", cached_only: bool = False) -> list[RefugeComm
 
 def point_url(point_id: str) -> str:
     """Attribution link to the refuge's page (per-review ``link``)."""
-    return f"{settings.MANGROVE_REFUGES_INFO_API_BASE}/point/{point_id}"
+    return f"{settings.ORA_REFUGES_INFO_API_BASE}/point/{point_id}"

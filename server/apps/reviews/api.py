@@ -53,20 +53,20 @@ BATCH_MAX_SLUGS = 50
 #: Anonymous read throttle: burst per minute + daily volume brake
 #: (upstream-amplification guard, design D10).
 _REVIEWS_BURST_THROTTLE = SyncThrottle(
-    settings.MANGROVE_THROTTLE_READ_BURST_PER_MIN,
+    settings.ORA_THROTTLE_READ_BURST_PER_MIN,
     Rate.minute,
     cache_key=ClientIp(),
     backend=throttle_backend(),
 )
 _REVIEWS_DAILY_THROTTLE = SyncThrottle(
-    settings.MANGROVE_THROTTLE_READ_DAILY,
+    settings.ORA_THROTTLE_READ_DAILY,
     Rate.day,
     cache_key=ClientIp(),
     backend=throttle_backend(),
 )
 #: Batch summary + abuse reports: tighter burst.
 _REVIEWS_BATCH_THROTTLE = SyncThrottle(
-    settings.MANGROVE_THROTTLE_BATCH_PER_MIN,
+    settings.ORA_THROTTLE_BATCH_PER_MIN,
     Rate.minute,
     cache_key=ClientIp(),
     backend=throttle_backend(),
@@ -110,7 +110,7 @@ class ReviewsListController(ApiController):
 
     @modify(
         operation_id="get_hut_reviews",
-        headers=cache_headers(settings.MANGROVE_PUBLIC_MAX_AGE),
+        headers=cache_headers(settings.ORA_PUBLIC_MAX_AGE),
         throttling=[_REVIEWS_BURST_THROTTLE, _REVIEWS_DAILY_THROTTLE],
         extra_responses=[_UPSTREAM_503],
     )
@@ -133,7 +133,7 @@ class HutReviewSummaryController(ApiController):
 
     @modify(
         operation_id="get_hut_reviews_summary",
-        headers=cache_headers(settings.MANGROVE_PUBLIC_MAX_AGE),
+        headers=cache_headers(settings.ORA_PUBLIC_MAX_AGE),
         throttling=[_REVIEWS_BURST_THROTTLE, _REVIEWS_DAILY_THROTTLE],
         extra_responses=[_UPSTREAM_503],
     )
@@ -154,7 +154,7 @@ class ReviewsBatchSummaryController(ApiController):
 
     @modify(
         operation_id="get_reviews_summary_batch",
-        headers=cache_headers(settings.MANGROVE_PUBLIC_MAX_AGE),
+        headers=cache_headers(settings.ORA_PUBLIC_MAX_AGE),
         throttling=[_REVIEWS_BATCH_THROTTLE, _REVIEWS_DAILY_THROTTLE],
         extra_responses=[_UPSTREAM_503],
     )
@@ -343,7 +343,7 @@ class ReviewRepliesController(ApiController):
 
     @modify(
         operation_id="get_hut_review_replies",
-        headers=cache_headers(settings.MANGROVE_PUBLIC_MAX_AGE),
+        headers=cache_headers(settings.ORA_PUBLIC_MAX_AGE),
         throttling=[_REVIEWS_BURST_THROTTLE, _REVIEWS_DAILY_THROTTLE],
         extra_responses=[_UPSTREAM_503],
     )

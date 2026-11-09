@@ -53,7 +53,7 @@ class TestQuota:
 
         user = _user()
         subject = subject_for_hut(hut)
-        with override_settings(MANGROVE_QUOTA_SUBMIT=2):
+        with override_settings(ORA_QUOTA_SUBMIT=2):
             for _ in range(2):
                 log_row(user, hut.slug, subject, f"sig-{_}")
             with pytest.raises(APIError) as excinfo:
@@ -76,7 +76,7 @@ class TestQuota:
         with pytest.raises(Exception):  # noqa: B017 - exact type below
             from django.test import override_settings
 
-            with override_settings(MANGROVE_QUOTA_SUBMIT=1):
+            with override_settings(ORA_QUOTA_SUBMIT=1):
                 log_row(user, hut.slug, subject, "s-ok")
                 services.enforce_quota(user, "submit")
 
@@ -154,7 +154,7 @@ class TestReads:
     def test_reads_disabled_serve_empty(self, hut: Any) -> None:
         from django.test import override_settings
 
-        with override_settings(MANGROVE_ENABLED=False):
+        with override_settings(ORA_ENABLED=False):
             assert services.list_reviews(hut, 20, 0).count == 0
 
 

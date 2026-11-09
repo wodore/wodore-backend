@@ -126,7 +126,7 @@ class TestClientResilience:
             MangroveClient(base_url=BASE).list_reviews("geo:0,0?q=T&u=10")
 
     @respx.mock
-    @override_settings(MANGROVE_GET_RETRIES=2)
+    @override_settings(ORA_GET_RETRIES=2)
     def test_submit_never_retries(self) -> None:
         route = respx.post(f"{BASE}/submit").mock(side_effect=httpx.ConnectError("x"))
         with pytest.raises(UpstreamUnavailable):

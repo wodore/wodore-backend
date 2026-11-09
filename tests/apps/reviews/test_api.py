@@ -121,7 +121,7 @@ class TestReadEndpoints:
     def test_reads_disabled_serve_empty(self, hut: Any) -> None:
         from django.test import override_settings
 
-        with override_settings(MANGROVE_ENABLED=False):
+        with override_settings(ORA_ENABLED=False):
             response = Client().get(f"/v1/huts/{hut.slug}/reviews")
             assert response.status_code == 200
             assert response.json()["count"] == 0
@@ -205,7 +205,7 @@ class TestWriteEndpoints:
         from django.test import override_settings
 
         client, user = _logged_in_client()
-        with override_settings(MANGROVE_QUOTA_SUBMIT=1):
+        with override_settings(ORA_QUOTA_SUBMIT=1):
             first = client.post(
                 f"/v1/huts/{hut.slug}/reviews/submit",
                 {"rating": 10},
@@ -294,7 +294,7 @@ class TestWriteEndpoints:
         from django.test import override_settings
 
         client, _user = _logged_in_client()
-        with override_settings(MANGROVE_ENABLED=False):
+        with override_settings(ORA_ENABLED=False):
             response = client.post(
                 f"/v1/huts/{hut.slug}/reviews/submit",
                 {"rating": 10},

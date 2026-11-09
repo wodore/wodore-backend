@@ -14,7 +14,7 @@ use.
 
 ## What Changes
 
-- **New Django app `server/apps/reviews`** that proxies the Mangrove API
+- **New Django app `server/apps/reviews`** that proxies the Open Reviews API
   (0.4.1) for reading *and* writing — anonymous visitors read, Wodore accounts
   write. No review content is owned solely by Wodore: the upstream dataset is
   the source of truth, Wodore relays, caches, filters and moderates.
@@ -51,7 +51,7 @@ use.
   re-published into Mangrove. Provider failures degrade to Mangrove-only;
   refuges back-pressure (2.5 s timeout, 60 s negative cache, batch uses
   cached-only data).
-- **MangroveProvider (image gallery)**: hut review photos served through
+- **OpenReviewsProvider (image gallery)**: hut review photos served through
   the standard image-provider pipeline (imagor variants, CC-BY-4.0
   license rows, reviewer-nickname attribution). After a submit with
   images, the provider cache for the hut's coordinates is invalidated
@@ -74,8 +74,8 @@ use.
   edit-row shape, `q` encoding and photo upload verified live.
 - **Image strictness**: `images[].src` checked for parser-confusion
   bypasses (`\@`, ports, control chars) before the allowlist check.
-- **Kill-switch matrix**: `MANGROVE_ENABLED` gates Mangrove reads+writes;
-  `MANGROVE_REFUGES_INFO_ENABLED` independently gates the provider
+- **Kill-switch matrix**: `ORA_ENABLED` gates Mangrove reads+writes;
+  `ORA_REFUGES_INFO_ENABLED` independently gates the provider
   (both off = full read-dark; enabled-but-keyless in production fails
   startup). Settings default: on in dev/test, off in production.
 - **Frontend work is explicitly out of scope** (informative tasks listed
@@ -110,12 +110,12 @@ separate endpoints.)
 
 - **Code**: new app `server/apps/reviews` (models: reviewer key, reviewer
   profile, hut review subject, submission log, merge request, blacklist;
-  dmr controllers incl. photo upload; `MangroveClient` with photo upload;
-  `RefugesInfoClient` read-only provider; `MangroveProvider` image gallery
-  provider; erasure management command), a settings component (`MANGROVE_*`
+  dmr controllers incl. photo upload; `OpenReviewsClient` with photo upload;
+  `RefugesInfoClient` read-only provider; `OpenReviewsProvider` image gallery
+  provider; erasure management command), a settings component (`ORA_*`
   env via Infisical: base URL, timeout, key-encryption key, quota defaults,
   image-host allowlist, refuges back-pressure, kill-switches), Unfold
-  admin + tab, router wiring in `api_v1.py`, `MangroveProvider` registered
+  admin + tab, router wiring in `api_v1.py`, `OpenReviewsProvider` registered
   in `geometries/providers/__init__.py`.
 - **API**: new `/v1/` endpoints (additive — no version bump, no committed
   snapshot), one new registered error code (`review_quota_exceeded`); all

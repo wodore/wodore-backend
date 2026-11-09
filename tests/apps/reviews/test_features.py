@@ -63,7 +63,7 @@ class TestProviderMerge:
         assert refuge.opinion == "Belle cabane, gardien sympa"
         assert refuge.rating is None
         # Mangrove item carries its own license and no link.
-        assert by_signature["mg-1"].source == "mangrove"
+        assert by_signature["mg-1"].source == "open_reviews"
         assert by_signature["mg-1"].license == "CC-BY-4.0"
         # HTML-free text passes through verbatim.
         assert (
@@ -109,7 +109,7 @@ class TestProviderMerge:
         from django.test import override_settings
 
         fake_refuges.comments = [_comment("9005", "z", 1, "hidden")]
-        with override_settings(MANGROVE_REFUGES_INFO_ENABLED=False):
+        with override_settings(ORA_REFUGES_INFO_ENABLED=False):
             envelope = services.list_reviews(hut, limit=20, offset=0)
         assert envelope.count == 0
         assert fake_refuges.calls == []  # never consulted

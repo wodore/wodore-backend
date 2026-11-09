@@ -357,7 +357,7 @@ the **lane** database (the main checkout's `app` targets dev).
 
 ### Reviews (Mangrove integration)
 
-Open decentralized hut reviews via [Mangrove Reviews](https://docs.mangrove.reviews)
+Open decentralized hut reviews via [Open Reviews (ORA)](https://docs.mangrove.reviews)
 (openspec: `reviews-mangrove`; app `server.apps/reviews`). Every hut's
 subject is `geo:{lat:.6f},{lon:.6f}?q={review-name}&u=30` — the
 review name (OSM name → hut name fallback, PINNED on the hut's first
@@ -366,17 +366,17 @@ review). All upstream traffic goes through `MangroveClient`
 API 0.4.1, contract-pinned via `fixtures/mangrove/`). Anonymous reads
 are proxied/cached/filterred (blacklist + geo-match); writes require
 auth, are signed with per-account **server-held ES256 keypairs**
-(`ReviewerKey`, Fernet-encrypted under `MANGROVE_KEY_ENCRYPTION_KEY`,
+(`ReviewerKey`, Fernet-encrypted under `ORA_KEY_ENCRYPTION_KEY`,
 PROTECT FKs) and logged append-only (`SubmittedReview`, state
 pending→accepted/failed).
 
-- **Settings** (`components/reviews.py`): `MANGROVE_*` env vars.
-  `MANGROVE_ENABLED` defaults **on in dev/test, off in production**
+- **Settings** (`components/reviews.py`): `ORA_*` env vars.
+  `ORA_ENABLED` defaults **on in dev/test, off in production**
   (rollout flips it together with the key secret). Enabled-but-keyless
   in production fails startup (`ImproperlyConfigured`).
 - **Key-secret rotation**: add-new-keep-old — set
-  `MANGROVE_KEY_ENCRYPTION_KEY` to the new secret and move the old one
-  into `MANGROVE_KEY_ENCRYPTION_KEYS_OLD` (comma-separated); keys derive
+  `ORA_KEY_ENCRYPTION_KEY` to the new secret and move the old one
+  into `ORA_KEY_ENCRYPTION_KEYS_OLD` (comma-separated); keys derive
   via SHA-256 → Fernet/MultiFernet. Losing all secrets = users lose
   edit/delete of past reviews (upstream dataset unaffected).
 - **Erasure**: `app reviews_erase_user <email>` (`--export` first) —

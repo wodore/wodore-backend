@@ -235,10 +235,10 @@ class MangroveClient:
         base_url: str | None = None,
         timeout: httpx.Timeout | None = None,
     ) -> None:
-        self._base_url = base_url or settings.MANGROVE_API_BASE_URL
+        self._base_url = base_url or settings.ORA_API_BASE_URL
         self._timeout = timeout or httpx.Timeout(
-            settings.MANGROVE_TIMEOUT_READ,
-            connect=settings.MANGROVE_TIMEOUT_CONNECT,
+            settings.ORA_TIMEOUT_READ,
+            connect=settings.ORA_TIMEOUT_CONNECT,
         )
 
     # ── plumbing ─────────────────────────────────────────────────────
@@ -259,7 +259,7 @@ class MangroveClient:
             UpstreamRejected: upstream 4xx with its reason.
         """
         retriable = method == "GET"
-        attempts = 1 + (settings.MANGROVE_GET_RETRIES if retriable else 0)
+        attempts = 1 + (settings.ORA_GET_RETRIES if retriable else 0)
         last_error: Exception | None = None
         with httpx.Client(base_url=self._base_url, timeout=self._timeout) as client:
             for attempt in range(attempts):
@@ -446,4 +446,4 @@ class _NullSpan:
 
 def urljoin_base() -> str:
     """The configured upstream base (for logs/admin)."""
-    return urlparse(settings.MANGROVE_API_BASE_URL).geturl()
+    return urlparse(settings.ORA_API_BASE_URL).geturl()
