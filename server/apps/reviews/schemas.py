@@ -217,6 +217,35 @@ class ReportOut(pydantic.BaseModel):
     status: str = Field(description="Report relay status")
 
 
+class IdentityExportOut(pydantic.BaseModel):
+    """The user's private JWK — the identity they can import elsewhere."""
+
+    jwk: str = Field(
+        description="Private EC P-256 JWK as a JSON string (compatible with "
+        "MapComplete and mangrove.reviews import/export). Handle with care "
+        "— this is the user's private review identity."
+    )
+    kid: str = Field(
+        description="The public key (PEM) — the reviewer's identity on the dataset"
+    )
+    nickname: str | None = Field(
+        None, description="The reviewer profile nickname associated with this key"
+    )
+
+
+class IdentityImportIn(pydantic.BaseModel):
+    """Import an existing JWK to replace the caller's review identity."""
+
+    model_config = pydantic.ConfigDict(extra="forbid")
+
+    jwk: str = Field(
+        min_length=50,
+        max_length=2000,
+        description="Private EC P-256 JWK as a JSON string "
+        "(from MapComplete, mangrove.reviews, or a previous export)",
+    )
+
+
 class MergeRequestOut(pydantic.BaseModel):
     id: int = Field(description="Merge request id")
     state: str = Field(description="Review state (new/done/rejected)")

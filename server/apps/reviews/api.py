@@ -32,6 +32,8 @@ from . import services
 from .schemas import (
     BatchSummaryEnvelope,
     BatchSummaryQuery,
+    IdentityExportOut,
+    IdentityImportIn,
     MergeRequestOut,
     MyReviewOut,
     PhotoUploadResponse,
@@ -431,6 +433,45 @@ class ReviewPhotoUploadController(ReviewsWriteController):
         return PhotoUploadResponse(images=[PhotoUploadOut(src=url) for url in urls])
 
 
+class ReviewIdentityExportController(ReviewsWriteController):
+    """Export the caller's review identity (private JWK)."""
+
+    @modify(operation_id="export_review_identity")
+    def get(self) -> IdentityExportOut:
+        """Export my review identity as a JWK.
+
+        Returns the private EC P-256 JWK string (compatible with
+        MapComplete and mangrove.reviews import/export). This is the
+        user's private review identity — handle with care. Only
+        available after the first review submission.
+        """
+        data = services.export_identity(self.caller)
+        return IdentityExportOut(**data)
+
+
+class ReviewIdentityImportController(ReviewsWriteController):
+    """Import a review identity (JWK) to replace the caller's key."""
+
+    @modify(operation_id="import_review_identity", status_code=HTTPStatus.OK)
+    def post(
+        self,
+        parsed_body: Body[IdentityImportIn],
+    ) -> IdentityExportOut:
+        """Import a review identity (JWK).
+
+        Replaces the caller's current review key with the imported one.
+        Reviews signed with the imported key become editable/deletable
+        from Wodore. Reviews signed with a previous key become
+        unmanageable (re-import the old JWK to manage them).
+        """
+        result = services.import_identity(self.caller, parsed_body.jwk)
+        return IdentityExportOut(
+            jwk=parsed_body.jwk,
+            kid=result["kid"],
+            nickname=result.get("nickname"),
+        )
+
+
 #: Top-level routes — mounted under ``reviews/`` by ``api_v1.py``.
 paths = [
     path(
@@ -497,4 +538,14 @@ hut_paths = [
 #: User-scoped route — mounted under ``my/`` by ``api_v1.py``.
 my_paths = [
     path("reviews", MyReviewsController.as_view(), name="get_my_reviews"),
+    path(
+        "reviews/identity",
+        ReviewIdentityExportController.as_view(),
+        name="export_review_identity",
+    ),
+    path(
+        "reviews/identity/import",
+        ReviewIdentityImportController.as_view(),
+        name="import_review_identity",
+    ),
 ]

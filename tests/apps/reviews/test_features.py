@@ -1,6 +1,7 @@
 """New-capability tests: provider merge, replies, merge requests."""
 
 import datetime
+import json
 import typing as t
 from typing import Any
 
@@ -256,10 +257,122 @@ class TestMergeRequest:
 
 def _payload(jwt: str) -> dict[str, t.Any]:
     import base64
-    import json
 
     part = jwt.split(".")[1]
     return t.cast(
         dict[str, t.Any],
         json.loads(base64.urlsafe_b64decode(part + "=" * ((4 - len(part) % 4) % 4))),
     )
+
+
+class TestIdentityImportExport:
+    """Phase 2: JWK export/import — bring your MapComplete identity."""
+
+    @pytest.mark.usefixtures("use_fake_client")
+    def test_export_after_first_review(self, hut: Any) -> None:
+        client, user = _logged_in_client()
+        # Submit a review first (mints the key).
+        client.post(
+            f"/v1/huts/{hut.slug}/reviews/submit",
+            {"rating": 50},
+            content_type="application/json",
+        )
+        # Export.
+        response = client.get("/v1/my/reviews/identity")
+        assert response.status_code == 200, response.content
+        body = response.json()
+        assert body["jwk"]  # non-empty JWK string
+        assert body["kid"].startswith("-----BEGIN PUBLIC KEY-----")
+        assert body["nickname"]  # minted nickname
+
+    def test_export_without_key_404(self) -> None:
+        _user = User.objects.create_user(  # type: ignore  # custom manager/queryset inference gap
+            email="nokey@example.com", password="x"
+        )
+        client = Client(SERVER_NAME="localhost")
+        client.force_login(_user)
+        response = client.get("/v1/my/reviews/identity")
+        assert response.status_code in (404, 422)  # 404 if no key, 422 if dmr wraps
+
+    def test_export_requires_auth(self) -> None:
+        response = Client().get("/v1/my/reviews/identity")
+        assert response.status_code == 401
+
+    @pytest.mark.usefixtures("use_fake_client")
+    def test_import_replaces_identity(self, hut: Any) -> None:
+        import json as _json
+
+        from server.apps.reviews import signing as _signing
+
+        _user = User.objects.create_user(  # type: ignore  # custom manager/queryset inference gap
+            email="import-test@example.com", password="x"
+        )
+        client = Client(SERVER_NAME="localhost")
+        client.force_login(_user)
+        # Submit a review first (mints the original key).
+        client.post(
+            f"/v1/huts/{hut.slug}/reviews/submit",
+            {"rating": 50},
+            content_type="application/json",
+        )
+        # Export the original.
+        original = client.get("/v1/my/reviews/identity").json()
+        # Mint a second keypair (simulates a MapComplete key).
+        _kid2, jwk2 = _signing.mint_keypair()
+        jwk2_str = _json.dumps(jwk2, separators=(",", ":"))
+        # Import it.
+        response = client.post(
+            "/v1/my/reviews/identity/import",
+            {"jwk": jwk2_str},
+            content_type="application/json",
+        )
+        assert response.status_code == 200, response.content
+        body = response.json()
+        assert body["kid"] == _kid2  # new identity
+        assert body["kid"] != original["kid"]  # different from original
+        # Re-export — should return the imported key.
+        re_export = client.get("/v1/my/reviews/identity").json()
+        assert _json.loads(re_export["jwk"])["d"] == jwk2["d"]
+
+    def test_import_rejects_invalid_jwk(self) -> None:
+        client, _user = _logged_in_client()
+        for bad in [
+            "{}",  # not an object with required fields
+            '{"kty":"RSA","d":"x"}',  # wrong key type
+            "not-json",
+        ]:
+            response = client.post(
+                "/v1/my/reviews/identity/import",
+                {"jwk": bad},
+                content_type="application/json",
+            )
+            assert response.status_code == 400, bad
+
+    @pytest.mark.usefixtures("use_fake_client")
+    def test_round_trip_export_import(self, hut: Any) -> None:
+        """Export from one account → import into another → same kid."""
+
+        _user_a = User.objects.create_user(  # type: ignore  # custom manager/queryset inference gap
+            email="roundtrip-a@example.com", password="x"
+        )
+        client_a = Client(SERVER_NAME="localhost")
+        client_a.force_login(_user_a)
+        client_a.post(
+            f"/v1/huts/{hut.slug}/reviews/submit",
+            {"rating": 75},
+            content_type="application/json",
+        )
+        exported = client_a.get("/v1/my/reviews/identity").json()
+
+        _user_b = User.objects.create_user(  # type: ignore  # custom manager/queryset inference gap
+            email="roundtrip-b@example.com", password="x"
+        )
+        client_b = Client(SERVER_NAME="localhost")
+        client_b.force_login(_user_b)
+        response = client_b.post(
+            "/v1/my/reviews/identity/import",
+            {"jwk": exported["jwk"]},
+            content_type="application/json",
+        )
+        assert response.status_code == 200, response.content
+        assert response.json()["kid"] == exported["kid"]

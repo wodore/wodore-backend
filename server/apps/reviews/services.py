@@ -1430,6 +1430,126 @@ def invalidate_image_provider_cache(hut: Hut) -> None:
     image_response_cache.invalidate_for_hut(hut.slug)
 
 
+def export_identity(user: t.Any) -> dict[str, t.Any]:
+    """Export the user's private JWK for use in other Open Reviews clients.
+
+    The JWK is the user's review identity — they can import it into
+    MapComplete, mangrove.reviews, or any compatible app to continue
+    reviewing with the same identity and credibility.
+
+    Raises:
+        APIError (404): the user has no reviewer key (never written).
+    """
+    key = ReviewerKey.objects.filter(user=user).first()
+    if key is None:
+        raise_not_found("No reviewer identity found — submit a review first.")
+    profile = ReviewerProfile.objects.filter(user=user).first()
+    return {
+        "jwk": json.dumps(key.private_jwk, separators=(",", ":")),
+        "kid": key.kid,
+        "nickname": profile.nickname if profile else None,
+    }
+
+
+def import_identity(user: t.Any, jwk_string: str) -> dict[str, t.Any]:
+    """Import a JWK to replace the caller's review identity.
+
+    The imported key becomes the user's active identity: they can now
+    edit/delete reviews signed with it (e.g., their MapComplete reviews).
+    Reviews signed with a PREVIOUS key become unmanageable from Wodore
+    (re-import the old key to manage them).
+
+    Raises:
+        APIError (400): invalid JWK (not EC P-256, missing fields).
+    """
+    try:
+        jwk = json.loads(jwk_string)
+        if not isinstance(jwk, dict):
+            raise ValueError("not a JSON object")
+    except (ValueError, TypeError) as exc:
+        raise APIError(
+            {
+                "code": ErrorCode.validation_error,
+                "detail": f"Invalid JWK format: {exc}",
+            },
+            status_code=HTTPStatus.BAD_REQUEST,
+        ) from exc
+
+    # Validate it's a usable EC P-256 private key.
+    required = {"kty", "crv", "x", "y", "d"}
+    if not required.issubset(jwk):
+        missing = required - set(jwk)
+        raise APIError(
+            {
+                "code": ErrorCode.validation_error,
+                "detail": f"JWK missing required fields: {', '.join(sorted(missing))}",
+            },
+            status_code=HTTPStatus.BAD_REQUEST,
+        )
+    if jwk.get("kty") != "EC" or jwk.get("crv") != "P-256":
+        raise APIError(
+            {
+                "code": ErrorCode.validation_error,
+                "detail": "JWK must be an EC P-256 key (kty='EC', crv='P-256').",
+            },
+            status_code=HTTPStatus.BAD_REQUEST,
+        )
+
+    # Derive the kid (PEM public key) from the JWK.
+    from cryptography.hazmat.primitives.asymmetric import ec as _ec
+
+    from .signing import mint_keypair  # noqa: F401  (validate via construction)
+
+    try:
+        d_bytes = base64.urlsafe_b64decode(
+            str(jwk["d"]) + "=" * (4 - len(str(jwk["d"])) % 4)
+        )
+        d = int.from_bytes(d_bytes, "big")
+        private_key = _ec.derive_private_key(d, _ec.SECP256R1())
+        pem = (
+            private_key.public_key()
+            .public_bytes(
+                __import__(
+                    "cryptography.hazmat.primitives.serialization",
+                    fromlist=["Encoding", "PublicFormat"],
+                ).Encoding.PEM,
+                __import__(
+                    "cryptography.hazmat.primitives.serialization",
+                    fromlist=["Encoding", "PublicFormat"],
+                ).PublicFormat.SubjectPublicKeyInfo,
+            )
+            .decode()
+        )
+        kid = "".join(pem.splitlines())
+    except (ValueError, TypeError) as exc:
+        raise APIError(
+            {
+                "code": ErrorCode.validation_error,
+                "detail": f"JWK is not a valid EC P-256 private key: {exc}",
+            },
+            status_code=HTTPStatus.BAD_REQUEST,
+        ) from exc
+
+    # Replace the key (old key's reviews become unmanageable — the user
+    # would need to re-import the old JWK to manage them).
+    # A kid (public key) is globally unique — one key = one identity.
+    # If another user holds this key, transfer it (they exported it and
+    # are importing it here — the old binding is intentionally released).
+    ReviewerKey.objects.filter(kid=kid).exclude(user=user).delete()
+    ReviewerKey.objects.update_or_create(
+        user=user,
+        defaults={
+            "kid": kid,
+            "private_jwk_encrypted": _encrypt(json.dumps(jwk, separators=(",", ":"))),
+        },
+    )
+    profile = ReviewerProfile.objects.filter(user=user).first()
+    return {
+        "kid": kid,
+        "nickname": profile.nickname if profile else None,
+    }
+
+
 def _not_owner() -> APIError:
     return APIError(
         {
