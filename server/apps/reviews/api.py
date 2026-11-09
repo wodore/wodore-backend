@@ -240,8 +240,10 @@ class ReviewSubmitController(ReviewsWriteController):
         Association terms: https://mangrove.reviews/terms). Rating is
         the likelihood to recommend (0–100)."""
         hut = services.resolve_hut(parsed_path.slug)
+        from django.utils import translation
+
         return services.submit_review(
-            self.caller, hut, parsed_body, settings.LANGUAGE_CODE
+            self.caller, hut, parsed_body, translation.get_language() or "de"
         )
 
 
@@ -421,20 +423,10 @@ class ReviewPhotoUploadController(ReviewsWriteController):
         from .schemas import PhotoUploadOut
 
         files: list[tuple[str, bytes, str]] = []
-        for field_name, uploaded in self.request.FILES.items():
-            if not field_name.startswith("files"):
-                continue
-            raw_items: list[Any] = (
-                uploaded if isinstance(uploaded, list) else [uploaded]
+        for uploaded in self.request.FILES.getlist("files"):
+            files.append(
+                (uploaded.name or "photo", uploaded.read(), uploaded.content_type or "")
             )
-            for item in raw_items:
-                files.append(
-                    (
-                        str(item.name or "photo"),  # type: ignore[union-attr]  # UploadedFile protocol
-                        item.read(),  # type: ignore[union-attr]  # UploadedFile protocol
-                        str(item.content_type or ""),  # type: ignore[union-attr]  # UploadedFile protocol
-                    )
-                )
         urls = services.upload_review_photos(files)
         return PhotoUploadResponse(images=[PhotoUploadOut(src=url) for url in urls])
 

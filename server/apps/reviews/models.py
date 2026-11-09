@@ -235,6 +235,12 @@ class SubmittedReview(TimeStampedModel):
         verbose_name_plural = _("Submitted reviews")
         indexes = (
             models.Index(fields=["user", "action", "state"], name="reviews_quota_idx"),
+            # Hot-path overlay query: subject + created filter runs on
+            # every anonymous list read (Opus R7).
+            models.Index(
+                fields=["subject", "state", "created"],
+                name="reviews_overlay_idx",
+            ),
         )
         constraints = (
             models.CheckConstraint(

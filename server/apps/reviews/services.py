@@ -278,7 +278,11 @@ def _quota_used(user: t.Any, actions: list[str]) -> int:
     return SubmittedReview.objects.filter(
         user=user,
         action__in=actions,
-        state__in=[SubmittedReview.State.accepted, SubmittedReview.State.failed],
+        state__in=[
+            SubmittedReview.State.accepted,
+            SubmittedReview.State.failed,
+            SubmittedReview.State.pending,  # close the parallel-submit race (R8)
+        ],
         created__gte=since,
     ).count()
 
@@ -412,6 +416,9 @@ def _cached_items(subject: str) -> list[ReviewItem] | None:
     try:
         response = client().list_reviews(subject)
     except (UpstreamUnavailable, UpstreamRejected) as exc:
+        _cache.set(down_key, True, _MANGROVE_NEGATIVE_TTL)
+        raise _upstream_unavailable() from exc
+    except ValueError as exc:  # 2xx non-JSON (CDN/maintenance page) → R7
         _cache.set(down_key, True, _MANGROVE_NEGATIVE_TTL)
         raise _upstream_unavailable() from exc
     items = [item for item in response.reviews if item.payload.action in (None, "edit")]
@@ -913,17 +920,35 @@ def owns_review(user: t.Any, key: ReviewerKey, signature: str) -> bool:
 
 
 def _refuse_foreign_target(hut: Hut, signature: str) -> None:
-    """404 gate: the target must be one of the hut's visible reviews.
+    """404 gate: the target must be one of the hut's visible reviews or replies.
 
     Checked against the locally visible list (upstream cache + own-write
     overlay) — no upstream call (Opus review N6). Blacklisted targets,
     provider ids (``refuges-info:*``) and foreign-hut reviews all 404;
-    provider items are never actionable.
+    provider items are never actionable. Reply targets (``urn:maresi``
+    signatures logged with ``target_signature``) are accepted too, so
+    replies can be edited, deleted and reported (Opus R3).
     """
     subject = subject_for_hut(hut)
     for item in _visible_items(subject):
         if _effective_signature(item) == signature:
             return
+    # Check the submission log for a reply to one of this hut's reviews
+    # (the reply's target must be a visible review of this hut).
+    reply_row = (
+        SubmittedReview.objects.filter(
+            signature=signature,
+            action=SubmittedReview.Action.review,
+            target_signature__isnull=False,
+        )
+        .exclude(target_signature="")
+        .first()
+    )
+    if reply_row is not None:
+        # Verify the parent is a visible review of THIS hut.
+        for item in _visible_items(subject):
+            if _effective_signature(item) == reply_row.target_signature:
+                return
     msg = "Review not found for this hut."
     raise_not_found(msg)
 
@@ -992,6 +1017,10 @@ def _upstream_rejected() -> APIError:
 def submit_review(
     user: t.Any, hut: Hut, dto: ReviewSubmitIn, language: str
 ) -> ReviewOut:
+    """``language`` is the REQUEST language (from `lang` param or
+    Accept-Language), not `settings.LANGUAGE_CODE` — FR/IT/EN reviews
+    without an explicit language would otherwise be mislabeled `de`
+    (Opus R4)."""
     """Validate → pin name → enrich → sign → relay → cache-merge."""
     enforce_enabled()
     key, profile = get_or_mint_key(user)
@@ -1013,6 +1042,20 @@ def submit_review(
     osm_id = osm_id_for_hut(hut)
     if osm_id:
         metadata["osm_id"] = osm_id
+    # Enforce the image-src allowlist at INPUT (Opus R6): with the
+    # upload relay in place, all legitimate images come from
+    # files.mangrove.reviews — anything else is rejected.
+    if dto.images:
+        for img in dto.images:
+            if not _image_src_allowed(img.src):
+                raise APIError(
+                    {
+                        "code": ErrorCode.validation_error,
+                        "detail": "Image src must be an https URL on an "
+                        "allowlisted host (use POST /v1/reviews/images to upload).",
+                    },
+                    status_code=HTTPStatus.BAD_REQUEST,
+                )
     images = (
         [img.model_dump(exclude_none=True) for img in dto.images]
         if dto.images
@@ -1297,7 +1340,8 @@ def upload_review_photos(files: "list[tuple[str, bytes, str]]") -> "list[str]":
 
     Raises:
         APIError (400): too many photos, oversized, or wrong type.
-        APIError (503): upload server unreachable or rejected.
+        APIError (503): upload server unreachable or rejected, or the
+            feature is disabled.
     """
     from .client import (
         UPLOAD_ALLOWED_TYPES,
@@ -1306,6 +1350,7 @@ def upload_review_photos(files: "list[tuple[str, bytes, str]]") -> "list[str]":
         photo_url,
     )
 
+    enforce_enabled()  # kill-switch + write guard (Opus R1a)
     if not files:
         raise APIError(
             {
@@ -1372,10 +1417,17 @@ def invalidate_image_provider_cache(hut: Hut) -> None:
     from .images import MangroveProvider
 
     provider = MangroveProvider()
+    # Cover all gallery radii (default 5000, max 10000 — Opus R2).
     lat = round(hut.location.y, 6)
     lon = round(hut.location.x, 6)
-    for radius in (100, 300, 500, 1000, 2000):
+    for radius in (100, 300, 500, 1000, 2000, 5000, 10000):
         provider.invalidate_cache(lat, lon, radius)
+    # Also flush the provider-wide version counter + the image response
+    # cache for this hut (the gallery endpoint caches its full response).
+    MangroveProvider.invalidate_all_provider_cache("mangrove")
+    from server.apps.geometries import image_response_cache
+
+    image_response_cache.invalidate_for_hut(hut.slug)
 
 
 def _not_owner() -> APIError:
