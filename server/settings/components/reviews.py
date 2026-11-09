@@ -25,6 +25,11 @@ ORA_ENABLED: bool = config("ORA_ENABLED", cast=bool, default=_IS_DEV_OR_TEST)
 #: flips it together with ORA_ENABLED at rollout.
 ORA_WRITES_ENABLED: bool = config("ORA_WRITES_ENABLED", cast=bool, default=False)
 
+#: Identity export/import (phase 2). Default OFF until re-auth for
+#: export is implemented (Opus final review B3): the private JWK is
+#: un-rotatable — a leaked token means permanent identity theft.
+ORA_IDENTITY_ENABLED: bool = config("ORA_IDENTITY_ENABLED", cast=bool, default=False)
+
 #: Original Mangrove Server base URL (OpenAPI 0.4.1 at deploy time).
 ORA_API_BASE_URL: str = config(
     "ORA_API_BASE_URL", default="https://api.mangrove.reviews"

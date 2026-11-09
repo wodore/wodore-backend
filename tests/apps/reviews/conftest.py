@@ -174,6 +174,7 @@ def fake_refuges(_stub_refuges_provider: FakeRefugesClient) -> FakeRefugesClient
 def _enable_writes(settings: Any):
     """Enable writes for review tests (ORA_WRITES_ENABLED defaults False)."""
     settings.ORA_WRITES_ENABLED = True
+    settings.ORA_IDENTITY_ENABLED = True  # phase 2 identity tests
 
 
 @pytest.fixture(autouse=True)
