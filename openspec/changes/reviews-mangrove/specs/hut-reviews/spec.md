@@ -267,6 +267,24 @@ provider failures SHALL degrade to an empty result; the
 - **WHEN** the only review carrying a photo is blacklisted
 - **THEN** the gallery does not include the photo
 
+### Requirement: Reviewer profile endpoint
+The system SHALL serve `GET /v1/my/reviews/profile` (authenticated)
+returning the caller's reviewer profile defaults (`nickname`,
+`language`), creating the profile with a minted nickname if none
+exists. `PATCH /v1/my/reviews/profile` SHALL accept optional
+`nickname` (≤50) and `language` (BCP 47 ≤35) updates. Profile changes
+apply to future reviews only; existing reviews are unchanged.
+
+#### Scenario: Read profile
+
+- **WHEN** an authenticated user reads their profile
+- **THEN** the response includes a non-empty nickname (minted if first access) and an optional language
+
+#### Scenario: Update nickname
+
+- **WHEN** the user patches their nickname
+- **THEN** subsequent reviews carry the new nickname; existing reviews keep the old one
+
 ### Requirement: Review merge requests
 The system SHALL serve
 `POST /v1/huts/{slug}/reviews/merge-request` requiring authentication

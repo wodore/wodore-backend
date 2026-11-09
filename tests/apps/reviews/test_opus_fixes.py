@@ -254,3 +254,126 @@ class _DownClient:
 
     def __getattr__(self, name: str) -> t.Any:
         return getattr(self.inner, name)
+
+
+class TestEditOfEdit:
+    """R5: A second edit must preserve the first edit's metadata."""
+
+    def test_second_edit_keeps_first_edit_images(
+        self, hut: Any, use_fake_client: Any
+    ) -> None:
+        from server.apps.reviews.schemas import ReviewEditIn, ReviewSubmitIn
+
+        user = _user("edit2@example.com")
+        out = services.submit_review(
+            user,
+            hut,
+            ReviewSubmitIn.model_validate({"rating": 10, "opinion": "initial"}),
+            "de",
+        )
+        sig = out.signature
+        # First edit: add an image.
+        services.edit_review(
+            user,
+            hut,
+            sig,
+            ReviewEditIn.model_validate(
+                {
+                    "rating": 50,
+                    "images": [{"src": "https://files.mangrove.reviews/a.jpg"}],
+                }
+            ),
+        )
+        # Second edit: change only the rating (no images in DTO).
+        result = services.edit_review(
+            user,
+            hut,
+            sig,
+            ReviewEditIn.model_validate({"rating": 90}),
+        )
+        # The image from the FIRST edit must survive.
+        assert result.images
+        assert result.images[0].src == "https://files.mangrove.reviews/a.jpg"
+        assert result.rating == 90
+
+    def test_rating_omitted_is_preserved(self, hut: Any, use_fake_client: Any) -> None:
+        from server.apps.reviews.schemas import ReviewEditIn, ReviewSubmitIn
+
+        user = _user("edit3@example.com")
+        out = services.submit_review(
+            user,
+            hut,
+            ReviewSubmitIn.model_validate({"rating": 75, "opinion": "good"}),
+            "de",
+        )
+        # Edit: change only the opinion (rating is None in DTO).
+        result = services.edit_review(
+            user,
+            hut,
+            out.signature,
+            ReviewEditIn.model_validate({"opinion": "updated opinion"}),
+        )
+        # The rating from the original must be carried forward.
+        assert result.rating == 75
+        assert result.opinion == "updated opinion"
+
+
+class TestReplyEditDelete:
+    """R7: Replies can be edited and deleted via the extended gate."""
+
+    def test_reply_edit_and_delete(self, hut: Any, use_fake_client: Any) -> None:
+
+        client, user = _user_and_client("reply-edit@example.com")
+        subject = subject_for_hut(hut)
+        use_fake_client.items = [review_item(signature="parent-r", subject=subject)]
+
+        # Post a reply.
+        created = client.post(
+            f"/v1/huts/{hut.slug}/reviews/parent-r/reply",
+            {"opinion": "original reply"},
+            content_type="application/json",
+        )
+        assert created.status_code == 201, created.content
+        reply_sig = created.json()["signature"]
+
+        # Edit the reply (the gate must accept reply targets).
+        edited = client.post(
+            f"/v1/huts/{hut.slug}/reviews/{reply_sig}/edit",
+            {"opinion": "edited reply"},
+            content_type="application/json",
+        )
+        assert edited.status_code == 200, edited.content
+        assert edited.json()["opinion"] == "edited reply"
+
+        # Delete the reply.
+        deleted = client.post(f"/v1/huts/{hut.slug}/reviews/{reply_sig}/delete")
+        assert deleted.status_code == 204, deleted.content
+
+
+class TestProfile:
+    """R19: Reviewer profile get/update."""
+
+    def test_get_and_patch_profile(self) -> None:
+        client, _user = _user_and_client("profile@example.com")
+        # Get (creates implicitly with minted nickname).
+        get_resp = client.get("/v1/my/reviews/profile")
+        assert get_resp.status_code == 200
+        assert get_resp.json()["nickname"]  # non-empty minted name
+        # Patch.
+        patch_resp = client.patch(
+            "/v1/my/reviews/profile",
+            {"nickname": "Alpinist", "language": "fr"},
+            content_type="application/json",
+        )
+        assert patch_resp.status_code == 200, patch_resp.content
+        assert patch_resp.json()["nickname"] == "Alpinist"
+        assert patch_resp.json()["language"] == "fr"
+
+
+def _user_and_client(email: str) -> tuple[Client, User]:
+    from django.test import Client
+
+    user = _user(email)
+    client = Client(SERVER_NAME="localhost")
+    client.force_login(user)
+    return client, user

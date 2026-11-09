@@ -39,6 +39,8 @@ from .schemas import (
     PhotoUploadResponse,
     ReportOut,
     ReviewEditIn,
+    ReviewerProfileOut,
+    ReviewerProfilePatchIn,
     ReviewListQuery,
     ReviewMergeRequestIn,
     ReviewOut,
@@ -447,6 +449,34 @@ class ReviewPhotoUploadController(ReviewsWriteController):
         return PhotoUploadResponse(images=[PhotoUploadOut(src=url) for url in urls])
 
 
+class ReviewerProfileController(ReviewsWriteController):
+    """Read/update the caller's reviewer profile defaults."""
+
+    @modify(operation_id="get_reviewer_profile")
+    def get(self) -> ReviewerProfileOut:
+        """Get my reviewer profile.
+
+        The nickname appears on all reviews; the language is the
+        default for new reviews without an explicit language.
+        """
+        return ReviewerProfileOut(**services.get_reviewer_profile(self.caller))
+
+    @modify(operation_id="update_reviewer_profile")
+    def patch(
+        self,
+        parsed_body: Body[ReviewerProfilePatchIn],
+    ) -> ReviewerProfileOut:
+        """Update my reviewer profile.
+
+        Change the display nickname and/or the default language.
+        Applies to future reviews; existing reviews are unchanged.
+        """
+        result = services.update_reviewer_profile(
+            self.caller, parsed_body.nickname, parsed_body.language
+        )
+        return ReviewerProfileOut(**result)
+
+
 class ReviewIdentityExportController(ReviewsWriteController):
     """Export the caller's review identity (private JWK)."""
 
@@ -552,6 +582,11 @@ hut_paths = [
 #: User-scoped route — mounted under ``my/`` by ``api_v1.py``.
 my_paths = [
     path("reviews", MyReviewsController.as_view(), name="get_my_reviews"),
+    path(
+        "reviews/profile",
+        ReviewerProfileController.as_view(),
+        name="get_reviewer_profile",
+    ),
     path(
         "reviews/identity",
         ReviewIdentityExportController.as_view(),

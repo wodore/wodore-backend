@@ -233,6 +233,28 @@ class IdentityExportOut(pydantic.BaseModel):
     )
 
 
+class ReviewerProfileOut(pydantic.BaseModel):
+    """The reviewer's profile defaults."""
+
+    nickname: str = Field(description="Public display name in reviews")
+    language: str | None = Field(
+        None, description="Default language for reviews (BCP 47)"
+    )
+
+
+class ReviewerProfilePatchIn(pydantic.BaseModel):
+    """Update the reviewer's profile defaults."""
+
+    model_config = pydantic.ConfigDict(extra="forbid")
+
+    nickname: str | None = Field(
+        None, min_length=1, max_length=50, description="New display name"
+    )
+    language: str | None = Field(
+        None, max_length=35, description="Default language (BCP 47)"
+    )
+
+
 class IdentityImportIn(pydantic.BaseModel):
     """Import an existing JWK to replace the caller's review identity."""
 

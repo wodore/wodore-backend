@@ -824,18 +824,66 @@ def summary_for_hut(hut: Hut) -> ReviewSummaryOut:
 def batch_summary(slugs: list[str]) -> BatchSummaryEnvelope:
     """One aggregate per slug (≤50, canonicalized: sorted, deduplicated)."""
     canonical = sorted({slug.strip() for slug in slugs if slug.strip()})
-    # Map badges must not fan out to the volunteer-run provider: cached
-    # provider data only, cold huts fall back to Mangrove-only counts
-    # (Opus review B6).
-    # Batch = cached-only for BOTH providers (Opus B6): no cold upstream
-    # fetches on the map-badge path. Zeroed for cold huts; a q2 job can
-    # warm them in the background.
-    summaries = [
-        _summarize(hut.slug, visible_reviews(hut, all_cached_only=True))
-        for hut in Hut.objects.filter(
-            is_active=True, is_public=True, slug__in=canonical
-        ).only("slug", "location", "name")
-    ]
+    # N+1 fix (Opus R12): load the blacklist once, resolve hut subjects
+    # in bulk, skip refuges for cold huts. No cold upstream fetches.
+    blacklisted = set(ReviewBlacklist.objects.values_list("signature", flat=True))
+    huts = list(
+        Hut.objects.filter(is_active=True, is_public=True, slug__in=canonical).only(
+            "slug", "location", "name"
+        )
+    )
+    # Pre-resolve pinned names in bulk.
+    from server.apps.huts.models import HutSource
+
+    pinned_map: dict[int, str] = {}
+    if huts:
+        pinned_rows = HutReviewSubject.objects.filter(hut__in=huts).values_list(
+            "hut_id", "name"
+        )
+        pinned_map = dict(pinned_rows)
+        # For unpinned huts, try OSM names in bulk.
+        unpinned = [h for h in huts if h.pk not in pinned_map]
+        if unpinned:
+            osm_map = dict(
+                HutSource.objects.filter(
+                    hut__in=unpinned,
+                    organization__slug="osm",
+                    is_current=True,
+                )
+                .order_by("-created")
+                .values_list("hut_id", "name")
+            )
+            for hut_id, name in osm_map.items():
+                if name.strip():
+                    pinned_map[hut_id] = name.strip()
+    summaries: list[ReviewSummaryOut] = []
+    for hut in huts:
+        name = pinned_map.get(hut.pk) or hut.name
+        subject = build_geo_subject(hut.location.y, hut.location.x, name)
+        cached = _cache.get(_list_cache_key(subject))
+        if cached is None:
+            summaries.append(
+                ReviewSummaryOut(
+                    slug=hut.slug,
+                    count=0,
+                    rating_count=0,
+                    rating_mean=None,
+                    positive_count=0,
+                    opinion_count=0,
+                )
+            )
+            continue
+        items = [ReviewItem.model_validate(item) for item in cached]
+        items = _overlay_own_writes(subject, items, blacklisted)
+        visible = [
+            item
+            for item in items
+            if item.signature not in blacklisted
+            and _effective_signature(item) not in blacklisted
+            and subject_geo_matches(_effective_subject(item), subject)
+        ]
+        dtos = [serialize_review(item) for item in visible]
+        summaries.append(_summarize(hut.slug, dtos))
     known = {s.slug for s in summaries}
     summaries.extend(
         ReviewSummaryOut(
@@ -1110,17 +1158,51 @@ def edit_review(user: t.Any, hut: Hut, signature: str, dto: ReviewEditIn) -> Rev
         raise _not_owner()
     enforce_quota(user, "edit")
     subject = subject_for_hut(hut)
-    # Rebuild the edit payload from the ORIGINAL review's logged JWT.
+    # Rebuild from the LATEST effective payload (Opus R5):
+    # 1. Latest accepted edit row (which carries the full metadata/images
+    #    from the previous edit — not the stripped rating/opinion only)
+    # 2. Original submit row
+    # 3. Upstream review (imported/foreign keys)
+    latest_edit = (
+        SubmittedReview.objects.filter(
+            user=user,
+            target_signature=signature,
+            action=SubmittedReview.Action.edit,
+            state=SubmittedReview.State.accepted,
+        )
+        .order_by("-created")
+        .first()
+    )
     original_row = SubmittedReview.objects.filter(
         user=user, signature=signature, action=SubmittedReview.Action.review
     ).first()
+    # Pick the best source for the current state.
+    source_row = latest_edit or original_row
     original_metadata: dict[str, t.Any] = {}
     original_images: list[dict[str, t.Any]] = []
-    if original_row is not None:
-        original_payload = _jwt_payload(original_row.jwt)
+    prev_rating: int | None = None
+    prev_opinion: str | None = None
+    if source_row is not None:
+        original_payload = _jwt_payload(source_row.jwt)
         if original_payload:
             original_metadata = dict(original_payload.get("metadata") or {})
             original_images = list(original_payload.get("images") or [])
+            prev_rating = original_payload.get("rating")
+            prev_opinion = original_payload.get("opinion")
+    elif original_row is None:
+        # Foreign/imported review: fetch current state from upstream.
+        try:
+            upstream_item = client().review(signature)
+            if upstream_item is not None:
+                original_metadata = dict(upstream_item.payload.metadata or {})
+                original_images = [
+                    img.model_dump(exclude_none=True)
+                    for img in (upstream_item.payload.images or [])
+                ]
+                prev_rating = upstream_item.payload.rating
+                prev_opinion = upstream_item.payload.opinion
+        except UpstreamUnavailable:
+            pass  # proceed with empty state — the edit still works
     # Merge DTO overrides into the original metadata.
     if dto.nickname is not None:
         original_metadata["nickname"] = dto.nickname
@@ -1159,13 +1241,18 @@ def edit_review(user: t.Any, hut: Hut, signature: str, dto: ReviewEditIn) -> Rev
     preserved: dict[str, t.Any] = {"metadata": original_metadata}
     if final_images:
         preserved["images"] = final_images
+    # Rating/opinion omit-means-keep (Opus R5): if the DTO omits them
+    # (None), carry forward the previous values — omitting must not
+    # permanently strip them from the open dataset.
+    effective_rating = dto.rating if dto.rating is not None else prev_rating
+    effective_opinion = dto.opinion if dto.opinion is not None else prev_opinion
     jwt = signing.build_action_jwt(
         key.kid,
         _decrypt_key_jwk(key),
         action="edit",
         target_signature=signature,
-        rating=dto.rating,
-        opinion=dto.opinion,
+        rating=effective_rating,
+        opinion=effective_opinion,
         preserved_fields=preserved,
     )
     _relay(user, hut, subject, SubmittedReview.Action.edit, jwt, target=signature)
@@ -1174,8 +1261,8 @@ def edit_review(user: t.Any, hut: Hut, signature: str, dto: ReviewEditIn) -> Rev
         invalidate_image_provider_cache(hut)
     return ReviewOut(
         signature=signature,
-        rating=dto.rating,
-        opinion=dto.opinion,
+        rating=effective_rating,
+        opinion=effective_opinion,
         nickname=_str_or_none(original_metadata.get("nickname")),
         language=_str_or_none(original_metadata.get("language")),
         experience_context=_str_or_none(original_metadata.get("experience_context")),
@@ -1449,6 +1536,28 @@ def invalidate_image_provider_cache(hut: Hut) -> None:
     from server.apps.geometries import image_response_cache
 
     image_response_cache.invalidate_for_hut(hut.slug)
+
+
+def get_reviewer_profile(user: t.Any) -> dict[str, t.Any]:
+    """The caller's reviewer profile (nickname, default language)."""
+    profile, _created = ReviewerProfile.objects.get_or_create(user=user)
+    return {"nickname": profile.nickname, "language": profile.language or None}
+
+
+def update_reviewer_profile(
+    user: t.Any, nickname: str | None, language: str | None
+) -> dict[str, t.Any]:
+    """Update the caller's reviewer profile defaults.
+
+    Creates the profile (with a minted nickname) if none exists.
+    """
+    profile, _created = ReviewerProfile.objects.get_or_create(user=user)
+    if nickname is not None:
+        profile.nickname = nickname
+    if language is not None:
+        profile.language = language
+    profile.save()
+    return {"nickname": profile.nickname, "language": profile.language or None}
 
 
 def export_identity(user: t.Any) -> dict[str, t.Any]:

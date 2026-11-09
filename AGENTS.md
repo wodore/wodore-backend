@@ -371,9 +371,12 @@ PROTECT FKs) and logged append-only (`SubmittedReview`, state
 pending→accepted/failed).
 
 - **Settings** (`components/reviews.py`): `ORA_*` env vars.
-  `ORA_ENABLED` defaults **on in dev/test, off in production**
-  (rollout flips it together with the key secret). Enabled-but-keyless
-  in production fails startup (`ImproperlyConfigured`).
+  `ORA_ENABLED` defaults **on in dev/test, off in production**.
+  `ORA_WRITES_ENABLED` (default off everywhere) gates all write paths —
+  no Open Reviews sandbox exists; test reviews publish permanently.
+  `ORA_IDENTITY_ENABLED` (default off) gates the JWK export/import
+  endpoints until re-auth is implemented. Enabled-but-keyless in
+  production fails startup (`ImproperlyConfigured`).
 - **Key-secret rotation**: add-new-keep-old — set
   `ORA_KEY_ENCRYPTION_KEY` to the new secret and move the old one
   into `ORA_KEY_ENCRYPTION_KEYS_OLD` (comma-separated); keys derive

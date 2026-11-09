@@ -293,6 +293,21 @@ are decided but sequenced after the first release cut.
       tests (relay, auth gate, validation service, cache
       invalidation); 120 reviews tests green
 
+## 8f. Round 6 — Remaining recommended + nice-to-have items (2026-11-09)
+
+- [x] 8f.1 R5: Edit-of-edit preservation (builds from the LATEST edit
+      row, falls back to original, then upstream); rating/opinion
+      omit-means-keep (None carries forward previous value)
+- [x] 8f.2 R12: Batch summary N+1 fix (blacklist loaded once, hut
+      subjects resolved in bulk via pinned/OSM name maps)
+- [x] 8f.3 R19: `GET/PATCH /v1/my/reviews/profile` endpoint (nickname,
+      default language; creates with minted nickname on first read)
+- [x] 8f.4 R7: Reply edit/delete tests (gate accepts reply targets)
+- [x] 8f.5 R5: Edit-of-edit + rating-preservation tests
+- [x] 8f.6 R13/R14: Spec source field fixed, profile requirement
+      added, AGENTS.md updated with all three flags
+- [x] 8f.7 130 reviews tests green; pyrefly strict 0 errors; ruff clean
+
 ## 9. Pre-release verification (manual, staging)
 
 - [ ] 9.1 Re-verify upstream contract against live 0.4.x at release time
