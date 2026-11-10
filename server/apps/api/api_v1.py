@@ -38,6 +38,7 @@ from server.apps.geometries import api_near as geo_near_api
 from server.apps.huts.api import paths as huts_paths
 from server.apps.meteo import api as meteo_api
 from server.apps.organizations import api as organizations_api
+from server.apps.reviews import api as reviews_api
 from server.apps.symbols import api as symbols_api
 from server.apps.symbols import api_icons as icons_api
 from server.apps.utils import api as utils_api
@@ -60,6 +61,12 @@ def build_router() -> Router:
     router.include(Router("categories/", categories_api.paths, tags=["category"]))
     router.include(Router("map/", map_api.paths, tags=["map"]))
     router.include(Router("huts/", huts_paths, tags=["hut"]))
+    # Reviews on huts (openspec: reviews-mangrove) — hut-scoped routes
+    # share the huts/ prefix (no pattern overlap: every reviews route
+    # carries a literal `/reviews` segment); the batch summary lives on
+    # its own reviews/ prefix (own CDN tag), my-reviews on my/.
+    router.include(Router("huts/", reviews_api.hut_paths, tags=["reviews"]))
+    router.include(Router("reviews/", reviews_api.paths, tags=["reviews"]))
     router.include(Router("meteo/", meteo_api.paths, tags=["meteo"]))
     router.include(
         Router("organizations/", organizations_api.paths, tags=["organization"])
@@ -72,6 +79,7 @@ def build_router() -> Router:
     # namespace (MyApiController — auth + private + never CDN).
     router.include(Router("links/", external_links_api.paths, tags=["links"]))
     router.include(Router("my/", external_links_api.my_paths, tags=["my"]))
+    router.include(Router("my/", reviews_api.my_paths, tags=["my"]))
     # Root (version, sitemaps) last — least specific.
     router.include(Router("", utils_api.paths, tags=["utils"]))
     return router

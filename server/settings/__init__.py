@@ -53,6 +53,8 @@ _base_settings = (
     "components/oidc.py",
     "components/auth_local.py",
     "components/email.py",
+    # Reviews (Mangrove integration, openspec: reviews-mangrove).
+    "components/reviews.py",
     # dmr (django-modern-rest) base settings (response validation is
     # disabled for production inside the component):
     "components/dmr.py",

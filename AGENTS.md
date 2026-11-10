@@ -355,6 +355,47 @@ the **lane** database (the main checkout's `app` targets dev).
 - Work touching **imagor** is done in the main checkout — the shared
   container reads the main checkout's media setup.
 
+### Reviews (Mangrove integration)
+
+Open decentralized hut reviews via [Open Reviews (ORA)](https://docs.mangrove.reviews)
+(openspec: `reviews-mangrove`; app `server.apps/reviews`). Every hut's
+subject is `geo:{lat:.6f},{lon:.6f}?q={review-name}&u=30` — the
+review name (OSM name → hut name fallback, PINNED on the hut's first
+review). All upstream traffic goes through `MangroveClient`
+(`client.py` — the ONLY module talking to `api.mangrove.reviews`,
+API 0.4.1, contract-pinned via `fixtures/mangrove/`). Anonymous reads
+are proxied/cached/filterred (blacklist + geo-match); writes require
+auth, are signed with per-account **server-held ES256 keypairs**
+(`ReviewerKey`, Fernet-encrypted under `ORA_KEY_ENCRYPTION_KEY`,
+PROTECT FKs) and logged append-only (`SubmittedReview`, state
+pending→accepted/failed).
+
+- **Settings** (`components/reviews.py`): `ORA_*` env vars.
+  `ORA_ENABLED` defaults **on in dev/test, off in production**.
+  `ORA_WRITES_ENABLED` (default off everywhere) gates all write paths —
+  no Open Reviews sandbox exists; test reviews publish permanently.
+  `ORA_IDENTITY_ENABLED` (default off) gates the JWK export/import
+  endpoints until re-auth is implemented. Enabled-but-keyless in
+  production fails startup (`ImproperlyConfigured`).
+- **Key-secret rotation**: add-new-keep-old — set
+  `ORA_KEY_ENCRYPTION_KEY` to the new secret and move the old one
+  into `ORA_KEY_ENCRYPTION_KEYS_OLD` (comma-separated); keys derive
+  via SHA-256 → Fernet/MultiFernet. Losing all secrets = users lose
+  edit/delete of past reviews (upstream dataset unaffected).
+- **Erasure**: `app reviews_erase_user <email>` (`--export` first) —
+  signs+relays delete actions (idempotent), then destroys
+  key/profile/log rows. The only sanctioned way to delete a user with
+  reviews (PROTECT FKs block naive `user.delete()`).
+- **Quota/moderation**: per-user 24 h quotas counted from the log
+  (submit / edit+delete classes); `ReviewBlacklist` hides signatures
+  from serving only (never mutates the open dataset); abuse reports
+  relay as signed `report_abuse` actions.
+- **Fixtures**: recorded against **reserved test subjects only**
+  (`geo:0,0?q=Test&u=100` family); never re-record against real hut
+  subjects. Upstream isn't frozen — re-verify on 0.4.x drift.
+- **Frontend**: out of scope; informative tasks live in the openspec
+  change (§11).
+
 ### Error Tracking (Sentry protocol)
 
 `sentry-sdk` initialized in `server/settings/components/sentry.py`,

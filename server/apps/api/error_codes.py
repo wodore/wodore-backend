@@ -41,6 +41,9 @@ class ErrorCode(StrEnum):
     #: is past its sunset date (registered here so the problem-details
     #: enrichment covers it like every other code).
     api_version_sunset = "api_version_sunset"
+    #: Review writes per user beyond the rolling quota (reviews app,
+    #: openspec reviews-mangrove): 429 with ``Retry-After``.
+    review_quota_exceeded = "review_quota_exceeded"
 
 
 #: Short human summary per code — RFC 9457 ``title``. Titles MUST NOT
@@ -55,6 +58,7 @@ PROBLEM_TITLES: typing.Final[dict[ErrorCode, str]] = {
     ErrorCode.gone: "The requested resource is gone.",
     ErrorCode.service_unavailable: "The service is temporarily unavailable.",
     ErrorCode.api_version_sunset: "The requested API version is sunset.",
+    ErrorCode.review_quota_exceeded: "The review write quota is exceeded.",
 }
 
 #: Codes whose failure is about the addressed resource: these (and

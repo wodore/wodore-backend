@@ -1,0 +1,11 @@
+{
+  "status": 200,
+  "body": {
+    "sub": "geo:0,0?q=Test&u=100",
+    "quality": 8000,
+    "count": 5,
+    "opinion_count": 3,
+    "positive_count": 3,
+    "confirmed_count": 0
+  }
+}
