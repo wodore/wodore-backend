@@ -1,115 +1,115 @@
 {
- "status": 200,
- "body": {
-  "reviews": [
-   {
-    "signature": "0pZ-DYF0Fvic2-Q1y5LavkTzH5W_c8LNpqOi_EP5uz2uY9mbRaodJDc0Odt3pvzb4Fqjxhv3D5baYLmhgVTNpg",
-    "jwt": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Ii0tLS0tQkVHSU4gUFVCTElDIEtFWS0tLS0tTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FFYVlzNWRtSVVsT2NKRVg3OTdYUGIweFY4clpKL0N4V0J0OWNFY1JvcVJoaGtzMzZjQlNlLzRJK2dMTGtCWTFpWHI4dVc2NlVYdGpoZ3F0YlpyMytYMFE9PS0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLSIsImp3ayI6IntcImNydlwiOlwiUC0yNTZcIixcImt0eVwiOlwiRUNcIixcInhcIjpcImFZczVkbUlVbE9jSkVYNzk3WFBiMHhWOHJaSl9DeFdCdDljRWNSb3FSaGdcIixcInlcIjpcIlpMTi1uQVVudi1DUG9DeTVBV05ZbDZfTGx1dWxGN1k0WUtyVzJhOV9sOUVcIixcImtleV9vcHNcIjpbXCJ2ZXJpZnlcIl0sXCJleHRcIjp0cnVlfSJ9.eyJpYXQiOjE3OTQwOTg5MzYsInN1YiI6ImdlbzowLDAuMDAwMT9xPVRlc3QmdT0xMDAiLCJyYXRpbmciOjQyLCJtZXRhZGF0YSI6eyJuaWNrbmFtZSI6IndvZG9yZS1zcGlrZSIsImNsaWVudF9pZCI6Imh0dHBzOi8vd29kb3JlLmNvbSJ9fQ.0pZ-DYF0Fvic2-Q1y5LavkTzH5W_c8LNpqOi_EP5uz2uY9mbRaodJDc0Odt3pvzb4Fqjxhv3D5baYLmhgVTNpg",
-    "kid": "-----BEGIN PUBLIC KEY-----MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEaYs5dmIUlOcJEX797XPb0xV8rZJ/CxWBt9cEcRoqRhhks36cBSe/4I+gLLkBY1iXr8uW66UXtjhgqtbZr3+X0Q==-----END PUBLIC KEY-----",
-    "payload": {
-     "iat": 1794098936,
-     "sub": "geo:0,0.0001?q=Test&u=100",
-     "rating": 42,
-     "metadata": {
-      "client_id": "https://wodore.com",
-      "nickname": "wodore-spike"
-     }
-    },
-    "scheme": "geo",
-    "geo": {
-     "coordinates": {
-      "lat": 0.0,
-      "lon": 0.0001
-     },
-     "uncertainty": 100
-    }
-   },
-   {
-    "signature": "ZLSmZF6u8IqwnX6dW4QDAftjNUb2Rv9KLZbQFw0sesDIo3ZOV328NYKhfvQn2q0aUF38q-UwVr-aQB2dOrhYlg",
-    "jwt": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Ii0tLS0tQkVHSU4gUFVCTElDIEtFWS0tLS0tTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FFYVlzNWRtSVVsT2NKRVg3OTdYUGIweFY4clpKL0N4V0J0OWNFY1JvcVJoaGtzMzZjQlNlLzRJK2dMTGtCWTFpWHI4dVc2NlVYdGpoZ3F0YlpyMytYMFE9PS0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLSIsImp3ayI6IntcImNydlwiOlwiUC0yNTZcIixcImt0eVwiOlwiRUNcIixcInhcIjpcImFZczVkbUlVbE9jSkVYNzk3WFBiMHhWOHJaSl9DeFdCdDljRWNSb3FSaGdcIixcInlcIjpcIlpMTi1uQVVudi1DUG9DeTVBV05ZbDZfTGx1dWxGN1k0WUtyVzJhOV9sOUVcIixcImtleV9vcHNcIjpbXCJ2ZXJpZnlcIl0sXCJleHRcIjp0cnVlfSJ9.eyJpYXQiOjE3OTQwOTg5MzYsInN1YiI6ImdlbzowLDAuMDAwMT9xPVRlc3QmdT0xMDAiLCJvcGluaW9uIjoid29kb3JlIHNwaWtlIG9waW5pb24tb25seSBwcm9iZSIsIm1ldGFkYXRhIjp7Im5pY2tuYW1lIjoid29kb3JlLXNwaWtlIiwiY2xpZW50X2lkIjoiaHR0cHM6Ly93b2RvcmUuY29tIn19.ZLSmZF6u8IqwnX6dW4QDAftjNUb2Rv9KLZbQFw0sesDIo3ZOV328NYKhfvQn2q0aUF38q-UwVr-aQB2dOrhYlg",
-    "kid": "-----BEGIN PUBLIC KEY-----MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEaYs5dmIUlOcJEX797XPb0xV8rZJ/CxWBt9cEcRoqRhhks36cBSe/4I+gLLkBY1iXr8uW66UXtjhgqtbZr3+X0Q==-----END PUBLIC KEY-----",
-    "payload": {
-     "iat": 1794098936,
-     "sub": "geo:0,0.0001?q=Test&u=100",
-     "opinion": "wodore spike opinion-only probe",
-     "metadata": {
-      "client_id": "https://wodore.com",
-      "nickname": "wodore-spike"
-     }
-    },
-    "scheme": "geo",
-    "geo": {
-     "coordinates": {
-      "lat": 0.0,
-      "lon": 0.0001
-     },
-     "uncertainty": 100
-    }
-   },
-   {
-    "signature": "EdXTmJGGxBGekCoYWZdNh8s6ZSkoz7zqwFuDmveTge4Q9zITZXkoJrI_6HU2rXuqB5qbbyyHxfLBomHANsA1-A",
-    "jwt": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Ii0tLS0tQkVHSU4gUFVCTElDIEtFWS0tLS0tXG5NRmt3RXdZSEtvWkl6ajBDQVFZSUtvWkl6ajBEQVFjRFFnQUU0L3J4WGsyOFNRUEo1M2FndTFXWDZGbnE0eXU2XG5keThmOGYzckJDaVp0VVhEdnVnVTdqT1ozdkZZUHFGQ2hYM0RDa2dUVDB0YVBhSjRLeWhJeERDeFFnPT1cbi0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLVxuIn0.eyJpYXQiOjE3OTE0NTY2OTYsInN1YiI6ImdlbzowLDA_cT1UZXN0JnU9MTAwIiwicmF0aW5nIjo4MH0.EdXTmJGGxBGekCoYWZdNh8s6ZSkoz7zqwFuDmveTge4Q9zITZXkoJrI_6HU2rXuqB5qbbyyHxfLBomHANsA1-A",
-    "kid": "-----BEGIN PUBLIC KEY-----MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4/rxXk28SQPJ53agu1WX6Fnq4yu6dy8f8f3rBCiZtUXDvugU7jOZ3vFYPqFChX3DCkgTT0taPaJ4KyhIxDCxQg==-----END PUBLIC KEY-----",
-    "payload": {
-     "iat": 1791456696,
-     "sub": "geo:0,0?q=Test&u=100",
-     "rating": 80
-    },
-    "scheme": "geo",
-    "geo": {
-     "coordinates": {
-      "lat": 0.0,
-      "lon": 0.0
-     },
-     "uncertainty": 100
-    }
-   },
-   {
-    "signature": "ydfVMXzaHnY5_sLZYyTiMkVxWjvI7I9XmAUgFg3pD64unDQV7OO6DggKRSWXJBSxcQvWQoIlpUB8Anh_QSyP0A",
-    "jwt": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Ii0tLS0tQkVHSU4gUFVCTElDIEtFWS0tLS0tTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FFYkN6ZFRORnUxM1hpQXZ2U1pWMnh1VU8veGM2U3REb1hmZzZUMFBRNXNXNDJzeFF3T3NuUXh4OFFZbUdkaGpXU0xWNlBZM2lLVlVhWjhwU0pSbXRDVnc9PS0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLSIsImp3ayI6IntcImNydlwiOlwiUC0yNTZcIixcImV4dFwiOnRydWUsXCJrZXlfb3BzXCI6W1widmVyaWZ5XCJdLFwia3R5XCI6XCJFQ1wiLFwieFwiOlwiYkN6ZFRORnUxM1hpQXZ2U1pWMnh1VU9feGM2U3REb1hmZzZUMFBRNXNXNFwiLFwieVwiOlwiTnJNVU1EckowTWNmRUdKaG5ZWTFraTFlajJONGlsVkdtZktVaVVaclFsY1wifSJ9.eyJpYXQiOjE3OTAzNTUxODMsInJhdGluZyI6ODAsIm1ldGFkYXRhIjp7ImNsaWVudF9pZCI6Imh0dHBzOi8vY3VsdHVyZS10b2dldGhlci5kZS9pbnN0aXR1dGlvbi90ZXN0Iiwibmlja25hbWUiOiJDVCBUZXN0In0sInN1YiI6ImdlbzowLDA_cT1UZXN0JnU9MzAiLCJvcGluaW9uIjoiZHVwIn0.ydfVMXzaHnY5_sLZYyTiMkVxWjvI7I9XmAUgFg3pD64unDQV7OO6DggKRSWXJBSxcQvWQoIlpUB8Anh_QSyP0A",
-    "kid": "-----BEGIN PUBLIC KEY-----MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEbCzdTNFu13XiAvvSZV2xuUO/xc6StDoXfg6T0PQ5sW42sxQwOsnQxx8QYmGdhjWSLV6PY3iKVUaZ8pSJRmtCVw==-----END PUBLIC KEY-----",
-    "payload": {
-     "iat": 1790355183,
-     "sub": "geo:0,0?q=Test&u=30",
-     "rating": 80,
-     "opinion": "dup",
-     "metadata": {
-      "client_id": "https://culture-together.de/institution/test",
-      "nickname": "CT Test"
-     }
-    },
-    "scheme": "geo",
-    "geo": {
-     "coordinates": {
-      "lat": 0.0,
-      "lon": 0.0
-     },
-     "uncertainty": 30
-    }
-   },
-   {
-    "signature": "l1uDjFsEVLKl7WxDBMfnbSVXvxEe54Q9V5AP83nw6vXynAY-tv6oqVQIpRoD0lElSztuOPbBdJWv_miMiFRMwg",
-    "jwt": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Ii0tLS0tQkVHSU4gUFVCTElDIEtFWS0tLS0tTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FFRE13YXI1ajBjTTNxdHN0eUZ1dStTaHFhNk5Ccis5QkpYYW5YcGpuTHJmK3ZFZm0zb3NxS0g4ZHJ0ZjR5RysvUTNySE96eEFPR2x6SHNpZTRmazh4eVE9PS0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLSIsImp3ayI6IntcImNydlwiOlwiUC0yNTZcIixcImV4dFwiOnRydWUsXCJrZXlfb3BzXCI6W1widmVyaWZ5XCJdLFwia3R5XCI6XCJFQ1wiLFwieFwiOlwiRE13YXI1ajBjTTNxdHN0eUZ1dS1TaHFhNk5Cci05QkpYYW5YcGpuTHJmOFwiLFwieVwiOlwicnhINXQ2TEtpaF9IYTdYLU1odnYwTjZ4enM4UURocGN4N0ludUg1UE1ja1wifSJ9.eyJpYXQiOjE3OTAzNTUwODgsInN1YiI6ImdlbzowLDA_cT1UZXN0JnU9MTAwIiwicmF0aW5nIjo4MCwib3BpbmlvbiI6IkN1bHR1cmVUb2dldGhlciBpbnRlZ3JhdGlvbiB0ZXN0IiwibWV0YWRhdGEiOnsiY2xpZW50X2lkIjoiaHR0cHM6Ly9jdWx0dXJlLXRvZ2V0aGVyLmRlL2luc3RpdHV0aW9uL3Rlc3QiLCJuaWNrbmFtZSI6IkNUIFRlc3QifX0.l1uDjFsEVLKl7WxDBMfnbSVXvxEe54Q9V5AP83nw6vXynAY-tv6oqVQIpRoD0lElSztuOPbBdJWv_miMiFRMwg",
-    "kid": "-----BEGIN PUBLIC KEY-----MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEDMwar5j0cM3qtstyFuu+Shqa6NBr+9BJXanXpjnLrf+vEfm3osqKH8drtf4yG+/Q3rHOzxAOGlzHsie4fk8xyQ==-----END PUBLIC KEY-----",
-    "payload": {
-     "iat": 1790355088,
-     "sub": "geo:0,0?q=Test&u=100",
-     "rating": 80,
-     "opinion": "CultureTogether integration test",
-     "metadata": {
-      "client_id": "https://culture-together.de/institution/test",
-      "nickname": "CT Test"
-     }
-    },
-    "scheme": "geo",
-    "geo": {
-     "coordinates": {
-      "lat": 0.0,
-      "lon": 0.0
-     },
-     "uncertainty": 100
-    }
-   }
-  ]
- }
+  "status": 200,
+  "body": {
+    "reviews": [
+      {
+        "signature": "0pZ-DYF0Fvic2-Q1y5LavkTzH5W_c8LNpqOi_EP5uz2uY9mbRaodJDc0Odt3pvzb4Fqjxhv3D5baYLmhgVTNpg",
+        "jwt": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Ii0tLS0tQkVHSU4gUFVCTElDIEtFWS0tLS0tTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FFYVlzNWRtSVVsT2NKRVg3OTdYUGIweFY4clpKL0N4V0J0OWNFY1JvcVJoaGtzMzZjQlNlLzRJK2dMTGtCWTFpWHI4dVc2NlVYdGpoZ3F0YlpyMytYMFE9PS0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLSIsImp3ayI6IntcImNydlwiOlwiUC0yNTZcIixcImt0eVwiOlwiRUNcIixcInhcIjpcImFZczVkbUlVbE9jSkVYNzk3WFBiMHhWOHJaSl9DeFdCdDljRWNSb3FSaGdcIixcInlcIjpcIlpMTi1uQVVudi1DUG9DeTVBV05ZbDZfTGx1dWxGN1k0WUtyVzJhOV9sOUVcIixcImtleV9vcHNcIjpbXCJ2ZXJpZnlcIl0sXCJleHRcIjp0cnVlfSJ9.eyJpYXQiOjE3OTQwOTg5MzYsInN1YiI6ImdlbzowLDAuMDAwMT9xPVRlc3QmdT0xMDAiLCJyYXRpbmciOjQyLCJtZXRhZGF0YSI6eyJuaWNrbmFtZSI6IndvZG9yZS1zcGlrZSIsImNsaWVudF9pZCI6Imh0dHBzOi8vd29kb3JlLmNvbSJ9fQ.0pZ-DYF0Fvic2-Q1y5LavkTzH5W_c8LNpqOi_EP5uz2uY9mbRaodJDc0Odt3pvzb4Fqjxhv3D5baYLmhgVTNpg",
+        "kid": "-----BEGIN PUBLIC KEY-----MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEaYs5dmIUlOcJEX797XPb0xV8rZJ/CxWBt9cEcRoqRhhks36cBSe/4I+gLLkBY1iXr8uW66UXtjhgqtbZr3+X0Q==-----END PUBLIC KEY-----",
+        "payload": {
+          "iat": 1794098936,
+          "sub": "geo:0,0.0001?q=Test&u=100",
+          "rating": 42,
+          "metadata": {
+            "client_id": "https://wodore.com",
+            "nickname": "wodore-spike"
+          }
+        },
+        "scheme": "geo",
+        "geo": {
+          "coordinates": {
+            "lat": 0.0,
+            "lon": 0.0001
+          },
+          "uncertainty": 100
+        }
+      },
+      {
+        "signature": "ZLSmZF6u8IqwnX6dW4QDAftjNUb2Rv9KLZbQFw0sesDIo3ZOV328NYKhfvQn2q0aUF38q-UwVr-aQB2dOrhYlg",
+        "jwt": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Ii0tLS0tQkVHSU4gUFVCTElDIEtFWS0tLS0tTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FFYVlzNWRtSVVsT2NKRVg3OTdYUGIweFY4clpKL0N4V0J0OWNFY1JvcVJoaGtzMzZjQlNlLzRJK2dMTGtCWTFpWHI4dVc2NlVYdGpoZ3F0YlpyMytYMFE9PS0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLSIsImp3ayI6IntcImNydlwiOlwiUC0yNTZcIixcImt0eVwiOlwiRUNcIixcInhcIjpcImFZczVkbUlVbE9jSkVYNzk3WFBiMHhWOHJaSl9DeFdCdDljRWNSb3FSaGdcIixcInlcIjpcIlpMTi1uQVVudi1DUG9DeTVBV05ZbDZfTGx1dWxGN1k0WUtyVzJhOV9sOUVcIixcImtleV9vcHNcIjpbXCJ2ZXJpZnlcIl0sXCJleHRcIjp0cnVlfSJ9.eyJpYXQiOjE3OTQwOTg5MzYsInN1YiI6ImdlbzowLDAuMDAwMT9xPVRlc3QmdT0xMDAiLCJvcGluaW9uIjoid29kb3JlIHNwaWtlIG9waW5pb24tb25seSBwcm9iZSIsIm1ldGFkYXRhIjp7Im5pY2tuYW1lIjoid29kb3JlLXNwaWtlIiwiY2xpZW50X2lkIjoiaHR0cHM6Ly93b2RvcmUuY29tIn19.ZLSmZF6u8IqwnX6dW4QDAftjNUb2Rv9KLZbQFw0sesDIo3ZOV328NYKhfvQn2q0aUF38q-UwVr-aQB2dOrhYlg",
+        "kid": "-----BEGIN PUBLIC KEY-----MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEaYs5dmIUlOcJEX797XPb0xV8rZJ/CxWBt9cEcRoqRhhks36cBSe/4I+gLLkBY1iXr8uW66UXtjhgqtbZr3+X0Q==-----END PUBLIC KEY-----",
+        "payload": {
+          "iat": 1794098936,
+          "sub": "geo:0,0.0001?q=Test&u=100",
+          "opinion": "wodore spike opinion-only probe",
+          "metadata": {
+            "client_id": "https://wodore.com",
+            "nickname": "wodore-spike"
+          }
+        },
+        "scheme": "geo",
+        "geo": {
+          "coordinates": {
+            "lat": 0.0,
+            "lon": 0.0001
+          },
+          "uncertainty": 100
+        }
+      },
+      {
+        "signature": "EdXTmJGGxBGekCoYWZdNh8s6ZSkoz7zqwFuDmveTge4Q9zITZXkoJrI_6HU2rXuqB5qbbyyHxfLBomHANsA1-A",
+        "jwt": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Ii0tLS0tQkVHSU4gUFVCTElDIEtFWS0tLS0tXG5NRmt3RXdZSEtvWkl6ajBDQVFZSUtvWkl6ajBEQVFjRFFnQUU0L3J4WGsyOFNRUEo1M2FndTFXWDZGbnE0eXU2XG5keThmOGYzckJDaVp0VVhEdnVnVTdqT1ozdkZZUHFGQ2hYM0RDa2dUVDB0YVBhSjRLeWhJeERDeFFnPT1cbi0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLVxuIn0.eyJpYXQiOjE3OTE0NTY2OTYsInN1YiI6ImdlbzowLDA_cT1UZXN0JnU9MTAwIiwicmF0aW5nIjo4MH0.EdXTmJGGxBGekCoYWZdNh8s6ZSkoz7zqwFuDmveTge4Q9zITZXkoJrI_6HU2rXuqB5qbbyyHxfLBomHANsA1-A",
+        "kid": "-----BEGIN PUBLIC KEY-----MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4/rxXk28SQPJ53agu1WX6Fnq4yu6dy8f8f3rBCiZtUXDvugU7jOZ3vFYPqFChX3DCkgTT0taPaJ4KyhIxDCxQg==-----END PUBLIC KEY-----",
+        "payload": {
+          "iat": 1791456696,
+          "sub": "geo:0,0?q=Test&u=100",
+          "rating": 80
+        },
+        "scheme": "geo",
+        "geo": {
+          "coordinates": {
+            "lat": 0.0,
+            "lon": 0.0
+          },
+          "uncertainty": 100
+        }
+      },
+      {
+        "signature": "ydfVMXzaHnY5_sLZYyTiMkVxWjvI7I9XmAUgFg3pD64unDQV7OO6DggKRSWXJBSxcQvWQoIlpUB8Anh_QSyP0A",
+        "jwt": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Ii0tLS0tQkVHSU4gUFVCTElDIEtFWS0tLS0tTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FFYkN6ZFRORnUxM1hpQXZ2U1pWMnh1VU8veGM2U3REb1hmZzZUMFBRNXNXNDJzeFF3T3NuUXh4OFFZbUdkaGpXU0xWNlBZM2lLVlVhWjhwU0pSbXRDVnc9PS0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLSIsImp3ayI6IntcImNydlwiOlwiUC0yNTZcIixcImV4dFwiOnRydWUsXCJrZXlfb3BzXCI6W1widmVyaWZ5XCJdLFwia3R5XCI6XCJFQ1wiLFwieFwiOlwiYkN6ZFRORnUxM1hpQXZ2U1pWMnh1VU9feGM2U3REb1hmZzZUMFBRNXNXNFwiLFwieVwiOlwiTnJNVU1EckowTWNmRUdKaG5ZWTFraTFlajJONGlsVkdtZktVaVVaclFsY1wifSJ9.eyJpYXQiOjE3OTAzNTUxODMsInJhdGluZyI6ODAsIm1ldGFkYXRhIjp7ImNsaWVudF9pZCI6Imh0dHBzOi8vY3VsdHVyZS10b2dldGhlci5kZS9pbnN0aXR1dGlvbi90ZXN0Iiwibmlja25hbWUiOiJDVCBUZXN0In0sInN1YiI6ImdlbzowLDA_cT1UZXN0JnU9MzAiLCJvcGluaW9uIjoiZHVwIn0.ydfVMXzaHnY5_sLZYyTiMkVxWjvI7I9XmAUgFg3pD64unDQV7OO6DggKRSWXJBSxcQvWQoIlpUB8Anh_QSyP0A",
+        "kid": "-----BEGIN PUBLIC KEY-----MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEbCzdTNFu13XiAvvSZV2xuUO/xc6StDoXfg6T0PQ5sW42sxQwOsnQxx8QYmGdhjWSLV6PY3iKVUaZ8pSJRmtCVw==-----END PUBLIC KEY-----",
+        "payload": {
+          "iat": 1790355183,
+          "sub": "geo:0,0?q=Test&u=30",
+          "rating": 80,
+          "opinion": "dup",
+          "metadata": {
+            "client_id": "https://culture-together.de/institution/test",
+            "nickname": "CT Test"
+          }
+        },
+        "scheme": "geo",
+        "geo": {
+          "coordinates": {
+            "lat": 0.0,
+            "lon": 0.0
+          },
+          "uncertainty": 30
+        }
+      },
+      {
+        "signature": "l1uDjFsEVLKl7WxDBMfnbSVXvxEe54Q9V5AP83nw6vXynAY-tv6oqVQIpRoD0lElSztuOPbBdJWv_miMiFRMwg",
+        "jwt": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Ii0tLS0tQkVHSU4gUFVCTElDIEtFWS0tLS0tTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FFRE13YXI1ajBjTTNxdHN0eUZ1dStTaHFhNk5Ccis5QkpYYW5YcGpuTHJmK3ZFZm0zb3NxS0g4ZHJ0ZjR5RysvUTNySE96eEFPR2x6SHNpZTRmazh4eVE9PS0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLSIsImp3ayI6IntcImNydlwiOlwiUC0yNTZcIixcImV4dFwiOnRydWUsXCJrZXlfb3BzXCI6W1widmVyaWZ5XCJdLFwia3R5XCI6XCJFQ1wiLFwieFwiOlwiRE13YXI1ajBjTTNxdHN0eUZ1dS1TaHFhNk5Cci05QkpYYW5YcGpuTHJmOFwiLFwieVwiOlwicnhINXQ2TEtpaF9IYTdYLU1odnYwTjZ4enM4UURocGN4N0ludUg1UE1ja1wifSJ9.eyJpYXQiOjE3OTAzNTUwODgsInN1YiI6ImdlbzowLDA_cT1UZXN0JnU9MTAwIiwicmF0aW5nIjo4MCwib3BpbmlvbiI6IkN1bHR1cmVUb2dldGhlciBpbnRlZ3JhdGlvbiB0ZXN0IiwibWV0YWRhdGEiOnsiY2xpZW50X2lkIjoiaHR0cHM6Ly9jdWx0dXJlLXRvZ2V0aGVyLmRlL2luc3RpdHV0aW9uL3Rlc3QiLCJuaWNrbmFtZSI6IkNUIFRlc3QifX0.l1uDjFsEVLKl7WxDBMfnbSVXvxEe54Q9V5AP83nw6vXynAY-tv6oqVQIpRoD0lElSztuOPbBdJWv_miMiFRMwg",
+        "kid": "-----BEGIN PUBLIC KEY-----MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEDMwar5j0cM3qtstyFuu+Shqa6NBr+9BJXanXpjnLrf+vEfm3osqKH8drtf4yG+/Q3rHOzxAOGlzHsie4fk8xyQ==-----END PUBLIC KEY-----",
+        "payload": {
+          "iat": 1790355088,
+          "sub": "geo:0,0?q=Test&u=100",
+          "rating": 80,
+          "opinion": "CultureTogether integration test",
+          "metadata": {
+            "client_id": "https://culture-together.de/institution/test",
+            "nickname": "CT Test"
+          }
+        },
+        "scheme": "geo",
+        "geo": {
+          "coordinates": {
+            "lat": 0.0,
+            "lon": 0.0
+          },
+          "uncertainty": 100
+        }
+      }
+    ]
+  }
 }

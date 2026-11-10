@@ -1,7 +1,7 @@
 {
- "status": 200,
- "body": {
-  "count": 2,
-  "credibility": null
- }
+  "status": 200,
+  "body": {
+    "count": 2,
+    "credibility": null
+  }
 }
