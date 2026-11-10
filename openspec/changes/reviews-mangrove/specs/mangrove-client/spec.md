@@ -127,6 +127,26 @@ logging SHALL carry subjects, endpoints, statuses and durations only.
 - **WHEN** a review submission is relayed
 - **THEN** the log event names the subject, action and result but does not contain the opinion or nickname
 
+### Requirement: Photo upload relay
+The client SHALL relay photo uploads to the Open Reviews file server
+(`PUT https://upload.mangrove.reviews`, multipart/form-data, field
+`files`, ≤5 photos, ≤4.5 MB total, JPEG/PNG/GIF/WebP). The response
+SHALL return base64url SHA-256 hashes in upload order; the public URL
+`https://files.mangrove.reviews/<hash>` serves each photo
+(content-addressed, immutable, 1-year cache). The client SHALL validate
+count, size and content types before relaying; the kill-switch SHALL
+gate the relay.
+
+#### Scenario: Upload relayed
+
+- **WHEN** an authenticated user uploads valid photos
+- **THEN** the client relays them to the upload server and returns the public `files.mangrove.reviews` URLs
+
+#### Scenario: Oversized upload rejected
+
+- **WHEN** the total upload exceeds 4.5 MB or contains more than 5 photos
+- **THEN** the client rejects with a validation error before contacting the upload server
+
 ### Requirement: Open-data archival and sovereignty
 The system SHALL document that the upstream dataset is canonical and open
 (CC-BY-4.0; a full-dataset dump is published daily via `GET /dump`), that

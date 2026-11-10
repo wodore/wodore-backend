@@ -74,7 +74,10 @@ use.
   edit-row shape, `q` encoding and photo upload verified live.
 - **Image strictness**: `images[].src` checked for parser-confusion
   bypasses (`\@`, ports, control chars) before the allowlist check.
-- **Kill-switch matrix**: `ORA_ENABLED` gates Mangrove reads+writes;
+- **Write guard**: `ORA_WRITES_ENABLED` (default off) gates all write
+  paths — no Open Reviews sandbox exists.
+
+  **Kill-switch matrix**: `ORA_ENABLED` gates Mangrove reads+writes;
   `ORA_REFUGES_INFO_ENABLED` independently gates the provider
   (both off = full read-dark; enabled-but-keyless in production fails
   startup). Settings default: on in dev/test, off in production.
