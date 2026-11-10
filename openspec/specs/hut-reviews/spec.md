@@ -63,7 +63,7 @@ The system SHALL serve `GET /v1/huts/{slug}/reviews/summary` and
 canonicalized before cache-keying), both anonymously readable and
 cacheable like the review list. Aggregates SHALL be computed locally from
 the cached, blacklist-filtered review list: `count` (listed reviews),
-`rating_count` and `rating_mean` (over rated reviews only), 
+`rating_count` and `rating_mean` (over rated reviews only),
 `positive_count` (rating > 50), `opinion_count`. Zero-review huts SHALL
 return zeroed aggregates; oversized slug lists SHALL answer 400 with the
 standard validation error.
