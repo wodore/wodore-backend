@@ -450,7 +450,7 @@ class ReviewPhotoUploadController(ReviewsWriteController):
 
 
 class ReviewerProfileController(ReviewsWriteController):
-    """Read/update the caller's reviewer profile defaults."""
+    """Read the caller's reviewer profile defaults."""
 
     @modify(operation_id="get_reviewer_profile")
     def get(self) -> ReviewerProfileOut:
@@ -461,8 +461,12 @@ class ReviewerProfileController(ReviewsWriteController):
         """
         return ReviewerProfileOut(**services.get_reviewer_profile(self.caller))
 
-    @modify(operation_id="update_reviewer_profile")
-    def patch(
+
+class ReviewerProfileUpdateController(ReviewsWriteController):
+    """Update the caller's reviewer profile defaults."""
+
+    @modify(operation_id="update_reviewer_profile", status_code=HTTPStatus.OK)
+    def post(
         self,
         parsed_body: Body[ReviewerProfilePatchIn],
     ) -> ReviewerProfileOut:
@@ -597,6 +601,11 @@ my_paths = [
         "reviews/profile",
         ReviewerProfileController.as_view(),
         name="get_reviewer_profile",
+    ),
+    path(
+        "reviews/profile/update",
+        ReviewerProfileUpdateController.as_view(),
+        name="update_reviewer_profile",
     ),
     path(
         "reviews/identity",

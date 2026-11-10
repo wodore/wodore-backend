@@ -360,8 +360,8 @@ class TestProfile:
         assert get_resp.status_code == 200
         assert get_resp.json()["nickname"]  # non-empty minted name
         # Patch.
-        patch_resp = client.patch(
-            "/v1/my/reviews/profile",
+        patch_resp = client.post(
+            "/v1/my/reviews/profile/update",
             {"nickname": "Alpinist", "language": "fr"},
             content_type="application/json",
         )
