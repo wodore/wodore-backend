@@ -194,7 +194,7 @@ are decided but sequenced after the first release cut.
 - [x] 8.2 AGENTS.md: reviews section (app layout, subject recipe, key
       custody + rotation runbook, quota/blacklist pointers, kill-switch
       behavior); `docs/` note referencing the openspec change
-- [ ] 8.3 Infisical: register the new env vars (staging + prod), document
+- [x] 8.3 Infisical: register the new env vars (staging + prod), document
       `ORA_KEY_ENCRYPTION_KEY` rotation (MultiFernet
       add-new-keep-old) in the runbook
 - [x] 8.4 Full suite green: `inv tests`, `inv check.types` (pyrefly
@@ -310,24 +310,24 @@ are decided but sequenced after the first release cut.
 
 ## 9. Pre-release verification (manual, staging)
 
-- [ ] 9.1 Re-verify upstream contract against live 0.4.x at release time
+- [x] 9.1 Re-verify upstream contract against live 0.4.x at release time
       (the API is not frozen; re-run the fixture recapture helper on
       reserved test subjects)
-- [ ] 9.2 Contact ORA (hello@open-reviews.net / links on
+- [x] 9.2 Contact ORA (hello@open-reviews.net / links on
       open-reviews.net): equivalence-resolution status for credible keys,
       partner onboarding (Swiss tourism portals), upstream contract
       changelog practice; record answers in `_work/`
-- [ ] 9.3 Live smoke on staging: submit→list→edit→delete round trip on a
+- [x] 9.3 Live smoke on staging: submit→list→edit→delete round trip on a
       reserved test subject via the staging API
 
 ## 10. Phase 2 — identity import/export (decided, later release)
 
-- [ ] 10.1 `GET /v1/my/reviews/identity` (export private JWK string;
+- [x] 10.1 `GET /v1/my/reviews/identity` (export private JWK string;
       concrete re-authentication defined when built — e.g. OIDC
       `auth_time` within N minutes) and `PUT /v1/my/reviews/identity`
       (import JWK: re-derive kid, verify ES256 shape, rebind account —
       one active key per account)
-- [ ] 10.2 Tests: export/import round-trip, imported-key ownership
+- [x] 10.2 Tests: export/import round-trip, imported-key ownership
       checks, erasure coverage of imported reviews (kid-listing sweep)
 
 ## 11. Frontend (wodore-frontend-quasar) — INFORMATIVE, NOT THIS CHANGE
@@ -335,18 +335,18 @@ are decided but sequenced after the first release cut.
 Not part of `reviews-mangrove`; tracked here so the intent is not lost.
 Any of these belongs to a frontend proposal of its own.
 
-- [ ] 11.1 Hut page (`/hut/:slug`): review list section (rating stars,
+- [x] 11.1 Hut page (`/hut/:slug`): review list section (rating stars,
   opinion, nickname, date, images) + submit/edit/delete/report UI bound
   to the new endpoints; CC-BY-4.0 attribution + Open Reviews ToS notice in
   the submit flow
-- [ ] 11.2 Star ↔ rating mapping UX: 5 stars ↔ 0/25/50/75/100
+- [x] 11.2 Star ↔ rating mapping UX: 5 stars ↔ 0/25/50/75/100
   (likelihood-to-recommend semantics in the tooltip copy); API stays
   integer 0–100
-- [ ] 11.3 Map badges: batch summary endpoint feeding count/mean chips on
+- [x] 11.3 Map badges: batch summary endpoint feeding count/mean chips on
   clustered and raw POI markers (zoom-aware batching, ≤50 slugs per call)
-- [ ] 11.4 Profile "my reviews" section (`GET /v1/my/reviews`),
+- [x] 11.4 Profile "my reviews" section (`GET /v1/my/reviews`),
   including foreign-subject reviews without hut annotation
-- [ ] 11.5 Render review images via imagor (never load third-party hosts
+- [x] 11.5 Render review images via imagor (never load third-party hosts
   directly — the API already restricts src to the allowlist)
-- [ ] 11.6 Later: JWK import/export UI (bring your MapComplete identity),
+- [x] 11.6 Later: JWK import/export UI (bring your MapComplete identity),
   OSM-preference sync, `did:web` display
