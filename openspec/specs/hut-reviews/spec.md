@@ -354,4 +354,3 @@ the batch endpoint bounded (≤50 slugs).
 
 - **WHEN** the upstream API is unreachable or slow beyond the configured timeouts
 - **THEN** read endpoints answer 503 with the registered `service_unavailable` error body while within-TTL cache still serves — never a 5xx with an unsanitized upstream body or stack trace
-

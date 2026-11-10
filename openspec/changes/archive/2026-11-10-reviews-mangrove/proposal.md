@@ -137,4 +137,3 @@ separate endpoints.)
 - **Frontend** (separate repo, later): hut-page review list/submit UI, star ↔
   rating mapping, my-reviews profile section, map badges, photo upload flow.
 - **Docs**: AGENTS.md § Reviews; specs/design/tasks in this change.
-

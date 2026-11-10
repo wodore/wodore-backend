@@ -104,4 +104,3 @@ authored by other accounts.
 
 - **WHEN** a delete action is refused upstream because the review is already deleted
 - **THEN** erasure continues and treats that target as erased
-

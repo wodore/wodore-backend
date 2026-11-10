@@ -162,4 +162,3 @@ availability.
 
 - **WHEN** an operator exports the submission log
 - **THEN** the export contains verbatim JWTs whose signatures verify against their embedded public keys without any Wodore service involved
-
