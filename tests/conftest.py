@@ -115,30 +115,8 @@ def _pk_sequences_reset(
         return
     request.getfixturevalue("db")  # ensure setup and an unblocked window
     with django_db_blocker.unblock():
-        _ensure_category_tree()
         _reset_pk_sequences()
         _pk_sequences_reset_done = True
-
-
-def _ensure_category_tree() -> None:
-    """Ensure the amenity→accommodation tree exists (fresh test DBs).
-
-    On a fresh test database, the categories data migration finds no
-    HutType data to migrate, so the accommodation tree is missing.
-    Tests that use HutFactory or Category lookups need it. Idempotent.
-    """
-    from server.apps.categories.models import Category
-
-    if Category.objects.filter(slug="amenity").exists():
-        return  # tree already present (seeded or previously ensured)
-    amenity, _created = Category.objects.get_or_create(
-        slug="amenity", defaults={"name": "Amenity", "is_active": True}
-    )
-    Category.objects.get_or_create(
-        slug="accommodation",
-        parent=amenity,
-        defaults={"name": "Accommodation", "is_active": True},
-    )
 
 
 def _seed_file_hash() -> str:
