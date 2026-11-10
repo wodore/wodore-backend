@@ -6,13 +6,20 @@ conftest code runs), and the module-level ``setdefault`` below covers
 non-standard settings modules that might not go through that guard.
 """
 
-import hashlib
 import os
+from typing import Any
 
 os.environ.setdefault("DJANGO_ENV", "test")
 
 import pytest
 from pytest_django.plugin import DjangoDbBlocker
+
+from tests.seed.loader import (
+    load_all_seeds,
+    reset_pk_sequences,
+    restore_post_flush,
+    seed_file_hash,
+)
 
 from server.apps.huts.models import Hut
 
@@ -35,37 +42,154 @@ def _bake_root_urlconf():
 
 
 def _reset_pk_sequences() -> None:
-    """Advance Postgres pk sequences past fixture-loaded explicit ids.
-
-    Fixture files (e.g. organizations.yaml) carry explicit ``pk:``
-    values; loading them does not advance the sequences, so later
-    factory/ORM inserts collide with existing ids (duplicate key
-    violations - seen live in CI and on staging). Idempotent.
-    """
-    from django.apps import apps
-    from django.db import connection
-
-    qn = connection.ops.quote_name
-    with connection.cursor() as cursor:
-        for model in apps.get_models():
-            field = model._meta.auto_field
-            if field is None:
-                continue
-            table = model._meta.db_table
-            cursor.execute(
-                "SELECT pg_get_serial_sequence(%s, %s)", [table, field.column]
-            )
-            seq = cursor.fetchone()[0]
-            if not seq:
-                continue
-            cursor.execute(
-                f"SELECT setval(%s, COALESCE((SELECT MAX({qn(field.column)})"  # type: ignore  # argument typing drift vs stubs
-                f" FROM {qn(table)}), 0) + 1, false)",
-                [seq],
-            )
+    """Advance Postgres pk sequences past fixture-loaded explicit ids."""
+    reset_pk_sequences()
 
 
 _pk_sequences_reset_done = False
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> Any:
+    """Force every transactional test onto Django's serialized rollback.
+
+    ``django_db(transaction=True)`` tests tear down with a database
+    flush that destroys data-migration rows and seed data (see
+    ``loader.restore_post_flush``). Django's ``serialized_rollback``
+    machinery snapshots the pristine post-migrate database at test-db
+    setup (``connection._test_serialized_contents``) — but only when at
+    least one test requests it. Wiring EVERY transactional test onto it
+    guarantees the snapshot exists exactly when flushes can happen, and
+    the transactional tests themselves start from a restored baseline.
+    """
+    from pytest import Mark, MarkDecorator
+
+    for item in items:
+        fixturenames = getattr(item, "fixturenames", None)
+        marker = item.get_closest_marker("django_db")
+        transactional_marker = marker is not None and (
+            marker.kwargs.get("transaction") or marker.kwargs.get("reset_sequences")
+        )
+        fixture_routed = fixturenames is not None and (
+            "transactional_db" in fixturenames or "live_server" in fixturenames
+        )
+        if transactional_marker:
+            assert marker is not None  # narrowed by transactional_marker
+            # The marker usually lives on the CLASS (``own_markers`` of
+            # the item stays empty — items inherit class markers through
+            # ``iter_markers``), so rewriting it in place is a no-op.
+            # An ITEM-level marker shadows it for get_closest_marker —
+            # which is what pytest-django reads both at session setup
+            # (_get_databases_for_setup → serialized_aliases) and at
+            # test setup (_django_db_helper).
+            item.add_marker(
+                MarkDecorator(
+                    Mark(
+                        marker.name,
+                        marker.args,
+                        {**marker.kwargs, "serialized_rollback": True},
+                        _ispytest=True,
+                    ),
+                    _ispytest=True,
+                )
+            )
+        elif fixture_routed:
+            # Fixture-routed transactional test (no django_db marker):
+            # the django_db_serialized_rollback fixture is the only
+            # opt-in pytest-django reads for this shape.
+            assert fixturenames is not None  # narrowed by fixture_routed
+            fixturenames.append("django_db_serialized_rollback")
+        else:
+            continue
+        # Request the end-of-session repair for every session that has
+        # transactional tests (the only sessions whose flushes can gut
+        # the database CI caches and reuses). PREPENDED so it sets up
+        # before the db fixtures — when a later fixture errors at setup
+        # (a failing test run), already-set-up fixtures still tear down
+        # and the repair still runs; appended-last it would never be
+        # reached and the session would end gutted.
+        if fixturenames is not None and "_healthy_db_at_exit" not in fixturenames:
+            fixturenames.insert(0, "_healthy_db_at_exit")
+    yield
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_setup(item: pytest.Item) -> Any:
+    """Restore the flushed-database baseline before fixture setup.
+
+    Must run BEFORE pytest-django's ``db``/``transactional_db`` fixtures
+    enter their atomics: the restore commits, so data written here is
+    visible to *other connections* — the ASGI tests drive the app from
+    request threads, and the reviews provider tests run sync code on
+    worker threads; neither can see rows inside the test's uncommitted
+    transaction. An autouse fixture would lose that race against the
+    plugin's own autouse ordering; a setup hook cannot.
+    """
+    _restore_flushed_baseline(item)
+    yield
+
+
+def _restore_flushed_baseline(item: pytest.Item) -> None:
+    """Detect and repair transactional-test flushes (see loader.restore_post_flush).
+
+    Runs only for tests that use the database — pure unit tests must
+    never force test-database creation. Guarded against db errors:
+    before the session's first db test the test database does not exist
+    yet (``django_db_setup`` creates it during fixture setup — the
+    connection then either fails to connect, or points at an
+    un-migrated database), and nothing can have been flushed at that
+    point anyway.
+    """
+    from pytest import Function
+    from pytest_django.plugin import blocking_manager_key
+
+    from django.db import OperationalError, ProgrammingError
+
+    fixturenames = item.fixturenames if isinstance(item, Function) else []
+    uses_db = (
+        item.get_closest_marker("django_db") is not None
+        or "db" in fixturenames
+        or "transactional_db" in fixturenames
+    )
+    if not uses_db:
+        return
+    try:
+        with item.config.stash[blocking_manager_key].unblock():
+            restore_post_flush()
+    except (OperationalError, ProgrammingError):
+        pass  # test database not set up yet — nothing to restore
+
+
+@pytest.fixture(scope="session")
+def _healthy_db_at_exit(
+    django_db_setup: None,  # pytest fixture dep (resolved by name)
+    django_db_blocker: DjangoDbBlocker,
+):
+    """Leave the test database healthy when the session ends.
+
+    A session whose last test was transactional ends on a flushed (empty
+    vocabulary) database. CI caches that pgdata and the next run reuses
+    it — it would start from a gutted baseline that ``migrate`` cannot
+    repair (data migrations are already recorded) and snapshot. This
+    fixture is requested (via the collection hook) by every
+    transactional test, so it finalizes — before ``django_db_setup``
+    tears the test-database context down — exactly for the sessions
+    that can end gutted. It restores the baseline from the snapshot and
+    then clears the seed rows so the next session's snapshot (taken
+    from the reused database) stays seed-free — stale seed rows in a
+    snapshot collide with re-loaded seeds (see loader.clear_seed_rows).
+    """
+    from tests.seed.loader import clear_seed_rows
+
+    from django.db import Error as DbError
+
+    yield
+    try:
+        with django_db_blocker.unblock():
+            restore_post_flush()
+            clear_seed_rows()
+    except DbError:
+        pass  # test database vanished mid-session — nothing to restore
 
 
 @pytest.fixture(autouse=True)
@@ -121,12 +245,7 @@ def _pk_sequences_reset(
 
 def _seed_file_hash() -> str:
     """Compute a hash of all seed YAML files to detect changes."""
-    from tests.seed.loader import SEED_DIR
-
-    hasher = hashlib.md5()
-    for seed_file in sorted(SEED_DIR.glob("*.yaml")):
-        hasher.update(seed_file.read_bytes())
-    return hasher.hexdigest()
+    return seed_file_hash()
 
 
 @pytest.fixture(scope="session")
@@ -137,8 +256,6 @@ def seed_data(django_db_setup: None, django_db_blocker: DjangoDbBlocker):
     - No huts in the database (first run or --create-db)
     - Seed file content has changed (hash comparison)
     """
-    from tests.seed.loader import load_all_seeds
-
     with django_db_blocker.unblock():
         needs_seeding = False
 
