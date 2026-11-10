@@ -496,7 +496,18 @@ class ReviewIdentityExportController(ReviewsWriteController):
 class ReviewIdentityImportController(ReviewsWriteController):
     """Import a review identity (JWK) to replace the caller's key."""
 
-    @modify(operation_id="import_review_identity", status_code=HTTPStatus.OK)
+    @modify(
+        operation_id="import_review_identity",
+        status_code=HTTPStatus.OK,
+        extra_responses=[
+            ResponseSpec(
+                ErrorDetail,
+                status_code=HTTPStatus.CONFLICT,
+                description="Import refused: current key has accepted reviews, "
+                "or the JWK belongs to another account with reviews.",
+            ),
+        ],
+    )
     def post(
         self,
         parsed_body: Body[IdentityImportIn],

@@ -320,19 +320,18 @@ class TestIdentityImportExport:
         # Mint a second keypair (simulates a MapComplete key).
         _kid2, jwk2 = _signing.mint_keypair()
         jwk2_str = _json.dumps(jwk2, separators=(",", ":"))
-        # Import it.
+        # Import should REFUSE: user has accepted reviews under the
+        # current key (destruction guard, Opus B1+B2).
         response = client.post(
             "/v1/my/reviews/identity/import",
             {"jwk": jwk2_str},
             content_type="application/json",
         )
-        assert response.status_code == 200, response.content
-        body = response.json()
-        assert body["kid"] == _kid2  # new identity
-        assert body["kid"] != original["kid"]  # different from original
-        # Re-export — should return the imported key.
+        assert response.status_code == 409, response.content
+        assert "Cannot import" in response.json()["detail"]
+        # The original key must be intact.
         re_export = client.get("/v1/my/reviews/identity").json()
-        assert _json.loads(re_export["jwk"])["d"] == jwk2["d"]
+        assert _json.loads(re_export["jwk"])["d"] == _json.loads(original["jwk"])["d"]
 
     def test_import_rejects_invalid_jwk(self) -> None:
         client, _user = _logged_in_client()
@@ -369,10 +368,11 @@ class TestIdentityImportExport:
         )
         client_b = Client(SERVER_NAME="localhost")
         client_b.force_login(_user_b)
+        # User A has reviews — import should refuse (cross-user guard).
         response = client_b.post(
             "/v1/my/reviews/identity/import",
             {"jwk": exported["jwk"]},
             content_type="application/json",
         )
-        assert response.status_code == 200, response.content
-        assert response.json()["kid"] == exported["kid"]
+        assert response.status_code == 409, response.content
+        assert "another account" in response.json()["detail"]

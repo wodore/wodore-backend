@@ -1567,9 +1567,22 @@ def export_identity(user: t.Any) -> dict[str, t.Any]:
     MapComplete, mangrove.reviews, or any compatible app to continue
     reviewing with the same identity and credibility.
 
+    Gated behind `ORA_IDENTITY_ENABLED` (default off): the private JWK
+    is un-rotatable — a leaked token means permanent identity theft
+    (Opus final review B3).
+
     Raises:
+        APIError (503): identity export not enabled.
         APIError (404): the user has no reviewer key (never written).
     """
+    if not settings.ORA_IDENTITY_ENABLED:
+        raise APIError(
+            {
+                "code": ErrorCode.service_unavailable,
+                "detail": "Identity export is not enabled on this environment.",
+            },
+            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+        )
     key = ReviewerKey.objects.filter(user=user).first()
     if key is None:
         raise_not_found("No reviewer identity found — submit a review first.")
@@ -1586,12 +1599,46 @@ def import_identity(user: t.Any, jwk_string: str) -> dict[str, t.Any]:
 
     The imported key becomes the user's active identity: they can now
     edit/delete reviews signed with it (e.g., their MapComplete reviews).
-    Reviews signed with a PREVIOUS key become unmanageable from Wodore
-    (re-import the old key to manage them).
+
+    Gated behind `ORA_IDENTITY_ENABLED` (default off). Refuses when the
+    caller has accepted reviews under their current key (the old key
+    would be destroyed, making those reviews permanently unmanageable
+    and breaking GDPR erasure — Opus final review B1+B2).
 
     Raises:
+        APIError (503): identity import not enabled.
+        APIError (409): caller has reviews under current key.
         APIError (400): invalid JWK (not EC P-256, missing fields).
     """
+    if not settings.ORA_IDENTITY_ENABLED:
+        raise APIError(
+            {
+                "code": ErrorCode.service_unavailable,
+                "detail": "Identity import is not enabled on this environment.",
+            },
+            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+        )
+    # Destruction guard (Opus B1+B2): refuse if the caller has accepted
+    # reviews signed with their current key — destroying it would make
+    # those reviews permanently unmanageable and break erasure.
+    existing_key = ReviewerKey.objects.filter(user=user).first()
+    if existing_key is not None:
+        old_review_count = SubmittedReview.objects.filter(
+            user=user,
+            action=SubmittedReview.Action.review,
+            state=SubmittedReview.State.accepted,
+        ).count()
+        if old_review_count > 0:
+            raise APIError(
+                {
+                    "code": ErrorCode.validation_error,
+                    "detail": "Cannot import: you have "
+                    f"{old_review_count} review(s) signed with your current "
+                    "key. Export your current identity first, delete your "
+                    "reviews (or contact support for erasure), then import.",
+                },
+                status_code=HTTPStatus.CONFLICT,
+            )
     try:
         jwk = json.loads(jwk_string)
         if not isinstance(jwk, dict):
@@ -1633,9 +1680,28 @@ def import_identity(user: t.Any, jwk_string: str) -> dict[str, t.Any]:
     # Replace the key (old key's reviews become unmanageable — the user
     # would need to re-import the old JWK to manage them).
     # A kid (public key) is globally unique — one key = one identity.
-    # If another user holds this key, transfer it (they exported it and
-    # are importing it here — the old binding is intentionally released).
-    ReviewerKey.objects.filter(kid=kid).exclude(user=user).delete()
+    # If ANOTHER user holds this key and has accepted reviews, refuse —
+    # silently removing their key would break their erasure and
+    # edit/delete capability (Opus B2).
+    other_key = ReviewerKey.objects.filter(kid=kid).exclude(user=user).first()
+    if other_key is not None:
+        other_reviews = SubmittedReview.objects.filter(
+            user=other_key.user,
+            action=SubmittedReview.Action.review,
+            state=SubmittedReview.State.accepted,
+        ).count()
+        if other_reviews > 0:
+            raise APIError(
+                {
+                    "code": ErrorCode.validation_error,
+                    "detail": "Cannot import: this key belongs to another "
+                    f"account with {other_reviews} review(s). "
+                    "The other account must export and delete first.",
+                },
+                status_code=HTTPStatus.CONFLICT,
+            )
+        # Other user has no reviews — safe to transfer.
+        other_key.delete()
     ReviewerKey.objects.update_or_create(
         user=user,
         defaults={
