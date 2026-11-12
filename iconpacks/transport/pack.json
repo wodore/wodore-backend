@@ -181,7 +181,7 @@
       "recraft_style_hash": "68fdffddd2da081d"
     }
   },
-  "rev": 24,
+  "rev": 25,
   "note": "Transport access icons. Used on a map.",
   "icons": {
     "airport": {
@@ -684,6 +684,66 @@
         },
         "primitive": {
           "link": "rail#primitive"
+        }
+      }
+    },
+    "gondola": {
+      "brief": "Alias of cablecar — same glyph, own slug.",
+      "main_color": "#a0e5a5",
+      "variants": {
+        "color": {
+          "link": "cablecar#color"
+        },
+        "mono": {
+          "link": "cablecar#mono"
+        },
+        "primitive": {
+          "link": "rail#primitive"
+        }
+      }
+    },
+    "trolleybus": {
+      "brief": "Alias of bus — same glyph, own slug.",
+      "main_color": "#475a99",
+      "variants": {
+        "color": {
+          "link": "bus#color"
+        },
+        "mono": {
+          "link": "bus#mono"
+        },
+        "primitive": {
+          "link": "bus#primitive"
+        }
+      }
+    },
+    "monorail": {
+      "brief": "Alias of tram — same glyph, own slug.",
+      "main_color": "#35495d",
+      "variants": {
+        "color": {
+          "link": "tram#color"
+        },
+        "mono": {
+          "link": "tram#mono"
+        },
+        "primitive": {
+          "link": "rail#primitive"
+        }
+      }
+    },
+    "bus_station": {
+      "brief": "Alias of bus — same glyph, own slug.",
+      "main_color": "#475a99",
+      "variants": {
+        "color": {
+          "link": "bus#color"
+        },
+        "mono": {
+          "link": "bus#mono"
+        },
+        "primitive": {
+          "link": "bus#primitive"
         }
       }
     }
