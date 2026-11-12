@@ -1,0 +1,338 @@
+{
+  "primitive-unknown": {
+    "x": 0,
+    "y": 0,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "primitive-transport": {
+    "x": 24,
+    "y": 0,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "primitive-tram_stop": {
+    "x": 48,
+    "y": 0,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "primitive-train_station": {
+    "x": 72,
+    "y": 0,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "primitive-parking": {
+    "x": 96,
+    "y": 0,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "primitive-multiple": {
+    "x": 120,
+    "y": 0,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "primitive-metro_station": {
+    "x": 144,
+    "y": 0,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "primitive-funicular": {
+    "x": 0,
+    "y": 24,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "primitive-ferry": {
+    "x": 24,
+    "y": 24,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "primitive-elevator": {
+    "x": 48,
+    "y": 24,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "primitive-chairlift": {
+    "x": 72,
+    "y": 24,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "primitive-cable_car": {
+    "x": 96,
+    "y": 24,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "primitive-bus_stop": {
+    "x": 120,
+    "y": 24,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "primitive-airport": {
+    "x": 144,
+    "y": 24,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "mono-unknown": {
+    "x": 0,
+    "y": 48,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "mono-transport": {
+    "x": 24,
+    "y": 48,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "mono-tram_stop": {
+    "x": 48,
+    "y": 48,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "mono-train_station": {
+    "x": 72,
+    "y": 48,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "mono-parking": {
+    "x": 96,
+    "y": 48,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "mono-multiple": {
+    "x": 120,
+    "y": 48,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "mono-metro_station": {
+    "x": 144,
+    "y": 48,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "mono-funicular": {
+    "x": 0,
+    "y": 72,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "mono-ferry": {
+    "x": 24,
+    "y": 72,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "mono-elevator": {
+    "x": 48,
+    "y": 72,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "mono-chairlift": {
+    "x": 72,
+    "y": 72,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "mono-cable_car": {
+    "x": 96,
+    "y": 72,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "mono-bus_stop": {
+    "x": 120,
+    "y": 72,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "mono-airport": {
+    "x": 144,
+    "y": 72,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "color-unknown": {
+    "x": 0,
+    "y": 96,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "color-transport": {
+    "x": 24,
+    "y": 96,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "color-tram_stop": {
+    "x": 48,
+    "y": 96,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "color-train_station": {
+    "x": 72,
+    "y": 96,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "color-parking": {
+    "x": 96,
+    "y": 96,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "color-multiple": {
+    "x": 120,
+    "y": 96,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "color-metro_station": {
+    "x": 144,
+    "y": 96,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "color-funicular": {
+    "x": 0,
+    "y": 120,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "color-ferry": {
+    "x": 24,
+    "y": 120,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "color-elevator": {
+    "x": 48,
+    "y": 120,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "color-chairlift": {
+    "x": 72,
+    "y": 120,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "color-cable_car": {
+    "x": 96,
+    "y": 120,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "color-bus_stop": {
+    "x": 120,
+    "y": 120,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  },
+  "color-airport": {
+    "x": 144,
+    "y": 120,
+    "width": 24,
+    "height": 24,
+    "pixelRatio": 1,
+    "sdf": false
+  }
+}

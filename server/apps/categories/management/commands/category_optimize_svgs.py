@@ -72,7 +72,7 @@ class Command(BaseCommand):
                 ["npx", "svgo", "--version"],
                 capture_output=True,
                 text=True,
-                timeout=10,
+                timeout=60,
                 check=False,
             )
             return result.returncode == 0
