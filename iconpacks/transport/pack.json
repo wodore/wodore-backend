@@ -160,7 +160,10 @@
         "tile-shaped regions, no outlines",
         "modern rounded corners"
       ],
-      "avoid": ["gradients", "strokes"],
+      "avoid": [
+        "gradients",
+        "strokes"
+      ],
       "recraft_style_id": "8fc26d07-c71c-4f95-8c31-2dcd6ab6b295",
       "recraft_style_hash": "11744f77b0abe78f"
     },
@@ -170,23 +173,31 @@
       "size": 24,
       "min_gap": 1,
       "max_nodes": 48,
-      "palette": ["#000000"],
+      "palette": [
+        "#000000"
+      ],
       "style_words": [
         "solid silhouette",
         "single color fill",
         "no strokes. Should work as map symbols. Basic monoton version of the color-flat variant."
       ],
-      "avoid": ["internal outlines", "gradients"],
+      "avoid": [
+        "internal outlines",
+        "gradients"
+      ],
       "recraft_style_id": "3a16f9f9-9b2f-4deb-a949-6452542ab4a1",
       "recraft_style_hash": "68fdffddd2da081d"
     }
   },
-  "rev": 23,
+  "rev": 24,
   "note": "Transport access icons. Used on a map.",
   "icons": {
     "airport": {
       "brief": "An airport — terminal or airfield with scheduled flights.",
-      "colors": ["#72d8ff", "#c9f3ff"],
+      "colors": [
+        "#72d8ff",
+        "#c9f3ff"
+      ],
       "main_color": "#72d8ff",
       "variants": {
         "color": {
@@ -215,77 +226,6 @@
             "variant": "c1"
           },
           "content_hash": "95bbf5fea5c16942750f1b2f0557c7e48b237301213c30cc201a7b670e4c734b"
-        }
-      }
-    },
-    "bus_stop": {
-      "brief": "A bus stop — roadside stop or small station for buses.",
-      "colors": [
-        "#475a99",
-        "#6171a3",
-        "#79ce6f",
-        "#7c88ad",
-        "#99da90",
-        "#deddf5",
-        "#eeecff",
-        "#fbf6b2"
-      ],
-      "main_color": "#475a99",
-      "variants": {
-        "color": {
-          "style": "color-flat",
-          "status": "approved",
-          "chosen": {
-            "run": "r001",
-            "variant": "r2"
-          },
-          "content_hash": "4f5403672c7210fdbc7be53aa270294c51c10d7ebbf66f4c8ddbea5aa3fd227e"
-        },
-        "mono": {
-          "style": "mono-filled",
-          "status": "approved",
-          "chosen": {
-            "run": "r006",
-            "variant": "c1"
-          },
-          "content_hash": "4c054f59fd56cb5a189f18911c2070a353c45ce3a4add08a06eb7808064661cb"
-        },
-        "primitive": {
-          "style": "mono-primitive",
-          "status": "approved",
-          "chosen": {
-            "run": "r003",
-            "variant": "c1"
-          },
-          "content_hash": "9ce76dba887afde0ec07646bc0102343c83aabf1aa50edca0b1404d0ba2cce2b"
-        }
-      }
-    },
-    "cable_car": {
-      "brief": "A cable car — aerial lift with cabins on a circulating rope.",
-      "colors": ["#a0e5a5", "#eefaff", "#ff7b79", "#ffda8f"],
-      "main_color": "#a0e5a5",
-      "variants": {
-        "color": {
-          "style": "color-flat",
-          "status": "approved",
-          "chosen": {
-            "run": "r001",
-            "variant": "r1"
-          },
-          "content_hash": "b0f659d47629215e4c2ce05e281a23d9e30f306de9f9313c859533c649bdeb1b"
-        },
-        "mono": {
-          "style": "mono-filled",
-          "status": "approved",
-          "chosen": {
-            "run": "r006",
-            "variant": "c1"
-          },
-          "content_hash": "9a4eafb3f6b112313cc842bb613c7ffc5ccb8b88bb3fc3d84ee116023d5896b7"
-        },
-        "primitive": {
-          "link": "train_station#primitive"
         }
       }
     },
@@ -320,13 +260,18 @@
           "content_hash": "3ab67c7939233dc6d1cbbbb6c293398f65e7cf2bdcd4db447e56ac0f967a55ac"
         },
         "primitive": {
-          "link": "train_station#primitive"
+          "link": "rail#primitive"
         }
       }
     },
     "elevator": {
       "brief": "An elevator — lift access at a station or building.",
-      "colors": ["#91def5", "#cff1fb", "#ffcb7c", "#ffedd1"],
+      "colors": [
+        "#91def5",
+        "#cff1fb",
+        "#ffcb7c",
+        "#ffedd1"
+      ],
       "main_color": "#91def5",
       "variants": {
         "color": {
@@ -348,13 +293,18 @@
           "content_hash": "5b97c094e7a374c15544b2fd2defeaf90201cb313ae8c539b4df150e2f018b7c"
         },
         "primitive": {
-          "link": "train_station#primitive"
+          "link": "rail#primitive"
         }
       }
     },
     "ferry": {
       "brief": "A ferry — boat crossing lakes or rivers with regular service.",
-      "colors": ["#64bbdf", "#b8ecff", "#ff6b6b", "#ffc945"],
+      "colors": [
+        "#64bbdf",
+        "#b8ecff",
+        "#ff6b6b",
+        "#ffc945"
+      ],
       "main_color": "#64bbdf",
       "variants": {
         "color": {
@@ -417,35 +367,7 @@
           "content_hash": "22ff982fe0e75a0b78aa6f16de295e54406fa400ce1f197bfb1a5ca99afe44dd"
         },
         "primitive": {
-          "link": "train_station#primitive"
-        }
-      }
-    },
-    "metro_station": {
-      "brief": "A metro station — urban rapid transit stop (U-Bahn/S-Bahn).",
-      "colors": ["#4dbaf6", "#898998", "#b3b6c3"],
-      "main_color": "#4dbaf6",
-      "variants": {
-        "color": {
-          "style": "color-flat",
-          "status": "approved",
-          "chosen": {
-            "run": "r001",
-            "variant": "r3"
-          },
-          "content_hash": "4c0ae3a420448c5581bd0a8a0d92b8df71d9dff2c85b834132d92d606775a890"
-        },
-        "mono": {
-          "style": "mono-filled",
-          "status": "approved",
-          "chosen": {
-            "run": "r002",
-            "variant": "r1"
-          },
-          "content_hash": "db6902f54bbb265d83cce673e01b86cfef44ebad9c68882681bf86db3d17e2ce"
-        },
-        "primitive": {
-          "link": "train_station#primitive"
+          "link": "rail#primitive"
         }
       }
     },
@@ -482,7 +404,7 @@
           "content_hash": "33cd3b16e0e81addb1d628c5f77e8ad5ea51f2455b910a343959e7c0b8c2598f"
         },
         "primitive": {
-          "link": "train_station#primitive"
+          "link": "rail#primitive"
         }
       }
     },
@@ -527,86 +449,6 @@
         }
       }
     },
-    "train_station": {
-      "brief": "A train station — railway station with scheduled service.",
-      "colors": [
-        "#4a5359",
-        "#5278a1",
-        "#6cb6de",
-        "#95d4e9",
-        "#e8e9ea",
-        "#ffce71"
-      ],
-      "main_color": "#4a5359",
-      "variants": {
-        "color": {
-          "style": "color-flat",
-          "status": "approved",
-          "chosen": {
-            "run": "r001",
-            "variant": "r1"
-          },
-          "content_hash": "5e3d4157fccb6c2d715d37070d994041b5133a9f15a3995b8a25927da9459898"
-        },
-        "mono": {
-          "style": "mono-filled",
-          "status": "approved",
-          "chosen": {
-            "run": "r002",
-            "variant": "c1"
-          },
-          "content_hash": "5f9da66f54274dccc2bf0ccf6542b6f5a013c83bb4ddee31e2b11a133b394f85"
-        },
-        "primitive": {
-          "style": "mono-primitive",
-          "status": "approved",
-          "chosen": {
-            "run": "r003",
-            "variant": "c1"
-          },
-          "content_hash": "15a97a4711e93df78b7129ac412b179932ec2325da85a3bc23b6c9a48deb666d"
-        }
-      }
-    },
-    "tram_stop": {
-      "brief": "A tram stop — street-level light rail stop.",
-      "colors": [
-        "#35495d",
-        "#844c46",
-        "#965b53",
-        "#9ad8ed",
-        "#b5e7fe",
-        "#bac1c6",
-        "#caddea",
-        "#d0d1d2",
-        "#e2effa",
-        "#ea9518"
-      ],
-      "main_color": "#35495d",
-      "variants": {
-        "color": {
-          "style": "color-flat",
-          "status": "approved",
-          "chosen": {
-            "run": "r001",
-            "variant": "r1"
-          },
-          "content_hash": "53416852a4ead099825c30dba89458a02ee6e5f2804b80da43e0e294da0ca85f"
-        },
-        "mono": {
-          "style": "mono-filled",
-          "status": "approved",
-          "chosen": {
-            "run": "r002",
-            "variant": "r2"
-          },
-          "content_hash": "7018b803078fd9ca36f6191073ba57f23e3cc0912f4510041f25e380b109223c"
-        },
-        "primitive": {
-          "link": "train_station#primitive"
-        }
-      }
-    },
     "transport": {
       "brief": "Generic transport — any public transport access point.",
       "colors": [
@@ -640,7 +482,7 @@
           "content_hash": "ee28a9660ce6c47f7bbfbf627fd1484457182cb479f6d3348e6e1e35c3e9bf5a"
         },
         "primitive": {
-          "link": "train_station#primitive"
+          "link": "rail#primitive"
         }
       }
     },
@@ -684,6 +526,194 @@
             "variant": "c2"
           },
           "content_hash": "1fe113b27ecaedfa765ae8f2d345e32331f106759d25a7c92cda00c1af73eca1"
+        }
+      }
+    },
+    "rail": {
+      "brief": "A train station — railway station with scheduled service.",
+      "colors": [
+        "#4a5359",
+        "#5278a1",
+        "#6cb6de",
+        "#95d4e9",
+        "#e8e9ea",
+        "#ffce71"
+      ],
+      "main_color": "#4a5359",
+      "variants": {
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r001",
+            "variant": "r1"
+          },
+          "content_hash": "5e3d4157fccb6c2d715d37070d994041b5133a9f15a3995b8a25927da9459898"
+        },
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r002",
+            "variant": "c1"
+          },
+          "content_hash": "5f9da66f54274dccc2bf0ccf6542b6f5a013c83bb4ddee31e2b11a133b394f85"
+        },
+        "primitive": {
+          "style": "mono-primitive",
+          "status": "approved",
+          "chosen": {
+            "run": "r003",
+            "variant": "c1"
+          },
+          "content_hash": "15a97a4711e93df78b7129ac412b179932ec2325da85a3bc23b6c9a48deb666d"
+        }
+      }
+    },
+    "bus": {
+      "brief": "A bus stop — roadside stop or small station for buses.",
+      "colors": [
+        "#475a99",
+        "#6171a3",
+        "#79ce6f",
+        "#7c88ad",
+        "#99da90",
+        "#deddf5",
+        "#eeecff",
+        "#fbf6b2"
+      ],
+      "main_color": "#475a99",
+      "variants": {
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r001",
+            "variant": "r2"
+          },
+          "content_hash": "4f5403672c7210fdbc7be53aa270294c51c10d7ebbf66f4c8ddbea5aa3fd227e"
+        },
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r006",
+            "variant": "c1"
+          },
+          "content_hash": "4c054f59fd56cb5a189f18911c2070a353c45ce3a4add08a06eb7808064661cb"
+        },
+        "primitive": {
+          "style": "mono-primitive",
+          "status": "approved",
+          "chosen": {
+            "run": "r003",
+            "variant": "c1"
+          },
+          "content_hash": "9ce76dba887afde0ec07646bc0102343c83aabf1aa50edca0b1404d0ba2cce2b"
+        }
+      }
+    },
+    "metro": {
+      "brief": "A metro station — urban rapid transit stop (U-Bahn/S-Bahn).",
+      "colors": [
+        "#4dbaf6",
+        "#898998",
+        "#b3b6c3"
+      ],
+      "main_color": "#4dbaf6",
+      "variants": {
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r001",
+            "variant": "r3"
+          },
+          "content_hash": "4c0ae3a420448c5581bd0a8a0d92b8df71d9dff2c85b834132d92d606775a890"
+        },
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r002",
+            "variant": "r1"
+          },
+          "content_hash": "db6902f54bbb265d83cce673e01b86cfef44ebad9c68882681bf86db3d17e2ce"
+        },
+        "primitive": {
+          "link": "rail#primitive"
+        }
+      }
+    },
+    "tram": {
+      "brief": "A tram stop — street-level light rail stop.",
+      "colors": [
+        "#35495d",
+        "#844c46",
+        "#965b53",
+        "#9ad8ed",
+        "#b5e7fe",
+        "#bac1c6",
+        "#caddea",
+        "#d0d1d2",
+        "#e2effa",
+        "#ea9518"
+      ],
+      "main_color": "#35495d",
+      "variants": {
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r001",
+            "variant": "r1"
+          },
+          "content_hash": "53416852a4ead099825c30dba89458a02ee6e5f2804b80da43e0e294da0ca85f"
+        },
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r002",
+            "variant": "r2"
+          },
+          "content_hash": "7018b803078fd9ca36f6191073ba57f23e3cc0912f4510041f25e380b109223c"
+        },
+        "primitive": {
+          "link": "rail#primitive"
+        }
+      }
+    },
+    "cablecar": {
+      "brief": "A cable car — aerial lift with cabins on a circulating rope.",
+      "colors": [
+        "#a0e5a5",
+        "#eefaff",
+        "#ff7b79",
+        "#ffda8f"
+      ],
+      "main_color": "#a0e5a5",
+      "variants": {
+        "color": {
+          "style": "color-flat",
+          "status": "approved",
+          "chosen": {
+            "run": "r001",
+            "variant": "r1"
+          },
+          "content_hash": "b0f659d47629215e4c2ce05e281a23d9e30f306de9f9313c859533c649bdeb1b"
+        },
+        "mono": {
+          "style": "mono-filled",
+          "status": "approved",
+          "chosen": {
+            "run": "r006",
+            "variant": "c1"
+          },
+          "content_hash": "9a4eafb3f6b112313cc842bb613c7ffc5ccb8b88bb3fc3d84ee116023d5896b7"
+        },
+        "primitive": {
+          "link": "rail#primitive"
         }
       }
     }
