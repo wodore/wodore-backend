@@ -160,10 +160,7 @@
         "tile-shaped regions, no outlines",
         "modern rounded corners"
       ],
-      "avoid": [
-        "gradients",
-        "strokes"
-      ],
+      "avoid": ["gradients", "strokes"],
       "recraft_style_id": "8fc26d07-c71c-4f95-8c31-2dcd6ab6b295",
       "recraft_style_hash": "11744f77b0abe78f"
     },
@@ -173,18 +170,13 @@
       "size": 24,
       "min_gap": 1,
       "max_nodes": 48,
-      "palette": [
-        "#000000"
-      ],
+      "palette": ["#000000"],
       "style_words": [
         "solid silhouette",
         "single color fill",
         "no strokes. Should work as map symbols. Basic monoton version of the color-flat variant."
       ],
-      "avoid": [
-        "internal outlines",
-        "gradients"
-      ],
+      "avoid": ["internal outlines", "gradients"],
       "recraft_style_id": "3a16f9f9-9b2f-4deb-a949-6452542ab4a1",
       "recraft_style_hash": "68fdffddd2da081d"
     }
@@ -194,10 +186,7 @@
   "icons": {
     "airport": {
       "brief": "An airport — terminal or airfield with scheduled flights.",
-      "colors": [
-        "#72d8ff",
-        "#c9f3ff"
-      ],
+      "colors": ["#72d8ff", "#c9f3ff"],
       "main_color": "#72d8ff",
       "variants": {
         "color": {
@@ -266,12 +255,7 @@
     },
     "elevator": {
       "brief": "An elevator — lift access at a station or building.",
-      "colors": [
-        "#91def5",
-        "#cff1fb",
-        "#ffcb7c",
-        "#ffedd1"
-      ],
+      "colors": ["#91def5", "#cff1fb", "#ffcb7c", "#ffedd1"],
       "main_color": "#91def5",
       "variants": {
         "color": {
@@ -299,12 +283,7 @@
     },
     "ferry": {
       "brief": "A ferry — boat crossing lakes or rivers with regular service.",
-      "colors": [
-        "#64bbdf",
-        "#b8ecff",
-        "#ff6b6b",
-        "#ffc945"
-      ],
+      "colors": ["#64bbdf", "#b8ecff", "#ff6b6b", "#ffc945"],
       "main_color": "#64bbdf",
       "variants": {
         "color": {
@@ -615,11 +594,7 @@
     },
     "metro": {
       "brief": "A metro station — urban rapid transit stop (U-Bahn/S-Bahn).",
-      "colors": [
-        "#4dbaf6",
-        "#898998",
-        "#b3b6c3"
-      ],
+      "colors": ["#4dbaf6", "#898998", "#b3b6c3"],
       "main_color": "#4dbaf6",
       "variants": {
         "color": {
@@ -686,12 +661,7 @@
     },
     "cablecar": {
       "brief": "A cable car — aerial lift with cabins on a circulating rope.",
-      "colors": [
-        "#a0e5a5",
-        "#eefaff",
-        "#ff7b79",
-        "#ffda8f"
-      ],
+      "colors": ["#a0e5a5", "#eefaff", "#ff7b79", "#ffda8f"],
       "main_color": "#a0e5a5",
       "variants": {
         "color": {
