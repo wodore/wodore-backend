@@ -2439,7 +2439,9 @@ def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
         "icon-halo-blur": 0,
     }
 
-    def _selected_plate(layer_id: str, minzoom: int, maxzoom: int | None, filt: list[Any]) -> dict[str, Any]:
+    def _selected_plate(
+        layer_id: str, minzoom: int, maxzoom: int | None, filt: list[Any]
+    ) -> dict[str, Any]:
         plate: dict[str, Any] = {
             # SELECTION PLATE — white plate, mode ring, selected-only
             # (hover lives in the icon halo alone; both opacities gated
