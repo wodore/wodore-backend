@@ -136,6 +136,14 @@ server {
     location / {
         set $martin_upstream http://${MARTIN_UPSTREAM};
         proxy_pass $martin_upstream;
+        # NEVER let an error response carry a cacheable policy: martin
+        # stamps blanket long Cache-Control on some responses and the
+        # sprite-404 incident (2026-11-15) left the edges serving
+        # week-cached "Not found" for sprite packs that had just
+        # appeared on origin. Intercepted errors re-serve bare with
+        # no-cache — success responses keep martin's headers untouched.
+        proxy_intercept_errors on;
+        error_page 404 500 502 503 504 = @martin_upstream_error;
         # Bunny purge tag (see the $cdn_tile_tag map): per-source for
         # canonical tiles and TileJSON, tiles:meta for sprites/fonts/catalog.
         add_header CDN-Tag $cdn_tile_tag always;
@@ -146,5 +154,15 @@ server {
         add_header Access-Control-Allow-Origin "*" always;
         proxy_set_header Host $http_host;
         proxy_set_header X-Forwarded-Host $http_host;
+    }
+
+    # Error twin of `location /` — same tags/CORS, but no-cache: a
+    # missing sprite/tile today may exist in a minute (martin_sync
+    # ran, martin has not restarted yet); the edges must re-ask.
+    location @martin_upstream_error {
+        add_header CDN-Tag $cdn_tile_tag always;
+        add_header Access-Control-Allow-Origin "*" always;
+        add_header Cache-Control "no-cache" always;
+        return 404;
     }
 }
