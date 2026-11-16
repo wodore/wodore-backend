@@ -1239,6 +1239,12 @@ class Command(BaseCommand):
         for definition in LAYERS:
             if definition.get("slug") == "transport-stops":
                 definition["style"] = lib.transport_style(colors)
+                # the subset twin must ride the same live colors or the
+                # Leaflet fallback drifts from the legend on the first
+                # admin color change
+                for variant in definition.get("variants", []):
+                    if variant.get("profile") == MapLayer.Profile.subset:
+                        variant["style"] = lib.transport_style_subset(colors)
 
     def _seed_layer(
         self,

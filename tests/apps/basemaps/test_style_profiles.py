@@ -684,6 +684,14 @@ class TransportVectorContractTests(SimpleTestCase):
             "transport-stops-icons-detail"
         )
 
+        # feature-state needs a stable per-feature id — the full source
+        # promotes the Transitland stable key (the #452 lesson); the
+        # subset twin must NOT carry it (subset-forbidden)
+        assert (
+            TRANSPORT_STYLE["sources"]["transitland_stops"]["promoteId"] == "onestop_id"
+        )
+        assert "promoteId" not in TRANSPORT_STYLE_SUBSET["sources"]["transitland_stops"]
+
     def test_no_clustering_anywhere(self) -> None:
         for source in TRANSPORT_STYLE["sources"].values():
             for key in (

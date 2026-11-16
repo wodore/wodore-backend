@@ -2423,6 +2423,12 @@ def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
     palette = {**TRANSPORT_FALLBACK_COLORS, **(colors or {})}
     doc = _transport_style_base(palette)
 
+    # feature-state (hover/selection) needs a stable per-feature id —
+    # promote the Transitland stable key (the #452 lesson: numeric ids
+    # churn between feed versions; #453 removed it when nothing used
+    # ids — this style uses them again). Subset-forbidden: full-only.
+    doc["sources"][TRANSPORT_SOURCE_ID]["promoteId"] = "onestop_id"
+
     # SDF pack: same martin sprite dir, SDF-encoded sheet
     doc["sprite"] = [
         {
@@ -2509,7 +2515,7 @@ def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
                     filt=_TRANSPORT_CIRCLE_FILTER,
                 )
             )
-            layer["paint"] = icon_paint
+            layer["paint"] = deepcopy(icon_paint)
         elif layer["id"] == "transport-stops-icons-detail":
             layers.append(
                 _selected_plate(
@@ -2519,10 +2525,18 @@ def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
                     filt=_TRANSPORT_ICON_FILTER,
                 )
             )
-            layer["paint"] = icon_paint
+            layer["paint"] = deepcopy(icon_paint)
         layers.append(layer)
     doc["layers"] = layers
     return doc
+
+
+def transport_style_subset(colors: dict[str, str] | None = None) -> dict[str, Any]:
+    """The subset twin rebuilt with live category colors (map_seed
+    passes them; the fallback palette covers fresh installs). Without
+    this the Leaflet fallback drifts from the legend on the first
+    admin color change."""
+    return _transport_style_base({**TRANSPORT_FALLBACK_COLORS, **(colors or {})})
 
 
 #: Module-level default (fallback palette) — tests import this; the
