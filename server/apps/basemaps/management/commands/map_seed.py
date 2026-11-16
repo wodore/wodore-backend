@@ -622,14 +622,21 @@ LAYERS: list[dict[str, Any]] = [
         "slot": "ways",
         "order": 2,
         "min_zoom": 11,
-        # Single SUBSET-profile row (owner decision): the document is
-        # subset-clean end to end — small colored circles z11–z13.99,
-        # mono category icons from z14 — and a subset document is a
-        # valid full style by construction, so ONE row serves WebGL and
-        # fallback sessions alike. Nothing below z11.
-        "profile": MapLayer.Profile.subset,
-        "version": SUBSET_REVISION,
+        # FULL row + subset twin (accommodations pattern, owner
+        # decision 2026-11-15): the full document is the hut-style
+        # look — SDF mono icons tinted by the stop's mode color with
+        # the white halo ladder, hover halo recolor, selected plate +
+        # ring (feature-state is subset-forbidden, hence the twin).
+        # The subset twin is the previous single document: plain
+        # sprite icons, no halo/hover — Leaflet-renderable.
         "style": lib.TRANSPORT_STYLE,
+        "variants": [
+            {
+                "profile": MapLayer.Profile.subset,
+                "version": SUBSET_REVISION,
+                "style": lib.TRANSPORT_STYLE_SUBSET,
+            }
+        ],
         "attributions": ["transitland", "openstreetmap"],
         "categories": [
             {"slug": "transport", "use": "filter"},
@@ -1232,6 +1239,12 @@ class Command(BaseCommand):
         for definition in LAYERS:
             if definition.get("slug") == "transport-stops":
                 definition["style"] = lib.transport_style(colors)
+                # the subset twin must ride the same live colors or the
+                # Leaflet fallback drifts from the legend on the first
+                # admin color change
+                for variant in definition.get("variants", []):
+                    if variant.get("profile") == MapLayer.Profile.subset:
+                        variant["style"] = lib.transport_style_subset(colors)
 
     def _seed_layer(
         self,

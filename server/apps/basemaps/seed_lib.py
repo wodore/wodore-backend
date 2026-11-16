@@ -894,6 +894,20 @@ def _hover_halo_color() -> list[Any]:
     ]
 
 
+def _transport_hover_halo_color(palette: dict[str, str]) -> list[Any]:
+    """Halo color on hover for transport stops: the stop's dominant
+    MODE color instead of white — the transport twin of
+    :func:`_hover_halo_color` (transitland stops carry no ``color``
+    property; the mode case chain is the color source). Same owner
+    rule: hover ONLY recolors the halo."""
+    return [
+        "case",
+        _HOVER_STATE,
+        _transport_color_expr(palette),
+        "#ffffff",
+    ]
+
+
 def _size_ladder(stops: list[tuple[int, float]]) -> list[Any]:
     """Flatten (zoom, size) stops into an interpolate expression."""
     flat: list[Any] = []
@@ -2063,17 +2077,19 @@ TRANSPORT_MODES: tuple[tuple[str, int], ...] = (
 #: rows' ``color`` values; this covers fresh installs before the
 #: categories migration ran). "other" deliberately has no category —
 #: it is the uncategorized remainder, not a legend entry.
+#: Owner decision 2026-11-12: values mirror the transport iconpilot
+#: pack's main colors (migration categories.0026) — keep in sync.
 TRANSPORT_FALLBACK_COLORS: dict[str, str] = {
-    "rail": "#C60018",  # SBB red (the old layer's "Train")
-    "tram": "#00838F",
-    "metro": "#7B1FA2",
-    "monorail": "#455A64",
-    "funicular": "#795548",
-    "gondola": "#D81B60",  # aerial lift
-    "cablecar": "#FF8F00",  # cable tram
-    "ferry": "#0079C7",  # the old layer's "Other" blue → ferry
-    "trolleybus": "#9E9D24",
-    "bus": "#2d327d",  # Post blue (the old layer's "Bus")
+    "rail": "#4a5359",
+    "tram": "#35495d",
+    "metro": "#4dbaf6",
+    "monorail": "#35495d",
+    "funicular": "#678d98",
+    "gondola": "#a0e5a5",
+    "cablecar": "#a0e5a5",
+    "ferry": "#64bbdf",
+    "trolleybus": "#475a99",
+    "bus": "#475a99",
     "other": "#6D6D6C",
 }
 
@@ -2179,8 +2195,13 @@ TRANSPORT_ICONS: dict[str, str] = {
 TRANSPORT_ICON_FALLBACK = "wd-transport:mono/transport.transport"
 
 
-def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
-    """The transport-stops overlay style (single SUBSET-profile document).
+def _transport_style_base(colors: dict[str, str] | None = None) -> dict[str, Any]:
+    """The transport-stops SUBSET twin: the leaflet-renderable document.
+
+    Plain (non-SDF) sprite icons — the fallback renderer cannot tint,
+    so the mono silhouettes render in their sheet color (black on the
+    white halo-less background). No feature-state, no halo paints:
+    everything here must stay inside the subset whitelist.
 
     ``colors`` overlays :data:`TRANSPORT_FALLBACK_COLORS` (map_seed passes
     the live ``transport`` category rows' colors). One vector source —
@@ -2210,14 +2231,11 @@ def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
     collisions) — per-mode where the tree has a symbol, the group's
     own ``mono/transport.transport`` silhouette for the rest.
 
-    Deliberately subset-clean end to end (owner decision: the full
-    profile gained nothing here — no feature-state, no day strips; a
-    subset document is a valid full style by construction, so ONE row
-    serves WebGL and fallback sessions alike). The icon-image case
-    chain returns whole literal sprite names — ``concat`` is not in
-    the subset whitelist. What a full-profile twin would add today:
-    nothing functional (``promoteId`` was the only full-only key and
-    nothing keyed features by id).
+    Deliberately subset-clean end to end: the icon-image case chain
+    returns whole literal sprite names — ``concat`` is not in the
+    subset whitelist — and no full-only paint (halo, feature-state)
+    appears anywhere. :func:`transport_style` upgrades this base into
+    the full-profile document.
     """
     palette = {**TRANSPORT_FALLBACK_COLORS, **(colors or {})}
 
@@ -2372,6 +2390,153 @@ def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
             },
         ],
     }
+
+
+#: Module-level default (fallback palette) — tests import this; the
+#: seed re-builds the document from the live category colors.
+TRANSPORT_STYLE_SUBSET: dict[str, Any] = _transport_style_base()
+
+
+def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
+    """The transport-stops FULL overlay: the hut/accommodation look.
+
+    :func:`_transport_style_base` upgraded in place (owner decision
+    2026-11-15, mirroring the accommodations overlay):
+
+    * the sprite pack switches to Martin's **SDF** variant
+      (``/sdf_sprite/transport``) — signed-distance-field icons the
+      renderer can tint per feature at runtime (non-SDF icons ignore
+      ``icon-color`` entirely and render in their sheet color — the
+      black-icons incident);
+    * both icon bands paint ``icon-color`` with the stop's dominant
+      MODE color (the same ``_transport_color_expr`` case chain the
+      z11–z14 circles use) over the standard white halo ladder
+      (``icon-halo-blur`` 0 — a crisp outline, not a glow);
+    * hover recolors ONLY the halo to the mode color
+      (:func:`_transport_hover_halo_color` — same owner rule as the
+      amenity overlays: no plate, no size change);
+    * selection shows the white plate + ring under the icon
+      (``feature-state selected``, ring from ``feature-state color`` —
+      both opacities gated so nothing renders unselected; the
+      2026-11-07 blue-ring-storm lesson).
+    """
+    palette = {**TRANSPORT_FALLBACK_COLORS, **(colors or {})}
+    doc = _transport_style_base(palette)
+
+    # feature-state (hover/selection) needs a stable per-feature id —
+    # promote the Transitland stable key (the #452 lesson: numeric ids
+    # churn between feed versions; #453 removed it when nothing used
+    # ids — this style uses them again). Subset-forbidden: full-only.
+    doc["sources"][TRANSPORT_SOURCE_ID]["promoteId"] = "onestop_id"
+
+    # SDF pack: same martin sprite dir, SDF-encoded sheet
+    doc["sprite"] = [
+        {
+            "id": TRANSPORT_SPRITE_ID,
+            "url": "{{env:MARTIN_TILE_URL}}/sdf_sprite/transport",
+        }
+    ]
+
+    mode_color = _transport_color_expr(palette)
+    icon_paint: dict[str, Any] = {
+        "icon-color": mode_color,
+        "icon-halo-color": _transport_hover_halo_color(palette),
+        "icon-halo-width": _size_ladder(_AMENITY_HALO_STOPS),
+        "icon-halo-blur": 0,
+    }
+
+    def _selected_plate(
+        layer_id: str, minzoom: int, maxzoom: int | None, filt: list[Any]
+    ) -> dict[str, Any]:
+        plate: dict[str, Any] = {
+            # SELECTION PLATE — white plate, mode ring, selected-only
+            # (hover lives in the icon halo alone; both opacities gated
+            # separately — circle-opacity does not gate the stroke).
+            "id": layer_id,
+            "type": "circle",
+            "source": TRANSPORT_SOURCE_ID,
+            "source-layer": "stops",
+            "minzoom": minzoom,
+            "filter": filt,
+            "paint": {
+                "circle-color": "#ffffff",
+                "circle-opacity": [
+                    "case",
+                    ["boolean", ["feature-state", "selected"], False],
+                    1,
+                    0,
+                ],
+                "circle-stroke-opacity": [
+                    "case",
+                    ["boolean", ["feature-state", "selected"], False],
+                    1,
+                    0,
+                ],
+                "circle-stroke-color": [
+                    "case",
+                    ["boolean", ["feature-state", "color"], False],
+                    ["feature-state", "color"],
+                    "#2673bf",
+                ],
+                "circle-stroke-width": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    14,
+                    1.5,
+                    19,
+                    2.5,
+                ],
+                "circle-radius": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    14,
+                    10,
+                    16,
+                    12,
+                    19,
+                    15,
+                ],
+            },
+        }
+        if maxzoom is not None:
+            plate["maxzoom"] = maxzoom
+        return plate
+
+    layers: list[dict[str, Any]] = []
+    for layer in doc["layers"]:
+        if layer["id"] == "transport-stops-icons":
+            layers.append(
+                _selected_plate(
+                    "transport-stops-selected",
+                    minzoom=14,
+                    maxzoom=17,
+                    filt=_TRANSPORT_CIRCLE_FILTER,
+                )
+            )
+            layer["paint"] = deepcopy(icon_paint)
+        elif layer["id"] == "transport-stops-icons-detail":
+            layers.append(
+                _selected_plate(
+                    "transport-stops-selected-detail",
+                    minzoom=17,
+                    maxzoom=None,
+                    filt=_TRANSPORT_ICON_FILTER,
+                )
+            )
+            layer["paint"] = deepcopy(icon_paint)
+        layers.append(layer)
+    doc["layers"] = layers
+    return doc
+
+
+def transport_style_subset(colors: dict[str, str] | None = None) -> dict[str, Any]:
+    """The subset twin rebuilt with live category colors (map_seed
+    passes them; the fallback palette covers fresh installs). Without
+    this the Leaflet fallback drifts from the legend on the first
+    admin color change."""
+    return _transport_style_base({**TRANSPORT_FALLBACK_COLORS, **(colors or {})})
 
 
 #: Module-level default (fallback palette) — tests import this; the
