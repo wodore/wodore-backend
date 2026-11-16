@@ -894,6 +894,14 @@ def _hover_halo_color() -> list[Any]:
     ]
 
 
+#: Selection ring color (transport): a FIXED accent — deliberately NOT
+#: the mode color, so the active state never reads as a bigger hover
+#: (owner 2026-11-16: hover recolors the halo in the mode color; the
+#: selected plate + this ring is the only active signal). Same accent
+#: the accommodation overlays use as their ring fallback.
+_TRANSPORT_SELECTED_RING = "#2673bf"
+
+
 def _transport_hover_halo_color(palette: dict[str, str]) -> list[Any]:
     """Halo color on hover for transport stops: the stop's dominant
     MODE color instead of white — the transport twin of
@@ -2082,12 +2090,12 @@ TRANSPORT_MODES: tuple[tuple[str, int], ...] = (
 TRANSPORT_FALLBACK_COLORS: dict[str, str] = {
     "rail": "#4a5359",
     "tram": "#35495d",
-    "metro": "#4dbaf6",
+    "metro": "#0b5ea6",
     "monorail": "#35495d",
-    "funicular": "#678d98",
-    "gondola": "#a0e5a5",
-    "cablecar": "#a0e5a5",
-    "ferry": "#64bbdf",
+    "funicular": "#4b7285",
+    "gondola": "#27703c",
+    "cablecar": "#27703c",
+    "ferry": "#14618d",
     "trolleybus": "#475a99",
     "bus": "#475a99",
     "other": "#6D6D6C",
@@ -2416,9 +2424,11 @@ def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
       (:func:`_transport_hover_halo_color` — same owner rule as the
       amenity overlays: no plate, no size change);
     * selection shows the white plate + ring under the icon
-      (``feature-state selected``, ring from ``feature-state color`` —
-      both opacities gated so nothing renders unselected; the
-      2026-11-07 blue-ring-storm lesson).
+      (``feature-state selected``; the ring is a FIXED accent —
+      :data:`_TRANSPORT_SELECTED_RING`, never the mode color, so
+      active cannot be mistaken for a bigger hover; both opacities
+      gated so nothing renders unselected; the 2026-11-07
+      blue-ring-storm lesson).
     """
     palette = {**TRANSPORT_FALLBACK_COLORS, **(colors or {})}
     doc = _transport_style_base(palette)
@@ -2472,12 +2482,7 @@ def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
                     1,
                     0,
                 ],
-                "circle-stroke-color": [
-                    "case",
-                    ["boolean", ["feature-state", "color"], False],
-                    ["feature-state", "color"],
-                    "#2673bf",
-                ],
+                "circle-stroke-color": _TRANSPORT_SELECTED_RING,
                 "circle-stroke-width": [
                     "interpolate",
                     ["linear"],
