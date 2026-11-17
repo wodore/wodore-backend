@@ -4118,7 +4118,7 @@
       "filter": [
         "all",
         ["match", ["geometry-type"], ["Point"], true, false],
-        ["match", ["get", "class"], ["rail", "airport", "bus"], true, false]
+        ["match", ["get", "class"], ["rail", "airport"], true, false]
       ],
       "layout": {
         "icon-image": ["concat", "ofm:", ["to-string", ["get", "class"]]],

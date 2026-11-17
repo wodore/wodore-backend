@@ -541,18 +541,22 @@ class TransportVectorContractTests(SimpleTestCase):
         assert all(icon.startswith(prefix) for icon in TRANSPORT_ICONS.values())
         assert TRANSPORT_ICON_FALLBACK == prefix + "mono/transport.transport"
 
-    def test_circle_layer_contract(self) -> None:
-        circle = TRANSPORT_STYLE["layers"][0]
-        assert circle["id"] == "transport-stops"
-        assert circle["type"] == "circle"
-        assert circle["source-layer"] == "stops"
-        # nothing below z11; icons take over exactly at z14 (exclusive)
-        assert circle["minzoom"] == 11
-        assert circle["maxzoom"] == 14
-        # zoomed out: ONE marker per stop group — parent stations plus
-        # standalone (parentless) stops; parented platforms hide behind
-        # their station (case-folded OR: any/all not subset-whitelisted)
-        assert circle["filter"] == [
+    def test_primitives_layer_contract(self) -> None:
+        """z11–z13.99 renders PRIMITIVE mode markers, not anonymous dots
+        (owner 2026-11-17) — one marker per stop group, collision-active."""
+        from server.apps.basemaps.seed_lib import (
+            TRANSPORT_MODES,
+            TRANSPORT_PRIMITIVE_FALLBACK,
+            TRANSPORT_PRIMITIVES,
+        )
+
+        band = TRANSPORT_STYLE_SUBSET["layers"][0]
+        assert band["id"] == "transport-stops-primitives"
+        assert band["type"] == "symbol"
+        assert band["source-layer"] == "stops"
+        assert band["minzoom"] == 11
+        assert band["maxzoom"] == 14  # exclusive: mono icons take over
+        assert band["filter"] == [
             "case",
             ["==", ["get", "location_type"], 1],
             True,
@@ -560,35 +564,53 @@ class TransportVectorContractTests(SimpleTestCase):
             True,
             False,
         ]
-        # SMALL zoomed-out dots (z11 1.5/2 → z13 3/4), stations larger
-        radius = circle["paint"]["circle-radius"]
-        assert radius[0] == "interpolate"
-        assert radius[3] == 11
-        assert radius[4] == ["case", ["==", ["get", "location_type"], 1], 2.0, 1.5]
-        assert radius[5] == 13
-        assert radius[6] == ["case", ["==", ["get", "location_type"], 1], 4.0, 3.0]
+        # per-mode primitive sprite names in TRANSPORT_MODES priority
+        # order, the root primitive as the fallback — literal names
+        # (concat is not subset-whitelisted)
+        expr = band["layout"]["icon-image"]
+        assert expr[0] == "case"
+        assert expr[2:-1:2] == [TRANSPORT_PRIMITIVES[s] for s, _ in TRANSPORT_MODES]
+        assert expr[-1] == TRANSPORT_PRIMITIVE_FALLBACK
+        # collision-active: NO allow-overlap (the loser hides instead of
+        # stacking — owner 2026-11-17)
+        assert "icon-allow-overlap" not in band["layout"]
+        # small: z11 0.16 → z13 0.28 (48px primitives → 7.7–13.4px)
+        size = band["layout"]["icon-size"]
+        assert size[3] == 11 and size[4] == 0.16
+        assert size[5] == 13 and size[6] == 0.28
 
     def test_icon_layer_contract(self) -> None:
-        """Two icon bands: one icon per stop GROUP through z16.99
-        (neighborhood declutter — the same filter as the circles),
-        platform detail from z17 (exclusive handover)."""
-        group = TRANSPORT_STYLE_SUBSET["layers"][1]
-        assert group["id"] == "transport-stops-icons"
-        assert group["type"] == "symbol"
+        """Stations reveal their mono glyph a zoom early (z13); the
+        neighborhood band follows at z14; platform detail from z17
+        (exclusive handover). The neighborhood band is collision-active
+        (no allow-overlap) — platforms keep overlap (they cluster)."""
+        by_id = {l["id"]: l for l in TRANSPORT_STYLE_SUBSET["layers"]}
+
+        stations = by_id["transport-stops-icons-stations"]
+        assert stations["type"] == "symbol"
+        assert stations["minzoom"] == 13
+        assert stations["maxzoom"] == 14
+        # STATIONS only — the interchange hierarchy gets the mono glyph
+        # while plain stops are still primitives
+        assert stations["filter"] == ["==", ["get", "location_type"], 1]
+        assert "icon-allow-overlap" not in stations["layout"]
+
+        group = by_id["transport-stops-icons"]
         assert group["minzoom"] == 14
         assert group["maxzoom"] == 17
-        # still one icon per stop group at neighborhood zooms
-        assert group["filter"] == TRANSPORT_STYLE_SUBSET["layers"][0]["filter"]
-        assert group["layout"]["icon-allow-overlap"] is True
+        # one icon per stop group at neighborhood zooms (same filter as
+        # the primitives band)
+        assert group["filter"] == by_id["transport-stops-primitives"]["filter"]
+        assert "icon-allow-overlap" not in group["layout"]
         assert group["layout"]["icon-size"][3] == 14
 
-        detail = TRANSPORT_STYLE_SUBSET["layers"][2]
-        assert detail["id"] == "transport-stops-icons-detail"
+        detail = by_id["transport-stops-icons-detail"]
         assert detail["minzoom"] == 17
         # platform detail only — the parent station would sit
         # redundantly mid-road between its platforms (the reported
         # "3 icons for 2 bus stops")
         assert detail["filter"] == ["==", ["get", "location_type"], 0]
+        # platforms legitimately cluster millimetres apart — overlap OK
         assert detail["layout"]["icon-allow-overlap"] is True
         assert detail["layout"]["icon-size"][3] == 17  # ramp continues
 
@@ -615,8 +637,10 @@ class TransportVectorContractTests(SimpleTestCase):
             assert icon == TRANSPORT_ICONS.get(slug, TRANSPORT_ICON_FALLBACK)
             assert condition[1] == ["in", f"[{basic_type}]", haystack]
         assert icon_expr[-1] == TRANSPORT_ICON_FALLBACK
-        # the color chain (circles) keeps the full palette mapping
-        color_expr = TRANSPORT_STYLE_SUBSET["layers"][0]["paint"]["circle-color"]
+        # the color chain keeps the full palette mapping — the tint now
+        # lives on the icon bands (FULL doc: SDF icon-color paint)
+        bands = {l["id"]: l for l in TRANSPORT_STYLE["layers"] if l["type"] == "symbol"}
+        color_expr = bands["transport-stops-primitives"]["paint"]["icon-color"]
         assert color_expr[2:-1:2] == [
             TRANSPORT_FALLBACK_COLORS[slug] for slug, _ in TRANSPORT_MODES
         ]
@@ -707,7 +731,8 @@ class TransportVectorContractTests(SimpleTestCase):
         from server.apps.basemaps.seed_lib import transport_style
 
         styled = transport_style({"rail": "#ff0000"})
-        color_expr = styled["layers"][0]["paint"]["circle-color"]
+        bands = {l["id"]: l for l in styled["layers"] if l["type"] == "symbol"}
+        color_expr = bands["transport-stops-primitives"]["paint"]["icon-color"]
         assert color_expr[2] == "#ff0000"  # rail (first mode) overridden
         assert color_expr[4] != "#ff0000"  # tram keeps the fallback
 
@@ -1014,7 +1039,8 @@ class TestSeedTagging:
         # the hut-style look: SDF pack, tinted icons, selected plates
         assert full.style["sprite"][0]["url"].endswith("/sdf_sprite/transport")
         assert [layer["id"] for layer in full.style["layers"]] == [
-            "transport-stops",
+            "transport-stops-primitives",
+            "transport-stops-icons-stations",
             "transport-stops-selected",
             "transport-stops-icons",
             "transport-stops-selected-detail",
@@ -1025,17 +1051,21 @@ class TestSeedTagging:
         assert twin.version == SUBSET_REVISION
         assert twin.style is not None
         assert twin.min_zoom == 11
-        # small circles z11-z13.99 hand over to mono icons at z14
+        # primitives z11–z13.99, stations mono a zoom early, then the
+        # neighborhood and detail bands
         assert [layer["id"] for layer in twin.style["layers"]] == [
-            "transport-stops",
+            "transport-stops-primitives",
+            "transport-stops-icons-stations",
             "transport-stops-icons",
             "transport-stops-icons-detail",
         ]
         assert twin.style["layers"][0]["minzoom"] == 11
         assert twin.style["layers"][0]["maxzoom"] == 14
-        assert twin.style["layers"][1]["minzoom"] == 14
-        assert twin.style["layers"][1]["maxzoom"] == 17
-        assert twin.style["layers"][2]["minzoom"] == 17
+        assert twin.style["layers"][1]["minzoom"] == 13
+        assert twin.style["layers"][1]["maxzoom"] == 14
+        assert twin.style["layers"][2]["minzoom"] == 14
+        assert twin.style["layers"][2]["maxzoom"] == 17
+        assert twin.style["layers"][3]["minzoom"] == 17
         # slug-level config (filter) rides the row
         assert twin.config is not None
         assert "filters" in twin.config
