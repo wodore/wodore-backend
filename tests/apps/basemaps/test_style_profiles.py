@@ -1191,9 +1191,22 @@ class TestDumpCommand:
         assert "restaurant--medium--subset.json" in names
         body = json.loads((tmp_path / "huts--medium--full.json").read_text())
         assert body["version"] == 8
-        # styl-ignored (["*"]) rows are skipped + manifested — the seed
-        # list is the single source of truth the CI job reads.
-        assert "world-satellite-hybrid--high--full.json" not in names
+        # styl-ignored (["*"]) rows are STILL WRITTEN + manifested:
+        # the styl job skips them via _skipped.txt, but the MapLibre
+        # validator needs the real (composed) documents — the basemap
+        # blocks only exist in the dump since the serve-time
+        # composition landed (owner 2026-11-17).
+        assert "world-satellite-hybrid--high--full.json" in names
+        assert (
+            "wd-outdoor-base-ofm-hill--high--full.json" in names
+        )  # styl-skipped basemap, written + composed
+        ofm = json.loads(
+            (tmp_path / "wd-outdoor-base-ofm-hill--high--full.json").read_text()
+        )
+        assert any(
+            layer["id"].startswith("wd-basemap-transit-")
+            for layer in ofm["layers"]
+        )
         manifest = (tmp_path / "_skipped.txt").read_text().split()
         assert "world-satellite-hybrid" in manifest
         assert "ch-swisstopo-light" in manifest  # variant-level ["*"]
