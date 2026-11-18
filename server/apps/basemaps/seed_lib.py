@@ -2649,10 +2649,10 @@ def transport_basemap_block(colors: dict[str, str] | None = None) -> dict[str, A
     CI dump composes the same way, so the validated document is the
     served document.
 
-    ``insert_before`` names the layers that DIRECTLY followed the
-    removed native POI layers per basemap family (the freed slot);
-    :func:`compose_basemap_style` falls back to the label band when no
-    anchor matches (foreign basemaps).
+    ``slot`` rides the basemap's overlay-slot anchors (one mechanism
+    for overlays and blocks — ``anchors["routes"]["before"]``, the
+    freed native transit-POI slot); :func:`compose_basemap_style`
+    falls back to the label band for anchorless basemaps.
     """
     palette = {**TRANSPORT_FALLBACK_COLORS, **(colors or {})}
     prefix = TRANSPORT_BASEMAP_SPRITE_ID + ":"
@@ -2666,12 +2666,15 @@ def transport_basemap_block(colors: dict[str, str] | None = None) -> dict[str, A
     icon_image.append(prefix + "mono/transport.transport")
 
     return {
-        "insert_before": [
-            # OFM family: followed poi_transit
-            "highway-name-path",
-            # MTK family: followed wd-station-label
-            "road_path_oneway_symbol",
-        ],
+        # The block rides the basemap's OVERLAY-SLOT ANCHORS (one
+        # mechanism for overlays and blocks alike — owner 2026-11-18):
+        # the composer inserts before anchors["routes"].before — the
+        # freed native transit-POI slot, seeded per basemap in
+        # ``anchors`` and served through the catalog (which also
+        # supersedes the frontend's legacy anchor on the removed
+        # wd-station-label). Anchorless basemaps fall back to the
+        # label band (see compose_basemap_style).
+        "slot": "routes",
         "sprite": [
             {
                 "id": TRANSPORT_BASEMAP_SPRITE_ID,
@@ -2755,19 +2758,24 @@ def transport_basemap_block(colors: dict[str, str] | None = None) -> dict[str, A
 
 
 def compose_basemap_style(
-    doc: dict[str, Any], blocks: list[dict[str, Any]]
+    doc: dict[str, Any],
+    blocks: list[dict[str, Any]],
+    anchors: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Merge overlay basemap blocks into a basemap style document.
 
-    Generic serve/dump-time composition (owner 2026-11-17):
+    Generic serve/dump-time composition (owner 2026-11-17, slot
+    anchors 2026-11-18):
 
     * sprite entries append (deduped by id — a basemap's own ids win);
     * sources merge (existing ids win);
-    * layers insert BEFORE the first ``insert_before`` anchor id that
-      exists in the document — the freed slot of the removed native
-      POI layers. No anchor (foreign basemap): before the first symbol
-      layer carrying a ``text-field`` (the label band — POIs belong
-      there); no symbols at all: append.
+    * each block inserts before its SLOT's anchor —
+      ``anchors[block["slot"]]["before"]``, the SAME insertion-point
+      system the frontend uses for overlays (one mechanism, no
+      per-basemap name lists in the block). No anchor for the slot
+      (anchorless basemap): before the first symbol layer carrying a
+      ``text-field`` (the label band — POIs belong there); no symbols
+      at all: append.
 
     The caller passes a copy; this mutates and returns ``doc``.
     """
@@ -2782,12 +2790,14 @@ def compose_basemap_style(
         layers = block.get("layers", [])
         if not layers:
             continue
-        ids = [l.get("id") for l in doc["layers"]]
         index: int | None = None
-        for anchor in block.get("insert_before", []):
-            if anchor in ids:
-                index = ids.index(anchor)
-                break
+        slot = block.get("slot")
+        if slot and isinstance(anchors, dict):
+            slot_anchor = anchors.get(slot)
+            if isinstance(slot_anchor, dict) and slot_anchor.get("before"):
+                ids = [layer.get("id") for layer in doc["layers"]]
+                if slot_anchor["before"] in ids:
+                    index = ids.index(slot_anchor["before"])
         if index is None:
             # label-band fallback: first symbol layer with a text field
             for i, layer in enumerate(doc["layers"]):

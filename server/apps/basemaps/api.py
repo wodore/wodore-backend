@@ -939,7 +939,9 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
                     f"basemap-block:{overlay.pk}:{overlay.modified.isoformat()}"
                 )
         if blocks:
-            style_doc = compose_basemap_style(deepcopy(style_doc), blocks)
+            style_doc = compose_basemap_style(
+                deepcopy(style_doc), blocks, anchors=layer.anchors
+            )
 
     from .tile_assets import (
         asset_versions,

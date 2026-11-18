@@ -1693,11 +1693,11 @@ class TransportBasemapBlockTests(SimpleTestCase):
         assert names and all(
             n.startswith(TRANSPORT_BASEMAP_SPRITE_ID + ":") for n in names
         )
-        # anchors name the freed slots per basemap family
-        assert "highway-name-path" in block["insert_before"]
-        assert "road_path_oneway_symbol" in block["insert_before"]
+        # the block rides the overlay-slot anchors — ONE mechanism for
+        # overlays and blocks (no per-basemap name lists)
+        assert block["slot"] == "routes"
 
-    def test_compose_anchors_into_the_freed_slot(self) -> None:
+    def test_compose_anchors_into_the_slot_anchor(self) -> None:
         from server.apps.basemaps.seed_lib import (
             compose_basemap_style,
             transport_basemap_block,
@@ -1709,22 +1709,26 @@ class TransportBasemapBlockTests(SimpleTestCase):
             "sources": {},
             "layers": [
                 {"id": "background", "type": "background", "layout": empty},
-                {"id": "highway-name-path", "type": "symbol", "layout": empty},
+                {"id": "road_path_oneway_symbol", "type": "symbol", "layout": empty},
                 {"id": "later", "type": "symbol", "layout": empty},
             ],
         }
-        out = compose_basemap_style(doc, [transport_basemap_block()])
+        anchors: dict[str, Any] = {
+            "routes": {"before": "road_path_oneway_symbol"},
+        }
+        out = compose_basemap_style(doc, [transport_basemap_block()], anchors=anchors)
         ids = [layer["id"] for layer in out["layers"]]
-        # inserted BEFORE the anchor — the slot the native POI layer held
+        # inserted BEFORE the slot anchor — the freed native POI slot
         assert ids == [
             "background",
             "wd-basemap-transit-stations",
             "wd-basemap-transit-stations-label",
-            "highway-name-path",
+            "road_path_oneway_symbol",
             "later",
         ]
 
     def test_compose_falls_back_to_the_label_band(self) -> None:
+        """No anchors (anchorless basemap) → the label band."""
         from server.apps.basemaps.seed_lib import (
             compose_basemap_style,
             transport_basemap_block,

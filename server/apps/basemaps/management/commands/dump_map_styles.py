@@ -99,7 +99,10 @@ class Command(BaseCommand):
                 if style is None:
                     continue
                 if parent.get("role") == MapLayer.Role.basemap and blocks:
-                    style = lib.compose_basemap_style(deepcopy(style), blocks)
+                    anchors = variant.get("anchors", parent.get("anchors"))
+                    style = lib.compose_basemap_style(
+                        deepcopy(style), blocks, anchors=anchors
+                    )
                 profile = variant.get(
                     "profile", parent.get("profile", MapLayer.Profile.full)
                 )
