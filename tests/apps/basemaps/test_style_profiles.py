@@ -1204,8 +1204,7 @@ class TestDumpCommand:
             (tmp_path / "wd-outdoor-base-ofm-hill--high--full.json").read_text()
         )
         assert any(
-            layer["id"].startswith("wd-basemap-transit-")
-            for layer in ofm["layers"]
+            layer["id"].startswith("wd-basemap-transit-") for layer in ofm["layers"]
         )
         manifest = (tmp_path / "_skipped.txt").read_text().split()
         assert "world-satellite-hybrid" in manifest
