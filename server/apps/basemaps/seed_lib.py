@@ -2623,6 +2623,186 @@ def transport_style_subset(colors: dict[str, str] | None = None) -> dict[str, An
 TRANSPORT_STYLE: dict[str, Any] = transport_style()
 
 
+#: Sprite id for the transport overlay's BASEMAP presence. Unique vs
+#: the overlay's own ``wd-transport`` (frontend sprite ids are
+#: add-once — a shared id would let whichever pack loads first shadow
+#: the other) and vs any basemap's native sprite ids.
+TRANSPORT_BASEMAP_SPRITE_ID = "wd-basemap-transport"
+
+#: Layer-id namespace for the basemap presence — the always-replace
+#: contract (owner 2026-11-17): no ``replaces`` list to maintain. The
+#: frontend hides every layer matching ``wd-basemap-<slug>-*`` when
+#: the overlay is active; the ids alone carry the mapping.
+_TRANSPORT_BASEMAP_PREFIX = "wd-basemap-transit"
+
+
+def transport_basemap_block(colors: dict[str, str] | None = None) -> dict[str, Any]:
+    """The transport overlay's BASEMAP presence (config ``basemap``).
+
+    "My POIs, not the basemap's" (owner 2026-11-17): stations show in
+    every basemap when the overlay is OFF — later (z13 vs the overlay's
+    z11) and simpler (station mono glyph + name label, no bands, no
+    hover/selection) — replacing the basemaps' native transit POIs
+    (OFM ``poi_transit``, MTK ``wd-station*`` — both removed). The
+    style endpoint composes this block into basemap documents at SERVE
+    time (map_seed stays fixtures-only; admin edits survive) and the
+    CI dump composes the same way, so the validated document is the
+    served document.
+
+    ``insert_before`` names the layers that DIRECTLY followed the
+    removed native POI layers per basemap family (the freed slot);
+    :func:`compose_basemap_style` falls back to the label band when no
+    anchor matches (foreign basemaps).
+    """
+    palette = {**TRANSPORT_FALLBACK_COLORS, **(colors or {})}
+    prefix = TRANSPORT_BASEMAP_SPRITE_ID + ":"
+
+    icon_image: list[Any] = ["case"]
+    for slug, basic_type in TRANSPORT_MODES:
+        icon_image += [
+            _route_type_present(basic_type),
+            prefix + f"mono/transport.transport.{slug}",
+        ]
+    icon_image.append(prefix + "mono/transport.transport")
+
+    return {
+        "insert_before": [
+            # OFM family: followed poi_transit
+            "highway-name-path",
+            # MTK family: followed wd-station-label
+            "road_path_oneway_symbol",
+        ],
+        "sprite": [
+            {
+                "id": TRANSPORT_BASEMAP_SPRITE_ID,
+                "url": "{{env:MARTIN_TILE_URL}}/sdf_sprite/transport",
+            }
+        ],
+        "sources": {
+            "wd-basemap-transitland-stops": {
+                "type": "vector",
+                "tiles": ["{{env:MARTIN_TILE_URL}}/transitland_stops/{z}/{x}/{y}.mlt"],
+                "encoding": "mlt",
+                "minzoom": 11,
+                "maxzoom": 14,
+            }
+        },
+        "layers": [
+            {
+                # stations only — the interchange hierarchy reads even
+                # without the overlay; z13+ = later than the overlay's
+                # z11 floor (owner: much later, simpler)
+                "id": f"{_TRANSPORT_BASEMAP_PREFIX}-stations",
+                "type": "symbol",
+                "source": "wd-basemap-transitland-stops",
+                "source-layer": "stops",
+                "minzoom": 13,
+                "filter": ["==", ["get", "location_type"], 1],
+                "layout": {
+                    "icon-image": icon_image,
+                    "icon-size": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        13,
+                        0.3,
+                        16,
+                        0.45,
+                    ],
+                },
+                "paint": {
+                    "icon-color": _transport_color_expr(palette),
+                    "icon-halo-color": "#ffffff",
+                    "icon-halo-width": _size_ladder(_AMENITY_HALO_STOPS),
+                    "icon-halo-blur": 0,
+                },
+            },
+            {
+                # name label from z14, mirroring the OFM POI label
+                # conventions (anchor left, offset, Barlow+Noto, pale
+                # halo) — "close to what the OSM layer did"
+                "id": f"{_TRANSPORT_BASEMAP_PREFIX}-stations-label",
+                "type": "symbol",
+                "source": "wd-basemap-transitland-stops",
+                "source-layer": "stops",
+                "minzoom": 14,
+                "filter": ["==", ["get", "location_type"], 1],
+                "layout": {
+                    "text-field": ["coalesce", ["get", "stop_name"], ""],
+                    "text-font": ["Barlow Semi Condensed Regular", "Noto Sans Regular"],
+                    "text-size": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        14,
+                        10,
+                        16,
+                        12,
+                    ],
+                    "text-anchor": "left",
+                    "text-offset": [0.9, 0],
+                    "text-max-width": 9,
+                },
+                "paint": {
+                    "text-color": "hsla(220, 14%, 42%, 1)",
+                    "text-halo-blur": 0.5,
+                    "text-halo-color": "rgba(242, 247, 244, 0.9)",
+                    "text-halo-width": 1,
+                },
+            },
+        ],
+    }
+
+
+def compose_basemap_style(
+    doc: dict[str, Any], blocks: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Merge overlay basemap blocks into a basemap style document.
+
+    Generic serve/dump-time composition (owner 2026-11-17):
+
+    * sprite entries append (deduped by id — a basemap's own ids win);
+    * sources merge (existing ids win);
+    * layers insert BEFORE the first ``insert_before`` anchor id that
+      exists in the document — the freed slot of the removed native
+      POI layers. No anchor (foreign basemap): before the first symbol
+      layer carrying a ``text-field`` (the label band — POIs belong
+      there); no symbols at all: append.
+
+    The caller passes a copy; this mutates and returns ``doc``.
+    """
+    for block in blocks:
+        doc.setdefault("sprite", [])
+        known = {s.get("id") for s in doc["sprite"] if isinstance(s, dict)}
+        for entry in block.get("sprite", []):
+            if entry.get("id") not in known:
+                doc["sprite"].append(deepcopy(entry))
+        for sid, source in block.get("sources", {}).items():
+            doc.setdefault("sources", {}).setdefault(sid, deepcopy(source))
+        layers = block.get("layers", [])
+        if not layers:
+            continue
+        ids = [l.get("id") for l in doc["layers"]]
+        index: int | None = None
+        for anchor in block.get("insert_before", []):
+            if anchor in ids:
+                index = ids.index(anchor)
+                break
+        if index is None:
+            # label-band fallback: first symbol layer with a text field
+            for i, layer in enumerate(doc["layers"]):
+                if layer.get("type") == "symbol" and "text-field" in (
+                    layer.get("layout") or {}
+                ):
+                    index = i
+                    break
+        if index is None:
+            doc["layers"].extend(deepcopy(layers))
+        else:
+            doc["layers"][index:index] = deepcopy(layers)
+    return doc
+
+
 def osm_raster_style() -> dict[str, Any]:
     """Keyless OSM raster (weak-GPU variant, frontend parity)."""
     return raster_style(

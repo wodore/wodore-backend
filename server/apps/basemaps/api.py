@@ -56,6 +56,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from copy import deepcopy
 from datetime import datetime
 from http import HTTPStatus
 from typing import Any
@@ -79,6 +80,7 @@ from server.apps.api.controller import (
 )
 from server.apps.api.error_codes import ErrorCode
 from server.apps.api.query import dump_sparse, dump_sparse_list, sparse_fields_query
+from server.apps.basemaps.seed_lib import compose_basemap_style
 from server.apps.translations import LanguageQuery, override
 
 from .models import (
@@ -428,6 +430,7 @@ def style_version(
     versions: dict[str, Any] | None = None,
     epoch: str | None = None,
     now: datetime | None = None,
+    extra_inputs: list[str] | None = None,
 ) -> str | None:
     """URL version token for one layer's style documents (``?v=``).
 
@@ -469,6 +472,10 @@ def style_version(
             layer.modified.isoformat(),
             version_digest(consumed),
             epoch,
+            # basemap composition inputs: the overlay rows whose blocks
+            # the endpoint merged in — a block change rotates every
+            # basemap URL that carries it (owner 2026-11-17)
+            *(extra_inputs or []),
         )
     )
     return hashlib.sha256(source.encode()).hexdigest()[:12]
@@ -910,6 +917,30 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
         response.headers["Cache-Control"] = REVALIDATE_CACHE_CONTROL
         return response
 
+    # Basemap composition (owner 2026-11-17): overlay basemap blocks
+    # (config.basemap — "my POIs, not the basemap's") merge in at SERVE
+    # time, so admin edits to either row survive and no re-seed is
+    # needed. The composed document is what gets resolved, cached,
+    # digested and ETagged; the contributing overlay rows' modified
+    # stamps fold into the immutable version token (a block change
+    # rotates every basemap URL that carries it).
+    style_doc = layer.style
+    block_inputs: list[str] = []
+    if layer.role == MapLayer.Role.basemap:
+        blocks = []
+        overlays = MapLayer.objects.filter(
+            role=MapLayer.Role.overlay, is_active=True
+        ).order_by("pk")
+        for overlay in overlays:
+            block = (overlay.config or {}).get("basemap")
+            if isinstance(block, dict) and block.get("layers"):
+                blocks.append(block)
+                block_inputs.append(
+                    f"basemap-block:{overlay.pk}:{overlay.modified.isoformat()}"
+                )
+        if blocks:
+            style_doc = compose_basemap_style(deepcopy(style_doc), blocks)
+
     from .tile_assets import (
         asset_versions,
         consumed_versions,
@@ -921,8 +952,10 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
     # Per-style digest: only the version groups this style's asset URLs
     # consume — a hut-data edit re-keys the huts overlay, not the
     # basemaps. Placeholder-aware, so it runs on the authored style
-    # before resolution (absolutization preserves paths).
-    consumed = consumed_versions(layer.style, versions)
+    # before resolution (absolutization preserves paths) — the COMPOSED
+    # document for basemaps (the injected sprite URLs consume their
+    # own version groups).
+    consumed = consumed_versions(style_doc, versions)
     if not tokenized:
         # Resolved mode bakes serve-time values into volatile
         # parameters — the cache key and ETag must rotate with them, or
@@ -945,7 +978,9 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
     # below — an immutable stamp can never pair a token with a body it
     # does not describe. Stale/missing token: current content under the
     # bounded-staleness catalog policy (s-maxage=60), never immutable.
-    token = style_version(layer, versions=versions, epoch=epoch)
+    token = style_version(
+        layer, versions=versions, epoch=epoch, extra_inputs=block_inputs
+    )
     versioned = token is not None and request.GET.get("v") == token
     cache_control = (
         IMMUTABLE_CACHE_CONTROL if versioned else REVALIDATE_EDGE_CACHE_CONTROL
@@ -976,7 +1011,7 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
                 values[link.parameter.slug] = served
 
     payload = resolve_style(
-        layer.style,
+        style_doc,
         values,
         tokenized=tokenized,
         api_url=api_url,

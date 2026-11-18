@@ -1648,3 +1648,150 @@ class TransportModeExtrasParityTests(SimpleTestCase):
             assert seed_lib_by_code[code], f"code {code} missing in seed_lib"
         # the extras key name is stable API for other readers
         assert migration.GTFS_EXTRA_KEY == "gtfs_route_type"
+
+
+class TransportBasemapBlockTests(SimpleTestCase):
+    """The overlay's BASEMAP presence: "my POIs, not the basemap's"
+    (owner 2026-11-17). config.basemap blocks compose into basemap
+    documents at SERVE time (and in the CI dump); always-replace rides
+    the wd-basemap-<slug>-* layer-id namespace — no replaces list."""
+
+    def test_block_contract(self) -> None:
+        from server.apps.basemaps.seed_lib import (
+            TRANSPORT_BASEMAP_SPRITE_ID,
+            transport_basemap_block,
+        )
+
+        block = transport_basemap_block()
+        # own sprite id (add-once ids must not collide with the overlay's)
+        assert block["sprite"][0]["id"] == TRANSPORT_BASEMAP_SPRITE_ID
+        assert block["sprite"][0]["id"] != "wd-transport"
+        # namespaced layer ids — the always-replace contract prefix
+        ids = [layer["id"] for layer in block["layers"]]
+        assert ids == [
+            "wd-basemap-transit-stations",
+            "wd-basemap-transit-stations-label",
+        ]
+        # stations only, LATER than the overlay floor (z13 vs z11)
+        icon = block["layers"][0]
+        assert icon["minzoom"] == 13
+        assert icon["filter"] == ["==", ["get", "location_type"], 1]
+        # the icon chain uses the BASEMAP sprite prefix, not the overlay's
+        names = icon["layout"]["icon-image"][2:-1:2]
+        assert names and all(
+            n.startswith(TRANSPORT_BASEMAP_SPRITE_ID + ":") for n in names
+        )
+        # anchors name the freed slots per basemap family
+        assert "highway-name-path" in block["insert_before"]
+        assert "road_path_oneway_symbol" in block["insert_before"]
+
+    def test_compose_anchors_into_the_freed_slot(self) -> None:
+        from server.apps.basemaps.seed_lib import (
+            compose_basemap_style,
+            transport_basemap_block,
+        )
+
+        empty: dict[str, Any] = {}
+        doc: dict[str, Any] = {
+            "version": 8,
+            "sources": {},
+            "layers": [
+                {"id": "background", "type": "background", "layout": empty},
+                {"id": "highway-name-path", "type": "symbol", "layout": empty},
+                {"id": "later", "type": "symbol", "layout": empty},
+            ],
+        }
+        out = compose_basemap_style(doc, [transport_basemap_block()])
+        ids = [layer["id"] for layer in out["layers"]]
+        # inserted BEFORE the anchor — the slot the native POI layer held
+        assert ids == [
+            "background",
+            "wd-basemap-transit-stations",
+            "wd-basemap-transit-stations-label",
+            "highway-name-path",
+            "later",
+        ]
+
+    def test_compose_falls_back_to_the_label_band(self) -> None:
+        from server.apps.basemaps.seed_lib import (
+            compose_basemap_style,
+            transport_basemap_block,
+        )
+
+        doc: dict[str, Any] = {
+            "version": 8,
+            "layers": [
+                {"id": "bg", "type": "background"},
+                {
+                    "id": "place-label",
+                    "type": "symbol",
+                    "layout": {"text-field": "x"},
+                },
+            ],
+        }
+        out = compose_basemap_style(doc, [transport_basemap_block()])
+        ids = [layer["id"] for layer in out["layers"]]
+        assert ids.index("wd-basemap-transit-stations") == 1
+
+    def test_compose_merges_sprite_and_sources_without_collisions(self) -> None:
+        from server.apps.basemaps.seed_lib import (
+            TRANSPORT_BASEMAP_SPRITE_ID,
+            compose_basemap_style,
+            transport_basemap_block,
+        )
+
+        doc: dict[str, Any] = {
+            "version": 8,
+            "sprite": [{"id": "ofm", "url": "x"}],
+            "sources": {"openmaptiles": {"type": "vector"}},
+            "layers": [],
+        }
+        out = compose_basemap_style(doc, [transport_basemap_block()])
+        assert [s["id"] for s in out["sprite"]] == [
+            "ofm",
+            TRANSPORT_BASEMAP_SPRITE_ID,
+        ]
+        assert "wd-basemap-transitland-stops" in out["sources"]
+        assert "openmaptiles" in out["sources"]
+
+
+@pytest.mark.django_db
+class TransportBasemapServingTests:
+    """Serve-time composition: the endpoint serves the composed basemap
+    (never the bare fixture), overlays stay un-composed, and the
+    immutable version token folds the contributing overlay rows."""
+
+    def test_basemap_style_serves_the_composed_document(self) -> None:
+        from django.core.management import call_command
+
+        from server.apps.basemaps.models import MapLayer
+
+        call_command("map_seed", verbosity=0)
+        response = Client().get("/v1/map/styles/wd-outdoor-base-ofm.json")
+        assert response.status_code == 200
+        layers = [layer["id"] for layer in response.json()["layers"]]
+        assert "wd-basemap-transit-stations" in layers
+        assert "wd-basemap-transit-stations-label" in layers
+        # the native transit POIs are gone — ours replace them
+        assert "poi_transit" not in layers
+        # the injected sprite rides along
+        sprites = {s["id"] for s in response.json()["sprite"]}
+        assert "wd-basemap-transport" in sprites
+
+        # overlay styles stay un-composed
+        overlay = Client().get("/v1/map/styles/transport-stops.json")
+        overlay_ids = [layer["id"] for layer in overlay.json()["layers"]]
+        assert "wd-basemap-transit-stations" not in overlay_ids
+
+        # the token rotates when a contributing overlay row changes
+        before = Client().get("/v1/map/styles/wd-outdoor-base-ofm.json")
+        row = MapLayer.objects.filter(
+            slug="transport-stops", profile=MapLayer.Profile.full
+        ).first()
+        assert row is not None
+        row.save(update_fields=["modified"])  # bumps modified
+        after = Client().get("/v1/map/styles/wd-outdoor-base-ofm.json")
+        assert (
+            before.headers["X-Map-Style-Version"]
+            != after.headers["X-Map-Style-Version"]
+        )

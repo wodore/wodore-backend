@@ -4109,39 +4109,6 @@
       }
     },
     {
-      "id": "poi_transit",
-      "type": "symbol",
-      "source": "openmaptiles",
-      "source-layer": "poi",
-      "filter": [
-        "all",
-        ["match", ["geometry-type"], ["Point"], true, false],
-        ["match", ["get", "class"], ["rail", "airport"], true, false]
-      ],
-      "layout": {
-        "icon-image": ["concat", "ofm:", ["to-string", ["get", "class"]]],
-        "icon-size": 0.7,
-        "text-anchor": "left",
-        "text-field": [
-          "case",
-          ["has", "name:nonlatin"],
-          ["concat", ["get", "name:latin"], "\n", ["get", "name:nonlatin"]],
-          ["coalesce", ["get", "name_en"], ["get", "name"]]
-        ],
-        "text-font": ["Barlow Semi Condensed Regular", "Noto Sans Regular"],
-        "text-max-width": 9,
-        "text-offset": [0.9, 0],
-        "text-size": 12
-      },
-      "paint": {
-        "text-color": "hsla(220, 14%, 42%, 1)",
-        "text-halo-blur": 0.5,
-        "text-halo-color": "rgba(242, 247, 244, 0.9)",
-        "text-halo-width": 1
-      },
-      "minzoom": 12.5
-    },
-    {
       "id": "highway-name-path",
       "type": "symbol",
       "source": "openmaptiles",

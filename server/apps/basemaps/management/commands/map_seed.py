@@ -643,6 +643,13 @@ LAYERS: list[dict[str, Any]] = [
             {"slug": "transport", "use": "legend"},
         ],
         "config": {
+            # The overlay's BASEMAP presence ("my POIs, not the
+            # basemap's" — owner 2026-11-17): the style endpoint and
+            # the CI dump compose this block into every basemap at
+            # serve/dump time; the frontend hides the wd-basemap-transit-*
+            # layers while this overlay is active (always-replace by id
+            # namespace — no replaces list to maintain).
+            "basemap": lib.transport_basemap_block(),
             "filters": [
                 {
                     "id": "transportTypes",
@@ -663,7 +670,7 @@ LAYERS: list[dict[str, Any]] = [
                     "mapProperty": "route_types_basic",
                     "filterExpression": "in",
                 }
-            ]
+            ],
         },
     },
     {
