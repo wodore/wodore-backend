@@ -1040,6 +1040,7 @@ class TestSeedTagging:
         assert full.style["sprite"][0]["url"].endswith("/sdf_sprite/transport")
         assert [layer["id"] for layer in full.style["layers"]] == [
             "transport-stops-primitives",
+            "transport-stops-icons-major",
             "transport-stops-icons-stations",
             "transport-stops-selected",
             "transport-stops-icons",
@@ -1772,7 +1773,7 @@ class TransportBasemapBlockTests(SimpleTestCase):
 
 
 @pytest.mark.django_db
-class TransportBasemapServingTests:
+class TestTransportBasemapServing:
     """Serve-time composition: the endpoint serves the composed basemap
     (never the bare fixture), overlays stay un-composed, and the
     immutable version token folds the contributing overlay rows."""
@@ -1783,7 +1784,7 @@ class TransportBasemapServingTests:
         from server.apps.basemaps.models import MapLayer
 
         call_command("map_seed", verbosity=0)
-        response = Client().get("/v1/map/styles/wd-outdoor-base-ofm.json")
+        response = Client().get("/v1/map/styles/wd-outdoor-base-ofm-hill.json")
         assert response.status_code == 200
         layers = [layer["id"] for layer in response.json()["layers"]]
         assert "wd-basemap-transit-stations" in layers
@@ -1793,6 +1794,19 @@ class TransportBasemapServingTests:
         # the injected sprite rides along
         sprites = {s["id"] for s in response.json()["sprite"]}
         assert "wd-basemap-transport" in sprites
+        # B1 regression: NO duplicate layer ids — the frontend's style
+        # gate rejects duplicates, and per-row block collection used to
+        # inject every block layer twice (variant rows share config)
+        assert len(layers) == len(set(layers)), (
+            f"duplicate layer ids: {sorted(x for x in layers if layers.count(x) > 1)}"
+        )
+        # B2 regression: catalog token == endpoint token (the immutable
+        # ?v= URL only works when both compute the same value)
+        catalog = Client().get("/v1/map/layers/wd-outdoor-base-ofm-hill")
+        assert catalog.status_code == 200
+        catalog_version = catalog.json()["style_version"]
+        assert catalog_version is not None
+        assert catalog_version == response.headers["X-Map-Style-Version"]
 
         # overlay styles stay un-composed
         overlay = Client().get("/v1/map/styles/transport-stops.json")
@@ -1800,13 +1814,13 @@ class TransportBasemapServingTests:
         assert "wd-basemap-transit-stations" not in overlay_ids
 
         # the token rotates when a contributing overlay row changes
-        before = Client().get("/v1/map/styles/wd-outdoor-base-ofm.json")
+        before = Client().get("/v1/map/styles/wd-outdoor-base-ofm-hill.json")
         row = MapLayer.objects.filter(
             slug="transport-stops", profile=MapLayer.Profile.full
         ).first()
         assert row is not None
         row.save(update_fields=["modified"])  # bumps modified
-        after = Client().get("/v1/map/styles/wd-outdoor-base-ofm.json")
+        after = Client().get("/v1/map/styles/wd-outdoor-base-ofm-hill.json")
         assert (
             before.headers["X-Map-Style-Version"]
             != after.headers["X-Map-Style-Version"]

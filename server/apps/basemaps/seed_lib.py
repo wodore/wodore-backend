@@ -2574,16 +2574,43 @@ def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
             layer["paint"] = deepcopy(icon_paint)
             layer["layout"]["symbol-sort-key"] = deepcopy(_TRANSPORT_SORT_KEY)
         elif layer["id"] == "transport-stops-icons-stations":
-            # route-rich interchanges reveal a zoom EARLIER (z12) —
-            # the importance proxy is full-only (``length`` op)
-            layer["minzoom"] = 12
-            layer["filter"] = [
-                "all",
-                ["==", ["get", "location_type"], 1],
-                deepcopy(_TRANSPORT_IMPORTANT),
-            ]
+            # keep ALL stations at z13 (base) — the FULL profile adds a
+            # SEPARATE layer for route-rich interchanges at z12 (Opus
+            # review: replacing the filter here dropped ordinary
+            # stations' z13 glyph in the full profile)
             layer["paint"] = deepcopy(icon_paint)
             layer["layout"]["symbol-sort-key"] = deepcopy(_TRANSPORT_SORT_KEY)
+            layers.append(
+                {
+                    # route-rich interchanges reveal a zoom EARLIER —
+                    # the importance proxy is full-only (``length`` op)
+                    "id": "transport-stops-icons-major",
+                    "type": "symbol",
+                    "source": TRANSPORT_SOURCE_ID,
+                    "source-layer": "stops",
+                    "minzoom": 12,
+                    "maxzoom": 14,
+                    "filter": [
+                        "all",
+                        ["==", ["get", "location_type"], 1],
+                        deepcopy(_TRANSPORT_IMPORTANT),
+                    ],
+                    "layout": {
+                        "icon-image": deepcopy(layer["layout"]["icon-image"]),
+                        "icon-size": [
+                            "interpolate",
+                            ["linear"],
+                            ["zoom"],
+                            12,
+                            0.28,
+                            14,
+                            0.35,
+                        ],
+                        "symbol-sort-key": deepcopy(_TRANSPORT_SORT_KEY),
+                    },
+                    "paint": deepcopy(icon_paint),
+                }
+            )
         elif layer["id"] == "transport-stops-icons":
             layers.append(
                 _selected_plate(
@@ -2675,6 +2702,11 @@ def transport_basemap_block(colors: dict[str, str] | None = None) -> dict[str, A
         # wd-station-label). Anchorless basemaps fall back to the
         # label band (see compose_basemap_style).
         "slot": "routes",
+        # The always-replace namespace, explicit for the frontend (the
+        # layer-id prefix cannot be derived from the overlay slug —
+        # hide every `${id_prefix}*` layer while this overlay is
+        # active).
+        "id_prefix": _TRANSPORT_BASEMAP_PREFIX + "-",
         "sprite": [
             {
                 "id": TRANSPORT_BASEMAP_SPRITE_ID,
