@@ -276,10 +276,19 @@
       basemapSelect.addEventListener("change", function() { refresh(); });
     } else { basemapLoaded = true; }
 
-    // ── Live refresh ───────────────────────────────────────────
+    // ── Live refresh ───────────────────────────────────────
     var requestId = 0, refreshTimer = null;
+    var editorVisible = function() {
+      var el = document.getElementById('wd-style-editor-root');
+      return !!el && el.offsetWidth > 0;
+    };
     function debounce(fn, ms) { return function() { clearTimeout(refreshTimer); refreshTimer = setTimeout(fn, ms); }; }
     function refresh() {
+      // Applying a style while the container is display:none leaves
+      // MapLibre with a blank canvas (no repaint ever fires) — only
+      // refresh while the Editor sub-tab is actually visible; the
+      // visibility observer below triggers the first refresh.
+      if (!editorVisible()) return;
       var raw = cm.getValue();
       if (!raw.trim()) { jsonStatusEl.textContent = "empty"; return; }
       jsonStatusEl.textContent = "checking…";
@@ -313,16 +322,16 @@
         .catch(function() { if (thisRequest !== requestId) return; jsonStatusEl.textContent = "request failed"; });
     }
     cm.on("change", debounce(refresh, 600));
-    map.on("load", function() { if (basemapLoaded || layerRole !== "overlay") refresh(); });
 
-    // ── Visibility: resize map + refresh CodeMirror when the Editor
-    //    sub-tab (or the Style top-level tab) becomes visible ──
+    // ── Visibility: the map must apply its style (and paint) while
+    //    visible — resize + refresh on every show of the Editor
+    //    sub-tab / Style top-level tab ──
     var editorRoot = document.getElementById("wd-style-editor-root");
     if (editorRoot) {
-      var resizeTimer = null;
       var ensureSize = debounce(function() {
         if (editorRoot.offsetWidth > 0) {
           try { map.resize(); cm.refresh(); } catch (e) {}
+          refresh();
         }
       }, 150);
       var visObserver = new MutationObserver(ensureSize);
