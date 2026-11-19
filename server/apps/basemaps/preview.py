@@ -214,6 +214,7 @@ def preview_live(request: HttpRequest) -> HttpResponse:
     # has_perm works on both, no isinstance needed.
     if not request.user.is_authenticated:
         return JsonResponse({"error": "Authentication required"}, status=403)
+
     # has_perm on the runtime user (custom model) — getattr bridges the
     # type gap: the stubs type request.user as AbstractBaseUser which
     # does not declare has_perm (only the concrete User classes do)

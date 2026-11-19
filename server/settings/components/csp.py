@@ -22,6 +22,14 @@ CONTENT_SECURITY_POLICY = {
             # and tiles from these):
             "https://tiles.wodore.com",
             "https://tiles.stg.wodore.com",
+            # External basemap tile hosts (admin style editor preview):
+            "https://api.mapy.com",
+            "https://server.arcgisonline.com",
+            "https://services.arcgisonline.com",
+            "https://vectortiles.geo.admin.ch",
+            "https://wmts.geo.admin.ch",
+            "https://api.maptiler.com",
+            "https://tiles.mapbox.com",
         ),
         "default-src": ("'none'",),
         "font-src": (

@@ -8,7 +8,7 @@ live style preview (MapLibre GL, resolved mode) via ``<id>/preview/``.
 
 from __future__ import annotations
 
-from typing import override
+from typing import Any, override
 
 from django.contrib import admin
 from django.http import HttpRequest, HttpResponse
@@ -280,6 +280,25 @@ class MapLayerAdmin(ModelAdmin):
     # admin_view checks this flag to skip csrf_protect — the endpoint
     # is csrf_exempt (read-only, admin-auth + model permission)
     preview_live_view.csrf_exempt = True  # type: ignore[attr-defined]
+
+    @override
+    def change_view(
+        self,
+        request: HttpRequest,
+        object_id: str,
+        form_url: str = "",
+        extra_context: dict[str, Any] | None = None,
+    ) -> HttpResponse:
+        """Pass the pretty-printed style JSON to the template (fast load)."""
+        import json as _json
+
+        extra_context = extra_context or {}
+        obj = self.get_object(request, object_id)
+        if obj is not None and obj.style is not None:
+            extra_context["wd_pretty_style"] = _json.dumps(
+                obj.style, indent=2, ensure_ascii=False
+            )
+        return super().change_view(request, object_id, form_url, extra_context)
 
     def style_serving_url(self, obj: MapLayer) -> str:
         """The public style endpoint URL for this layer variant."""
