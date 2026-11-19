@@ -96,6 +96,7 @@
   <script src="https://unpkg.com/codemirror@5.65.18/addon/edit/closebrackets.js"></script>
   <script src="https://unpkg.com/maplibre-gl@5.9.0/dist/maplibre-gl.js"></script>
   <script>
+  document.addEventListener('DOMContentLoaded', function() {
   (function() {
     "use strict";
     var styleField = document.getElementById("id_style");
@@ -269,6 +270,7 @@
       reader.readAsText(file); e.target.value = "";
     });
   })();
+  });
   </script>
   {% endif %}
 {% endblock %}
