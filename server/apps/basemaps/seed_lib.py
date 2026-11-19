@@ -2814,8 +2814,12 @@ def compose_basemap_style(
     for block in blocks:
         doc.setdefault("sprite", [])
         known = {s.get("id") for s in doc["sprite"] if isinstance(s, dict)}
+        known_urls = {s.get("url") for s in doc["sprite"] if isinstance(s, dict)}
         for entry in block.get("sprite", []):
-            if entry.get("id") not in known:
+            # Dedup by id AND url — MapLibre rejects duplicate sprite
+            # URLs in one style; a repeated URL must reuse the surviving
+            # entry's id in icon references.
+            if entry.get("id") not in known and entry.get("url") not in known_urls:
                 doc["sprite"].append(deepcopy(entry))
         for sid, source in block.get("sources", {}).items():
             doc.setdefault("sources", {}).setdefault(sid, deepcopy(source))

@@ -167,6 +167,22 @@ def _compose_overlay_on_basemap(
     overlay_sprite = overlay_doc.get("sprite") or []
     if isinstance(overlay_sprite, str):
         overlay_sprite = [{"id": "default", "url": overlay_sprite}]
+    # MapLibre rejects duplicate sprite URLs in one style. The overlay
+    # and the basemap block for the same content family (transport,
+    # …) share a sprite URL under different ids: drop the basemap
+    # entries whose URL an overlay sprite also brings — the block that
+    # owned them had its layers removed by the prefix filter above, so
+    # nothing references them anymore, and the overlay's layers
+    # reference the overlay's sprite id.
+    overlay_urls = {
+        s.get("url") for s in overlay_sprite if isinstance(s, dict) and s.get("url")
+    }
+    if overlay_urls and basemap_doc.get("sprite"):
+        basemap_doc["sprite"] = [
+            s
+            for s in basemap_doc["sprite"]
+            if not (isinstance(s, dict) and s.get("url") in overlay_urls)
+        ]
     existing_ids = {
         s.get("id") for s in (basemap_doc.get("sprite") or []) if isinstance(s, dict)
     }
