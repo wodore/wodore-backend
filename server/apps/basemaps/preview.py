@@ -137,21 +137,17 @@ def _compose_overlay_on_basemap(
     if basemap is None or basemap.style is None:
         return overlay_doc, None
 
-    # Resolve the basemap through the same pipeline
-    basemap_doc = _resolve_document(dict(basemap.style), basemap, tile_url)
+    # S1 fix: compose blocks FIRST (on the raw basemap document),
+    # THEN resolve — the blocks carry {{env:…}} tokens that the
+    # serve-time pipeline must resolve too (the old order left them
+    # as literal tokens MapLibre can't fetch)
+    basemap_doc = dict(basemap.style)
 
-    # Compose OTHER overlays' basemap blocks (the one being edited is
-    # excluded — it's the overlay we're previewing). The edited
-    # overlay's own block is REMOVED from the basemap (the frontend
-    # hides wd-basemap-<slug>-* layers while the overlay is active).
     all_blocks, _inputs = basemap_composition(basemap)
     if all_blocks:
         basemap_doc = compose_basemap_style(
             basemap_doc, all_blocks, anchors=basemap.anchors
         )
-    # The edited overlay's block stays in the basemap — hide it (the
-    # frontend hides wd-basemap-<slug>-* layers while the overlay is
-    # active); the simplest preview equivalent is to remove those layers
     overlay_prefix = _overlay_block_prefix(overlay_layer)
     if overlay_prefix:
         basemap_doc["layers"] = [
@@ -159,6 +155,10 @@ def _compose_overlay_on_basemap(
             for layer in basemap_doc.get("layers", [])
             if not str(layer.get("id", "")).startswith(overlay_prefix)
         ]
+
+    # NOW resolve the composed basemap (env + parameter tokens + URL
+    # absolutization — everything, including the block URLs)
+    basemap_doc = _resolve_document(basemap_doc, basemap, tile_url)
 
     # Append the overlay's sources/sprite/layers on top
     for key, source in (overlay_doc.get("sources") or {}).items():
@@ -193,15 +193,21 @@ def _overlay_block_prefix(layer: MapLayer) -> str:
 @require_POST
 def preview_live(request: HttpRequest) -> HttpResponse:
     """POST body: {style_json: str, basemap_slug: str|null, profile: str, slug: str, object_id: int}."""
-    # Permission: only users who can EDIT map layers get previews —
-    # the endpoint resolves env tokens (including API keys) and must
-    # not leak them to read-only staff
+    # Permission: CHANGE permission on this model — not just staff.
+    # The endpoint resolves env tokens (including API keys) and must
+    # not leak them to read-only staff (Opus review B2).
+    from django.contrib.auth.models import User
+
     if not request.user.is_authenticated:
         return JsonResponse({"error": "Authentication required"}, status=403)
-    from django.contrib.admin.sites import site as admin_site
-
-    if not admin_site.has_permission(request):
-        return JsonResponse({"error": "Permission denied"}, status=403)
+    # Model-level change permission — not just staff: the endpoint
+    # resolves env tokens (including API keys) and must not leak them
+    # to read-only staff (Opus review B2).
+    user = request.user
+    if not isinstance(user, User) or not user.has_perm("basemaps.change_maplayer"):
+        return JsonResponse(
+            {"error": "You need change permission on map layers"}, status=403
+        )
 
     try:
         body = json.loads(request.body)

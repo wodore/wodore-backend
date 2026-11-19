@@ -152,15 +152,10 @@
   "use strict";
 
   // ── Tab navigation ─────────────────────────────────────────
-  // Move Django fieldsets into tab panels by matching their h2 legends
-  var fieldsetMap = {
-    "Style": null,  // hidden — the editor tab replaces it
-    "General / General": "general",
-    "Placement & fallback": "config",
-    "Content & interaction": "config",
-    "Legal": "advanced",
-  };
-
+  // Move Django fieldsets into tab panels by matching their h2 legends.
+  // B1: hide only the STYLE FORM ROW, not the whole fieldset — the
+  // fieldset also holds style_url, styl_ignored_rules, min/max_zoom.
+  // S3: untitled fieldsets go to General; Legal goes to Advanced.
   var panels = {
     general: document.getElementById("wd-fieldset-general"),
     config: document.getElementById("wd-fieldset-config"),
@@ -170,24 +165,30 @@
   document.querySelectorAll("fieldset").forEach(function(fs) {
     var legend = fs.querySelector("h2, legend");
     var title = legend ? legend.textContent.trim() : "";
-    // Match by fuzzy title
-    var target = null;
-    if (/style/i.test(title)) { target = "style"; }
-    else if (/placement|content|legal/i.test(title)) { target = "config"; }
-    else if (/general|layer/i.test(title) && !/style/i.test(title)) { target = "general"; }
+    var target = "general"; // default: untitled fieldset → General
 
-    if (target === "style") {
-      fs.style.display = "none"; // hide — the editor tab replaces it
-    } else if (target && panels[target]) {
-      panels[target].appendChild(fs);
+    if (/placement|content/i.test(title)) { target = "config"; }
+    else if (/legal/i.test(title)) { target = "advanced"; }
+    else if (/style/i.test(title)) {
+      // B1: hide only the style form ROW inside the fieldset — the
+      // other fields (style_url, styl_ignored_rules, etc.) stay
+      // visible and editable in the General tab
+      var styleRow = fs.querySelector("#id_style")?.closest(".flex-container, .form-row, fieldset > div");
+      if (styleRow) styleRow.style.display = "none";
+      target = "general";
     }
+
+    if (panels[target]) panels[target].appendChild(fs);
   });
 
-  // Also move inline groups (parameters, categories, attributions) to advanced
-  var inlines = document.querySelector(".inline-group, .js-inline-admin-formset");
-  if (inlines && panels.advanced) {
-    panels.advanced.appendChild(inlines);
-  }
+  // Move inline groups (parameters, categories, attributions) to the
+  // Advanced tab — they render AFTER after_field_sets, so use
+  // requestAnimationFrame to catch them once the DOM settles
+  requestAnimationFrame(function() {
+    document.querySelectorAll(".inline-group, .js-inline-admin-formset").forEach(function(ig) {
+      if (panels.advanced) panels.advanced.appendChild(ig);
+    });
+  });
 
   document.querySelectorAll(".wd-tab-btn").forEach(function(btn) {
     btn.addEventListener("click", function() {
