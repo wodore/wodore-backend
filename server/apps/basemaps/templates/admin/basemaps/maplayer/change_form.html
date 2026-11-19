@@ -193,18 +193,15 @@
       });
     }, 100);
 
-    // Insert tab system between the breadcrumb and the form
+    // Append to body (the ONLY parent that renders — form and its
+    // siblings all collapse/hide injected children) and scroll to it
     var container = document.createElement('div');
-    container.style.cssText = 'margin: 0 auto 20px; max-width: 100%; padding: 0 16px;';
+    container.style.cssText = 'margin: 0 auto 20px; max-width: 1400px; padding: 12px 16px;';
     container.appendChild(tabBar);
     TAB_DEFS.forEach(function(def) { container.appendChild(panels[def.id]); });
-    // Find the form and insert BEFORE it (between breadcrumb and form)
-    var form = document.querySelector('form');
-    if (form && form.parentNode) {
-      form.parentNode.insertBefore(container, form);
-    } else {
-      document.body.appendChild(container);
-    }
+    document.body.appendChild(container);
+    // Bring the style editor into view
+    container.scrollIntoView({behavior: 'instant', block: 'start'});
 
     // ── Style editor: move into the Style tab ─────────────────
     var editorRoot = document.getElementById('wd-style-editor-root');
