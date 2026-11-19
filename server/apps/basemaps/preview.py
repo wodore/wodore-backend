@@ -214,7 +214,16 @@ def preview_live(request: HttpRequest) -> HttpResponse:
     # has_perm works on both, no isinstance needed.
     if not request.user.is_authenticated:
         return JsonResponse({"error": "Authentication required"}, status=403)
-    if not request.user.has_perm("basemaps.change_maplayer"):
+    # has_perm on the runtime user (custom model) — getattr bridges the
+    # type gap: the stubs type request.user as AbstractBaseUser which
+    # does not declare has_perm (only the concrete User classes do)
+    def _has_change_perm(perm: str) -> bool:
+        checker = getattr(request.user, "has_perm", None)
+        if checker is None:
+            return False
+        return bool(checker(perm))
+
+    if not _has_change_perm("basemaps.change_maplayer"):
         return JsonResponse(
             {"error": "You need change permission on map layers"}, status=403
         )
