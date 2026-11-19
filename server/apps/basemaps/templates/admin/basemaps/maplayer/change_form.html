@@ -7,12 +7,32 @@
   <link rel="stylesheet" href="https://unpkg.com/codemirror@5.65.18/theme/material-darker.css" />
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.9.0/dist/maplibre-gl.css" />
   <style>
-    /* Style editor: side-by-side above the form (always visible, no tabs) */
+    /* ── Tab bar (Unfold-compatible) ─────────────────────────── */
+    .wd-tab-bar {
+      display: flex; gap: 0; margin: 0 0 0; padding: 0 16px;
+      border-bottom: 2px solid var(--border-color, #3b4252);
+      overflow-x: auto; white-space: nowrap;
+    }
+    .wd-tab-btn {
+      padding: 10px 20px; font-size: 13.5px; font-weight: 500;
+      border: none; border-bottom: 2px solid transparent; margin-bottom: -2px;
+      background: transparent; color: var(--text-secondary, #888);
+      cursor: pointer; transition: color .15s, border-color .15s;
+    }
+    .wd-tab-btn:hover { color: var(--text-primary, #ddd); }
+    .wd-tab-btn.wd-active {
+      color: var(--accent, #81a1c1); border-bottom-color: var(--accent, #81a1c1);
+      font-weight: 600;
+    }
+    .wd-tab-panel { display: none; padding: 16px 0 0; }
+    .wd-tab-panel.wd-active { display: block; }
+    .wd-tab-panel.wd-scroll { max-height: calc(100vh - 200px); overflow-y: auto; padding-right: 8px; }
+
+    /* ── Style editor (inside its tab) ───────────────────────── */
     .wd-style-editor {
-      display: grid;
-      grid-template-columns: minmax(400px, 1fr) minmax(400px, 1fr);
-      gap: 10px; margin: 12px 0 20px;
-      height: calc(100vh - 200px); min-height: 480px;
+      display: grid; grid-template-columns: minmax(400px, 1fr) minmax(400px, 1fr);
+      gap: 10px; margin: 0 0 16px;
+      height: calc(100vh - 220px); min-height: 480px;
     }
     @media (max-width: 1200px) { .wd-style-editor { grid-template-columns: 1fr; height: auto; } }
     .wd-editor-col, .wd-map-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
@@ -20,26 +40,29 @@
       display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px;
     }
     .wd-toolbar select, .wd-toolbar button, .wd-toolbar label.wd-btn {
-      font-size: 12px; padding: 3px 8px; border: 1px solid var(--border-color, #374151);
-      border-radius: 4px; background: var(--bg-secondary, #1a1a2e); color: var(--text, #e0e0e0); cursor: pointer;
+      font-size: 12px; padding: 3px 10px; border: 1px solid var(--border-color, #374151);
+      border-radius: 4px; background: var(--bg-inset, #1a1a2e); color: var(--text, #e0e0e0); cursor: pointer;
     }
-    .wd-toolbar button:hover, .wd-toolbar label.wd-btn:hover { background: var(--bg-tertiary, #263238); }
-    .wd-status { font-size: 12px; opacity: 0.75; white-space: nowrap; }
+    .wd-toolbar button:hover, .wd-toolbar label.wd-btn:hover { background: var(--bg-hover, #263238); }
+    .wd-status { font-size: 12px; opacity: 0.8; white-space: nowrap; }
     .wd-status .err { color: #ef4444; opacity: 1; }
     .wd-status .ok { color: #22c55e; opacity: 1; }
+
     .CodeMirror {
-      flex: 1; min-height: 300px; border: 1px solid var(--border-color, #374151); border-radius: 6px;
-      font-size: 12px; line-height: 1.45;
+      flex: 1; min-height: 300px; border: 1px solid var(--border-color, #374151);
+      border-radius: 6px; font-size: 12px; line-height: 1.45;
     }
     .CodeMirror-gutters { background: #263238; border-right: 1px solid #374151; }
     .CodeMirror-linenumber { color: #546e7a; }
+
     .wd-map-canvas {
       flex: 1; min-height: 300px; border: 1px solid var(--border-color, #374151); border-radius: 6px;
     }
+
     .wd-lint-panel {
       max-height: 100px; overflow-y: auto; border: 1px solid var(--border-color, #374151);
       border-radius: 6px; padding: 3px 8px; font-size: 11.5px;
-      font-family: monospace; line-height: 1.4; background: var(--bg-secondary, #1a1a2e);
+      font-family: monospace; line-height: 1.4; background: var(--bg-inset, #1a1a2e);
     }
     .wd-lint-panel:empty { display: none; }
     .wd-lint-ok { color: #22c55e; padding: 2px 0; }
@@ -55,84 +78,174 @@
     .wd-g-error { color: #ef4444 !important; font-weight: bold; }
     .wd-g-warning { color: #d97706 !important; }
     .wd-g-info { color: #3b82f6 !important; }
-    /* Hide the raw style textarea row (CodeMirror replaces it) */
-    #id_style { display: none !important; }
-    #id_style.closest("div") { display: none !important; }
-    [for=id_style] { display: none !important; }
   </style>
 {% endblock %}
 
 {% block form_top %}
+  {# Placeholder — the tab system moves content into panels after DOM ready #}
+{% endblock %}
+
+{% block after_field_sets %}
+  {{ block.super }}
+
   {% if object_id and original and original.style is not None %}
-  <div class="wd-style-editor" id="wd-style-editor">
-    <div class="wd-editor-col">
-      <div class="wd-toolbar">
-        <strong>Style JSON</strong>
-        <span class="wd-status" id="wd-json-status"></span>
-        <button type="button" id="wd-export-btn">Export</button>
-        <label class="wd-btn" for="wd-import-file">Import</label>
-        <input type="file" id="wd-import-file" accept=".json" style="display:none" />
+  {# Style editor markup (hidden until JS moves it into the Style tab) #}
+  <div id="wd-style-editor-root" style="display:none">
+    <div class="wd-style-editor">
+      <div class="wd-editor-col">
+        <div class="wd-toolbar">
+          <strong>Style JSON</strong>
+          <span class="wd-status" id="wd-json-status"></span>
+          <button type="button" id="wd-export-btn">Export</button>
+          <label class="wd-btn" for="wd-import-file">Import</label>
+          <input type="file" id="wd-import-file" accept=".json" style="display:none" />
+        </div>
+        <div class="wd-lint-panel" id="wd-lint-panel"></div>
       </div>
-      <div class="wd-lint-panel" id="wd-lint-panel"></div>
-    </div>
-    <div class="wd-map-col">
-      <div class="wd-toolbar">
-        <strong>Preview</strong>
-        {% if original.role == "overlay" %}
-          <label for="wd-basemap-select">Basemap:</label>
-          <select id="wd-basemap-select"><option value="">— standalone —</option></select>
-        {% endif %}
-        <span class="wd-status" id="wd-preview-status"></span>
+      <div class="wd-map-col">
+        <div class="wd-toolbar">
+          <strong>Preview</strong>
+          {% if original.role == "overlay" %}
+            <label for="wd-basemap-select">Basemap:</label>
+            <select id="wd-basemap-select"><option value="">— standalone —</option></select>
+          {% endif %}
+          <span class="wd-status" id="wd-preview-status"></span>
+        </div>
+        <div class="wd-map-canvas" id="wd-map-canvas"></div>
       </div>
-      <div class="wd-map-canvas" id="wd-map-canvas"></div>
     </div>
   </div>
 
-  {# Pretty-printed style JSON (server-side; |safe: server-generated, not user input) #}
   <script type="application/json" id="wd-style-data">{{ wd_pretty_style|safe|default:'{}' }}</script>
 
   <script src="https://unpkg.com/codemirror@5.65.18/lib/codemirror.js"></script>
   <script src="https://unpkg.com/codemirror@5.65.18/mode/javascript/javascript.js"></script>
   <script src="https://unpkg.com/codemirror@5.65.18/addon/edit/closebrackets.js"></script>
   <script src="https://unpkg.com/maplibre-gl@5.9.0/dist/maplibre-gl.js"></script>
+
   <script>
   document.addEventListener('DOMContentLoaded', function() {
-  (function() {
     "use strict";
-    var styleField = document.getElementById("id_style");
-    if (!styleField) return;
 
+    // ── Tab system: group fieldsets into named tabs ────────────
+    var TAB_DEFS = [
+      { id: 'general',  label: 'General',     match: /^(?!Style|Placement|Content|Legal|Layer)/ },
+      { id: 'style',    label: 'Style',       match: /^Style$/ },
+      { id: 'config',   label: 'Config',      match: /^(Placement|Content|Legal)/ },
+      { id: 'params',   label: 'Parameters',  match: /^Layer parameters$/ },
+      { id: 'cats',     label: 'Categories',  match: /^Layer categories$/ },
+      { id: 'attribs',  label: 'Attributions',match: /^Layer attributions$/ },
+    ];
+
+    var tabBar = document.createElement('div');
+    tabBar.className = 'wd-tab-bar';
+    var panels = {};
+
+    // Create tab buttons and panels
+    TAB_DEFS.forEach(function(def) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'wd-tab-btn' + (def.id === 'general' ? ' wd-active' : '');
+      btn.textContent = def.label;
+      btn.dataset.tab = def.id;
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.wd-tab-btn').forEach(function(b) { b.classList.remove('wd-active'); });
+        document.querySelectorAll('.wd-tab-panel').forEach(function(p) { p.classList.remove('wd-active'); });
+        btn.classList.add('wd-active');
+        var panel = document.getElementById('wd-panel-' + def.id);
+        if (panel) panel.classList.add('wd-active');
+        if (def.id === 'style') { cmRefresh(); mapResize(); }
+      });
+      tabBar.appendChild(btn);
+
+      var panel = document.createElement('div');
+      panel.className = 'wd-tab-panel' + (def.id === 'general' ? ' wd-active' : '') + (def.id !== 'style' ? ' wd-scroll' : '');
+      panel.id = 'wd-panel-' + def.id;
+      panels[def.id] = panel;
+    });
+
+    // Move fieldsets into their tab panels
+    document.querySelectorAll('fieldset').forEach(function(fs) {
+      var legend = fs.querySelector('h2, legend');
+      var title = legend ? legend.textContent.trim() : '';
+      for (var def of TAB_DEFS) {
+        if (def.match.test(title)) {
+          panels[def.id].appendChild(fs);
+          // Hide the legend (redundant — the tab says it already)
+          if (legend && def.id !== 'general') legend.style.display = 'none';
+          return;
+        }
+      }
+      // Default: General
+      panels.general.appendChild(fs);
+    });
+
+    // Move inline groups (rendered after after_field_sets)
+    setTimeout(function() {
+      document.querySelectorAll('.inline-group, .js-inline-admin-formset').forEach(function(ig) {
+        var heading = ig.querySelector('h2, .inline-heading');
+        var title = heading ? heading.textContent.trim() : '';
+        if (/parameters/i.test(title)) panels.params.appendChild(ig);
+        else if (/categor/i.test(title)) panels.cats.appendChild(ig);
+        else if (/attribution/i.test(title)) panels.attribs.appendChild(ig);
+        else panels.general.appendChild(ig);
+        if (heading) heading.style.display = 'none';
+      });
+    }, 100);
+
+    // Insert the tab bar + panels before the form's submit row
+    var submitRow = document.querySelector('.submit-row');
+    var container = document.createElement('div');
+    container.appendChild(tabBar);
+    TAB_DEFS.forEach(function(def) { container.appendChild(panels[def.id]); });
+    if (submitRow) {
+      submitRow.parentNode.insertBefore(container, submitRow);
+    } else {
+      var form = document.querySelector('form');
+      if (form) form.appendChild(container);
+    }
+
+    // ── Style editor: move into the Style tab ─────────────────
+    var editorRoot = document.getElementById('wd-style-editor-root');
+    if (editorRoot) {
+      editorRoot.style.display = '';
+      panels.style.appendChild(editorRoot);
+    }
+
+    // Hide the raw style fieldset row (the Style tab replaces it)
+    var styleField = document.getElementById('id_style');
+    if (styleField) {
+      var row = styleField.closest('.flex-container, .form-row, fieldset > div');
+      if (row) row.style.display = 'none';
+    }
+
+    // ── CodeMirror ─────────────────────────────────────────────
+    var lintPanel = document.getElementById('wd-lint-panel');
+    var statusEl = document.getElementById('wd-preview-status');
+    var jsonStatusEl = document.getElementById('wd-json-status');
+    var basemapSelect = document.getElementById('wd-basemap-select');
     var layerSlug = "{{ original.slug|escapejs }}";
     var layerProfile = "{{ original.profile|escapejs }}";
     var layerRole = "{{ original.role|escapejs }}";
     var objectId = {{ object_id|default:'null' }};
     var previewUrl = "{% url 'admin:basemaps_maplayer_preview_live' %}";
-    var basemapSelect = document.getElementById("wd-basemap-select");
-    var lintPanel = document.getElementById("wd-lint-panel");
-    var statusEl = document.getElementById("wd-preview-status");
-    var jsonStatusEl = document.getElementById("wd-json-status");
 
-    // Server-side pretty-printed JSON (fast, no client-side parse)
     var prettyValue = document.getElementById("wd-style-data")?.textContent || "{}";
 
     var cm = CodeMirror(lintPanel.parentNode.insertBefore(document.createElement("div"), lintPanel), {
       value: prettyValue,
       mode: { name: "javascript", json: true },
       theme: "material-darker",
-      lineNumbers: true,
-      autoCloseBrackets: true,
-      lineWrapping: false,
+      lineNumbers: true, autoCloseBrackets: true, lineWrapping: false,
       indentUnit: 2, tabSize: 2,
       gutters: ["CodeMirror-linenumbers", "wd-lint-gutter"],
     });
-    // Sync back to the Django form field
-    cm.on("change", function() { styleField.value = cm.getValue(); });
+    cm.on("change", function() { if (styleField) styleField.value = cm.getValue(); });
 
-    // Hide the raw textarea row (after CodeMirror takes over)
-    var styleRow = styleField.closest("div");
-    if (styleRow) styleRow.style.display = "none";
+    function cmRefresh() { if (cm) { cm.refresh(); } }
+    function mapResize() { if (map) map.resize(); }
 
-    // ── Lint ────────────────────────────────────────────────────
+    // ── Lint ───────────────────────────────────────────────────
     function setGutter(findings) {
       cm.clearGutter("wd-lint-gutter");
       var byLine = {};
@@ -146,7 +259,6 @@
         var m = document.createElement("div");
         m.className = "wd-g-" + worst;
         m.textContent = items.length > 1 ? items.length + "×" : "●";
-        m.title = items.map(function(f) { return f.message; }).join("\n");
         cm.setGutterMarker(parseInt(lineNo, 10) - 1, "wd-lint-gutter", m);
       });
     }
@@ -167,16 +279,13 @@
         el.className = "wd-lint-item " + f.severity;
         var src = document.createElement("span");
         src.className = "src " + (f.severity === "info" ? "info" : f.source);
-        src.textContent = f.source;
-        el.appendChild(src);
+        src.textContent = f.source; el.appendChild(src);
         if (f.line) {
           var ln = document.createElement("span");
-          ln.className = "line-no"; ln.textContent = "L" + f.line;
-          el.appendChild(ln);
+          ln.className = "line-no"; ln.textContent = "L" + f.line; el.appendChild(ln);
         }
         var msg = document.createElement("span");
-        msg.className = "msg"; msg.textContent = f.message;
-        el.appendChild(msg);
+        msg.className = "msg"; msg.textContent = f.message; el.appendChild(msg);
         lintPanel.appendChild(el);
       });
     }
@@ -189,11 +298,6 @@
     });
     map.addControl(new maplibregl.NavigationControl());
     map.addControl(new maplibregl.ScaleControl());
-    map.on("error", function(e) {
-      statusEl.textContent = "";
-      statusEl.appendChild(document.createTextNode("map error: " + (e.error?.message || "unknown")));
-      statusEl.classList.add("err");
-    });
 
     // ── Basemap selector ───────────────────────────────────────
     var basemapLoaded = false;
@@ -269,23 +373,13 @@
       };
       reader.readAsText(file); e.target.value = "";
     });
-  })();
+
+    // Activate the Style tab by default for layers with inline styles
+    {% if original.style is not None %}
+    var styleTab = tabBar.querySelector('[data-tab="style"]');
+    if (styleTab) styleTab.click();
+    {% endif %}
   });
   </script>
   {% endif %}
-{% endblock %}
-
-{% block after_field_sets %}
-  {{ block.super }}
-  {# Hide the raw style textarea row (CodeMirror replaced it) #}
-  <style>#id_style { display: none !important; } [for=id_style] { display: none !important; }</style>
-  <script>
-  (function() {
-    var styleField = document.getElementById('id_style');
-    if (styleField) {
-      var row = styleField.closest('div');
-      if (row) row.style.display = 'none';
-    }
-  })();
-  </script>
 {% endblock %}
