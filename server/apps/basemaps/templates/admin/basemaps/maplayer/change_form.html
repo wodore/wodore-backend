@@ -101,16 +101,18 @@
     var styleField = document.getElementById("id_style");
     if (!styleField) return;
 
-    // Show the editor in its natural position (after_field_sets) —
-    // do NOT move it in the DOM (the form's parent collapses injected siblings).
-    // Just hide the raw style field and scroll to the editor.
+    // ── Move the editor INTO the native Unfold "Style" fieldset tab ──
+    // (fieldsets with classes=["tab"] render as native Unfold tabs; each
+    //  tab wrapper carries the class fieldset-<slugified-name>)
     var editorRoot = document.getElementById('wd-style-editor-root');
     if (editorRoot) {
       editorRoot.style.display = 'grid';
-      var styleRow = styleField.closest('.flex-container, .form-row, fieldset > div');
-      if (styleRow) styleRow.style.display = 'none';
-      // Scroll the editor into view
-      setTimeout(function() { editorRoot.scrollIntoView({behavior: 'smooth', block: 'start'}); }, 200);
+      var styleTab = document.querySelector('.tab-wrapper.fieldset-style');
+      if (styleTab) {
+        styleTab.appendChild(editorRoot);
+        var styleRow = styleField.closest('.flex-container, .form-row, fieldset > div');
+        if (styleRow) styleRow.style.display = 'none';
+      }
     }
 
     var layerSlug = "{{ original.slug|escapejs }}";
@@ -247,6 +249,18 @@
     }
     cm.on("change", debounce(refresh, 600));
     map.on("load", function() { if (basemapLoaded || layerRole !== "overlay") refresh(); });
+
+    // ── Tab visibility: Unfold toggles fieldset tabs via Alpine x-show.
+    //    Resize the map / refresh CodeMirror when the Style tab becomes visible.
+    var styleTabEl = document.querySelector('.tab-wrapper.fieldset-style');
+    if (styleTabEl) {
+      var visObserver = new MutationObserver(function() {
+        if (styleTabEl.offsetWidth > 0) {
+          try { map.resize(); cm.refresh(); } catch (e) {}
+        }
+      });
+      visObserver.observe(styleTabEl, {attributes: true, attributeFilter: ['style']});
+    }
 
     // ── Export / Import ────────────────────────────────────────
     document.getElementById("wd-export-btn").addEventListener("click", function() {

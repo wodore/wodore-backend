@@ -42,6 +42,7 @@ class MapLayerParameterInline(admin.TabularInline[MapLayerParameter, MapLayer]):
 
     model = MapLayerParameter
     tab = True
+    verbose_name_plural = _("Parameters")
     extra = 0
     autocomplete_fields = ("parameter",)
 
@@ -51,6 +52,7 @@ class MapLayerCategoryInline(admin.TabularInline[MapLayerCategory, MapLayer]):
 
     model = MapLayerCategory
     tab = True
+    verbose_name_plural = _("Categories")
     extra = 0
     autocomplete_fields = ("category",)
 
@@ -60,6 +62,7 @@ class MapLayerAttributionInline(admin.TabularInline[MapLayerAttribution, MapLaye
 
     model = MapLayerAttribution
     tab = True
+    verbose_name_plural = _("Attributions")
     extra = 0
     autocomplete_fields = ("organization",)
 
@@ -191,8 +194,9 @@ class MapLayerAdmin(ModelAdmin):
     readonly_fields = ("style_serving_url",)
     fieldsets = (
         (
-            None,
+            _("General"),
             {
+                "classes": ["tab"],
                 "fields": (
                     "slug",
                     "spec",
@@ -208,12 +212,13 @@ class MapLayerAdmin(ModelAdmin):
                     "show",
                     "is_active",
                     "is_default",
-                )
+                ),
             },
         ),
         (
             _("Style"),
             {
+                "classes": ["tab"],
                 "fields": (
                     "style",
                     "style_url",
@@ -221,18 +226,25 @@ class MapLayerAdmin(ModelAdmin):
                     "min_zoom",
                     "max_zoom",
                     "style_serving_url",
-                )
+                ),
             },
         ),
         (
-            _("Placement & fallback"),
-            {"fields": ("coverage", "fallback_min_zoom", "fallback", "anchors")},
+            _("Config"),
+            {
+                "classes": ["tab"],
+                "fields": (
+                    "coverage",
+                    "fallback_min_zoom",
+                    "fallback",
+                    "anchors",
+                    "config",
+                    "interaction",
+                    "preview_url",
+                    "license",
+                ),
+            },
         ),
-        (
-            _("Content & interaction"),
-            {"fields": ("config", "interaction", "preview_url")},
-        ),
-        (_("Legal"), {"fields": ("license",)}),
     )
 
     @display(description=_("Style"), boolean=True)
