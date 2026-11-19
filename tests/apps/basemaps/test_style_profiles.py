@@ -669,11 +669,9 @@ class TransportVectorContractTests(SimpleTestCase):
                     1,
                     0,
                 ]
-            assert plate["paint"]["circle-stroke-color"][1] == [
-                "boolean",
-                ["feature-state", "color"],
-                False,
-            ]
+            # FIXED ring accent — never the mode color, so active
+            # cannot read as a bigger hover (owner 2026-11-16)
+            assert plate["paint"]["circle-stroke-color"] == "#2673bf"
 
         # z-order: each plate sits BEFORE its icon band
         order = [layer["id"] for layer in TRANSPORT_STYLE["layers"]]
