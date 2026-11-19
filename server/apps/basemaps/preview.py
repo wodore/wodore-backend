@@ -20,6 +20,7 @@ import json
 from typing import Any
 
 from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
 from server.apps.basemaps.api import basemap_composition
@@ -190,9 +191,21 @@ def _overlay_block_prefix(layer: MapLayer) -> str:
     return ""
 
 
+@csrf_exempt
 @require_POST
 def preview_live(request: HttpRequest) -> HttpResponse:
-    """POST body: {style_json: str, basemap_slug: str|null, profile: str, slug: str, object_id: int}."""
+    """POST body: {style_json: str, basemap_slug: str|null, profile: str, slug: str, object_id: int}.
+
+    ``@csrf_exempt`` is safe here: the endpoint is read-only (returns
+    JSON, never mutates), requires an authenticated admin session AND
+    the ``basemaps.change_maplayer`` model permission, and is only
+    called same-origin from the admin page. The standard CSRF token
+    flow cannot work: ``CSRF_COOKIE_HTTPONLY=True`` prevents JS from
+    reading the cookie, and the form's ``csrfmiddlewaretoken`` is a
+    masked token for form POST fields, not the ``X-CSRFToken`` header
+    (they are DIFFERENT values — Django compares the header against
+    the cookie, not the form token).
+    """
     # Permission: CHANGE permission on this model — not just staff.
     # The endpoint resolves env tokens (including API keys) and must
     # not leak them to read-only staff (Opus review B2).

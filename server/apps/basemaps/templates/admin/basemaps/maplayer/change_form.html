@@ -209,7 +209,6 @@
   var layerRole = "{{ original.role|escapejs }}";
   var objectId = {{ object_id|default:'null' }};
   var previewUrl = "{% url 'admin:basemaps_maplayer_preview_live' %}";
-  var csrfToken = document.querySelector("[name=csrfmiddlewaretoken]")?.value || "";
   var basemapSelect = document.getElementById("wd-basemap-select");
   var lintPanel = document.getElementById("wd-lint-panel");
   var statusEl = document.getElementById("wd-preview-status");
@@ -347,7 +346,7 @@
     var thisRequest = ++requestId;
     fetch(previewUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         style_json: raw,
         basemap_slug: basemapSelect ? basemapSelect.value : null,
