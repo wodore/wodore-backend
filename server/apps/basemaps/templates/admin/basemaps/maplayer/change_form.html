@@ -5,7 +5,7 @@
   {{ block.super }}
   <link rel="stylesheet" href="https://unpkg.com/codemirror@5.65.18/lib/codemirror.css" />
   <link rel="stylesheet" href="https://unpkg.com/codemirror@5.65.18/theme/material-darker.css" />
-  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.9.0/dist/maplibre-gl.css" />
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.14.0/dist/maplibre-gl.css" />
   <style>
     .wd-style-editor {
       display: grid; grid-template-columns: minmax(400px, 1fr) minmax(400px, 1fr);
@@ -91,10 +91,12 @@
   <script type="application/json" id="wd-style-data">{{ wd_pretty_style|safe|default:'{}' }}</script>
   {% endif %}
 
-  {# ── Tab promotion: Style & Config fieldset tabs → top-level Unfold tabs ──
-     Runs synchronously BEFORE Alpine initializes (Alpine loads deferred), so
-     the moved containers and added nav links get bound by Alpine's first scan.
-     The Style tab gains sub-tabs (Settings | Editor) when the editor exists. #}
+  {% comment %}
+    Tab promotion: Style & Config fieldset tabs → top-level Unfold tabs.
+    Runs synchronously BEFORE Alpine initializes (Alpine loads deferred), so
+    the moved containers and added nav links get bound by Alpine's first scan.
+    The Style tab gains sub-tabs (Settings | Editor) when the editor exists.
+  {% endcomment %}
   <script>
   (function () {
     "use strict";
@@ -166,10 +168,24 @@
   <script src="https://unpkg.com/codemirror@5.65.18/lib/codemirror.js"></script>
   <script src="https://unpkg.com/codemirror@5.65.18/mode/javascript/javascript.js"></script>
   <script src="https://unpkg.com/codemirror@5.65.18/addon/edit/closebrackets.js"></script>
-  <script src="https://unpkg.com/maplibre-gl@5.9.0/dist/maplibre-gl.js"></script>
 
-  <script>
-  document.addEventListener('DOMContentLoaded', function() {
+  {# MapLibre GL v6 via ESM — v5's UMD bundle lacks the full MLT tile
+     decoder ("only optional string fields are implemented"), v6 dropped
+     UMD entirely. Named imports; module scripts are deferred so the
+     classic tab-promotion script below still runs first.
+     v6 loads its tile-parsing worker from a sibling .mjs via
+     new Worker(url) — browsers refuse cross-origin workers, so the
+     self-contained worker source is fetched and re-served as a
+     same-origin blob through setWorkerUrl (CSP worker-src allows
+     blob:). #}
+  <script type="module">
+  import { Map, NavigationControl, ScaleControl, setWorkerUrl } from "https://unpkg.com/maplibre-gl@6.14.0/dist/maplibre-gl.mjs";
+
+  const workerSrc = await fetch("https://unpkg.com/maplibre-gl@6.14.0/dist/maplibre-gl-worker.mjs")
+    .then(r => r.text());
+  setWorkerUrl(URL.createObjectURL(new Blob([workerSrc], {type: "text/javascript"})));
+
+  const initEditor = function() {
     "use strict";
 
     var styleField = document.getElementById("id_style");
@@ -249,13 +265,15 @@
     }
 
     // ── MapLibre ───────────────────────────────────────────────
-    var map = new maplibregl.Map({
+    var map = new Map({
       container: "wd-map-canvas",
       style: {version: 8, layers: [], sources: {}},
       center: [8.2, 46.8], zoom: 7,
     });
-    map.addControl(new maplibregl.NavigationControl());
-    map.addControl(new maplibregl.ScaleControl());
+    map.addControl(new NavigationControl());
+    map.addControl(new ScaleControl());
+    // Debug/console affordance: window.__wdMap (used by E2E tests too)
+    window.__wdMap = map;
 
     // ── Basemap selector ───────────────────────────────────────
     var basemapLoaded = false;
@@ -358,7 +376,15 @@
       };
       reader.readAsText(file); e.target.value = "";
     });
-  });
+  };
+
+  // Module scripts run before DOMContentLoaded, but the top-level await
+  // above delays this continuation past it — guard both cases.
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initEditor);
+  } else {
+    initEditor();
+  }
   </script>
   {% endif %}
 {% endblock %}
