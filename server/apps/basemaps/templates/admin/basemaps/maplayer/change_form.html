@@ -101,16 +101,18 @@
     var styleField = document.getElementById("id_style");
     if (!styleField) return;
 
-    // ── Move the style editor to the TOP of the form (before all fieldsets) ──
+    // Insert BEFORE the form (sibling — not inside its collapsed flex)
     var editorRoot = document.getElementById('wd-style-editor-root');
     if (editorRoot) {
-      editorRoot.style.display = '';
-      // Insert as the FIRST child inside the form's main content area
+      editorRoot.style.display = 'grid';
+      editorRoot.style.height = 'calc(100vh - 160px)';
+      editorRoot.style.minHeight = '480px';
       var form = document.querySelector('form');
-      if (form) {
-        form.insertBefore(editorRoot, form.firstChild);
+      if (form && form.parentNode) {
+        form.parentNode.insertBefore(editorRoot, form);
+      } else {
+        document.body.prepend(editorRoot);
       }
-      // Hide the raw style field row
       var styleRow = styleField.closest('.flex-container, .form-row, fieldset > div');
       if (styleRow) styleRow.style.display = 'none';
     }
