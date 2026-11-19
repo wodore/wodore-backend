@@ -4,17 +4,19 @@
 {% block extrastyle %}
   {{ block.super }}
   <link rel="stylesheet" href="https://unpkg.com/codemirror@5.65.18/lib/codemirror.css" />
+  <link rel="stylesheet" href="https://unpkg.com/codemirror@5.65.18/theme/material-darker.css" />
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.9.0/dist/maplibre-gl.css" />
   <style>
     /* ── Tab navigation ──────────────────────────────────────── */
     .wd-tabs { display: flex; gap: 0; margin: 16px 0 0; border-bottom: 2px solid var(--field-border, #ddd); }
     .wd-tab-btn {
       padding: 8px 18px; font-size: 13px; font-weight: 600;
-      border: 1px solid var(--field-border, #ccc); border-bottom: none;
-      border-radius: 6px 6px 0 0; background: var(--button-bg, #f8f9fa);
+      border: 1px solid var(--field-border, #374151); border-bottom: none;
+      border-radius: 6px 6px 0 0; background: var(--dark-bg, #1a1a2e);
+      color: var(--body-fg, #e0e0e0);
       cursor: pointer; margin-right: 2px;
     }
-    .wd-tab-btn.active { background: var(--body-bg, #fff); border-bottom: 2px solid var(--body-bg, #fff); margin-bottom: -2px; }
+    .wd-tab-btn.active { background: var(--dark-bg, #263238); border-bottom: 2px solid var(--dark-bg, #263238); margin-bottom: -2px; }
     .wd-tab-btn:hover { background: var(--button-hover-bg, #e9ecef); }
     .wd-tab-panel { display: none; padding-top: 14px; }
     .wd-tab-panel.active { display: block; }
@@ -36,30 +38,40 @@
     }
     .wd-editor-toolbar select, .wd-editor-toolbar button, .wd-editor-toolbar label.wd-btn {
       font-size: 12.5px; padding: 3px 10px;
-      border: 1px solid var(--field-border, #ccc); border-radius: 4px;
-      background: var(--button-bg, #f8f9fa); cursor: pointer;
+      border: 1px solid var(--field-border, #374151); border-radius: 4px;
+      background: var(--dark-bg, #1a1a2e); color: var(--body-fg, #e0e0e0);
+      cursor: pointer;
     }
-    .wd-editor-toolbar button:hover, .wd-editor-toolbar label.wd-btn:hover { background: var(--button-hover-bg, #e9ecef); }
+    .wd-editor-toolbar button:hover, .wd-editor-toolbar label.wd-btn:hover { background: var(--dark-bg, #263238); }
     .wd-status { font-size: 12px; opacity: 0.75; white-space: nowrap; }
     .wd-status .err { color: var(--error-fg, #dc3545); opacity: 1; }
     .wd-status .ok { color: var(--success-fg, #28a745); opacity: 1; }
 
     .CodeMirror {
       flex: 1; min-height: 300px;
-      border: 1px solid var(--field-border, #ccc); border-radius: 6px;
+      border: 1px solid var(--field-border, #374151); border-radius: 6px;
       font-size: 12.5px; line-height: 1.45;
+      background: var(--dark-bg, #263238); color: #eeffff;
     }
+    .CodeMirror-gutters { background: var(--dark-bg, #263238); border-right: 1px solid #374151; }
+    .CodeMirror-linenumber { color: #546e7a; }
+
+    /* Hide Django admin's native tab bar (Unfold inline tabs) —
+    our custom tabs replace them */
+    .tab-content .nav-tabs, .nav-tabs { display: none !important; }
+    .tab-content { padding-top: 0 !important; border-top: none !important; }
     .wd-map-canvas {
       flex: 1; min-height: 300px;
-      border: 1px solid var(--field-border, #ccc); border-radius: 6px;
+      border: 1px solid var(--field-border, #374151); border-radius: 6px;
     }
 
     /* ── Lint panel ──────────────────────────────────────────── */
     .wd-lint-panel {
       max-height: 120px; overflow-y: auto;
-      border: 1px solid var(--field-border, #ccc); border-radius: 6px;
+      border: 1px solid var(--field-border, #374151); border-radius: 6px;
       padding: 4px 8px; font-size: 12px;
       font-family: var(--font-family-monospace, monospace); line-height: 1.45;
+      background: var(--dark-bg, #1e1e1e);
     }
     .wd-lint-panel:empty { display: none; }
     .wd-lint-ok { color: var(--success-fg, #28a745); padding: 3px 0; }
@@ -227,6 +239,7 @@
   var cm = CodeMirror(document.createElement("div"), {
     value: prettyValue,
     mode: { name: "javascript", json: true },
+    theme: "material-darker",
     lineNumbers: true,
     autoCloseBrackets: true,
     lineWrapping: false,
