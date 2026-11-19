@@ -277,6 +277,10 @@ class MapLayerAdmin(ModelAdmin):
 
         return preview_live(request)
 
+    # admin_view checks this flag to skip csrf_protect — the endpoint
+    # is csrf_exempt (read-only, admin-auth + model permission)
+    preview_live_view.csrf_exempt = True  # type: ignore[attr-defined]
+
     def style_serving_url(self, obj: MapLayer) -> str:
         """The public style endpoint URL for this layer variant."""
         if not obj.pk:
