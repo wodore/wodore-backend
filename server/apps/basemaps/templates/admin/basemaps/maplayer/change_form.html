@@ -9,8 +9,8 @@
   <style>
     .wd-style-editor {
       display: grid; grid-template-columns: minmax(400px, 1fr) minmax(400px, 1fr);
-      gap: 10px; margin: 0 0 20px;
-      height: calc(100vh - 200px); min-height: 480px;
+      gap: 10px; margin: 12px 0 20px;
+      height: calc(100vh - 220px); min-height: 480px;
     }
     @media (max-width: 1200px) { .wd-style-editor { grid-template-columns: 1fr; height: auto; } }
     .wd-editor-col, .wd-map-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
@@ -61,8 +61,9 @@
 
 {% block after_field_sets %}
   {{ block.super }}
+
+  {# ── Style editor root (placed by the tab-promotion script below) ── #}
   {% if object_id and original and original.style is not None %}
-  {# Style editor: rendered after fieldsets, moved to top of form by JS #}
   <div id="wd-style-editor-root" class="wd-style-editor" style="display:none">
     <div class="wd-editor-col">
       <div class="wd-toolbar">
@@ -88,7 +89,80 @@
   </div>
 
   <script type="application/json" id="wd-style-data">{{ wd_pretty_style|safe|default:'{}' }}</script>
+  {% endif %}
 
+  {# ── Tab promotion: Style & Config fieldset tabs → top-level Unfold tabs ──
+     Runs synchronously BEFORE Alpine initializes (Alpine loads deferred), so
+     the moved containers and added nav links get bound by Alpine's first scan.
+     The Style tab gains sub-tabs (Settings | Editor) when the editor exists. #}
+  <script>
+  (function () {
+    "use strict";
+    var nav = document.getElementById("tabs-items");
+    var fieldsetsArea = document.querySelector('div[x-data][x-show="activeTab == \'general\'"]');
+    if (!nav || !fieldsetsArea) return;
+
+    var generalLink = nav.querySelector('a[href="#general"]');
+    var styleWrap = fieldsetsArea.querySelector(".tab-wrapper.fieldset-style");
+    var configWrap = fieldsetsArea.querySelector(".tab-wrapper.fieldset-config");
+    var generalWrap = fieldsetsArea.querySelector(".tab-wrapper.fieldset-general");
+    if (!generalLink || !styleWrap || !configWrap) return;
+
+    // General: render directly, no second-level tab bar anymore
+    if (generalWrap) generalWrap.removeAttribute("x-show");
+    var oldNav = fieldsetsArea.querySelector("nav");
+    if (oldNav) oldNav.remove();
+
+    // Style container: top-level tab with Settings | Editor sub-tabs
+    var editorRoot = document.getElementById("wd-style-editor-root");
+    var styleContainer = document.createElement("div");
+    styleContainer.setAttribute("x-data", "{ styleSub: 'settings' }");
+    styleContainer.setAttribute("x-show", "activeTab == 'style'");
+    styleWrap.setAttribute("x-show", "styleSub == 'settings'");
+    styleContainer.appendChild(styleWrap);
+    if (editorRoot) {
+      var subnavWrap = document.createElement("div");
+      subnavWrap.className = "border-b border-base-200 dark:border-base-800";
+      var subnav = document.createElement("nav");
+      subnav.className = "flex flex-row items-center *:border-x *:border-transparent *:font-medium *:text-important *:first:border-l-0 *:cursor-pointer *:relative *:py-2 *:px-3.5 *:hover:text-primary-600 dark:*:hover:text-primary-500 dark:*:border-transparent [&>.active]:bg-white dark:[&>.active]:bg-base-900 [&>.active]:border-base-200 dark:[&>.active]:border-base-800  [&>.active]:text-primary-600 dark:[&>.active]:text-primary-500 [&>.active]:after:absolute [&>.active]:after:content-[''] [&>.active]:after:-bottom-px [&>.active]:after:left-0 [&>.active]:after:right-0 [&>.active]:after:h-px [&>.active]:after:bg-white dark:[&>.active]:after:bg-base-900";
+      var settingsLink = document.createElement("a");
+      settingsLink.textContent = "{% trans 'Settings' %}";
+      settingsLink.setAttribute("x-on:click", "styleSub = 'settings'");
+      settingsLink.setAttribute("x-bind:class", "{'active': styleSub == 'settings'}");
+      var editorLink = document.createElement("a");
+      editorLink.textContent = "{% trans 'Editor' %}";
+      editorLink.setAttribute("x-on:click", "styleSub = 'editor'");
+      editorLink.setAttribute("x-bind:class", "{'active': styleSub == 'editor'}");
+      subnav.appendChild(settingsLink);
+      subnav.appendChild(editorLink);
+      subnavWrap.appendChild(subnav);
+      styleContainer.insertBefore(subnavWrap, styleWrap);
+      editorRoot.setAttribute("x-show", "styleSub == 'editor'");
+      styleContainer.appendChild(editorRoot);
+    }
+    fieldsetsArea.parentNode.insertBefore(styleContainer, fieldsetsArea.nextSibling);
+
+    // Config container: top-level tab
+    var configContainer = document.createElement("div");
+    configContainer.setAttribute("x-show", "activeTab == 'config'");
+    configWrap.removeAttribute("x-show");
+    configContainer.appendChild(configWrap);
+    styleContainer.parentNode.insertBefore(configContainer, styleContainer.nextSibling);
+
+    // Top-level nav links: General | Style | Config | <inlines…>
+    function makeLink(label, slug) {
+      var a = document.createElement("a");
+      a.href = "#" + slug;
+      a.setAttribute("x-on:click", "activeTab = '" + slug + "'");
+      a.setAttribute("x-bind:class", "{'active': activeTab == '" + slug + "'}");
+      a.textContent = label;
+      return a;
+    }
+    generalLink.after(makeLink("{% trans 'Style' %}", "style"), makeLink("{% trans 'Config' %}", "config"));
+  })();
+  </script>
+
+  {% if object_id and original and original.style is not None %}
   <script src="https://unpkg.com/codemirror@5.65.18/lib/codemirror.js"></script>
   <script src="https://unpkg.com/codemirror@5.65.18/mode/javascript/javascript.js"></script>
   <script src="https://unpkg.com/codemirror@5.65.18/addon/edit/closebrackets.js"></script>
@@ -101,19 +175,10 @@
     var styleField = document.getElementById("id_style");
     if (!styleField) return;
 
-    // ── Move the editor INTO the native Unfold "Style" fieldset tab ──
-    // (fieldsets with classes=["tab"] render as native Unfold tabs; each
-    //  tab wrapper carries the class fieldset-<slugified-name>)
-    var editorRoot = document.getElementById('wd-style-editor-root');
-    if (editorRoot) {
-      editorRoot.style.display = 'grid';
-      var styleTab = document.querySelector('.tab-wrapper.fieldset-style');
-      if (styleTab) {
-        styleTab.appendChild(editorRoot);
-        var styleRow = styleField.closest('.flex-container, .form-row, fieldset > div');
-        if (styleRow) styleRow.style.display = 'none';
-      }
-    }
+    // Hide the raw style textarea row (the Style ▸ Settings tab keeps the
+    // field in the form for submission; CodeMirror is the editing surface).
+    var styleRow = styleField.closest('.flex-container, .form-row, fieldset > div');
+    if (styleRow) styleRow.style.display = 'none';
 
     var layerSlug = "{{ original.slug|escapejs }}";
     var layerProfile = "{{ original.profile|escapejs }}";
@@ -250,16 +315,22 @@
     cm.on("change", debounce(refresh, 600));
     map.on("load", function() { if (basemapLoaded || layerRole !== "overlay") refresh(); });
 
-    // ── Tab visibility: Unfold toggles fieldset tabs via Alpine x-show.
-    //    Resize the map / refresh CodeMirror when the Style tab becomes visible.
-    var styleTabEl = document.querySelector('.tab-wrapper.fieldset-style');
-    if (styleTabEl) {
-      var visObserver = new MutationObserver(function() {
-        if (styleTabEl.offsetWidth > 0) {
+    // ── Visibility: resize map + refresh CodeMirror when the Editor
+    //    sub-tab (or the Style top-level tab) becomes visible ──
+    var editorRoot = document.getElementById("wd-style-editor-root");
+    if (editorRoot) {
+      var resizeTimer = null;
+      var ensureSize = debounce(function() {
+        if (editorRoot.offsetWidth > 0) {
           try { map.resize(); cm.refresh(); } catch (e) {}
         }
-      });
-      visObserver.observe(styleTabEl, {attributes: true, attributeFilter: ['style']});
+      }, 150);
+      var visObserver = new MutationObserver(ensureSize);
+      visObserver.observe(editorRoot, {attributes: true, attributeFilter: ["style"]});
+      var styleContainer = editorRoot.parentNode;
+      if (styleContainer) {
+        visObserver.observe(styleContainer, {attributes: true, attributeFilter: ["style"]});
+      }
     }
 
     // ── Export / Import ────────────────────────────────────────
