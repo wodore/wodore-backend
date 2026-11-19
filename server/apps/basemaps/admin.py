@@ -248,6 +248,11 @@ class MapLayerAdmin(ModelAdmin):
                 self.admin_site.admin_view(self.preview_view),
                 name="basemaps_maplayer_preview",
             ),
+            path(
+                "preview-live/",
+                self.admin_site.admin_view(self.preview_live_view),
+                name="basemaps_maplayer_preview_live",
+            ),
         ]
         return custom + urls
 
@@ -265,6 +270,12 @@ class MapLayerAdmin(ModelAdmin):
             "title": _("Preview: %(layer)s") % {"layer": layer.slug},
         }
         return render(request, "admin/basemaps/maplayer/preview.html", context)
+
+    def preview_live_view(self, request: HttpRequest) -> HttpResponse:
+        """Live style preview: resolve + lint + compose (admin widget)."""
+        from server.apps.basemaps.preview import preview_live
+
+        return preview_live(request)
 
     def style_serving_url(self, obj: MapLayer) -> str:
         """The public style endpoint URL for this layer variant."""
