@@ -101,20 +101,16 @@
     var styleField = document.getElementById("id_style");
     if (!styleField) return;
 
-    // Insert BEFORE the form (sibling — not inside its collapsed flex)
+    // Show the editor in its natural position (after_field_sets) —
+    // do NOT move it in the DOM (the form's parent collapses injected siblings).
+    // Just hide the raw style field and scroll to the editor.
     var editorRoot = document.getElementById('wd-style-editor-root');
     if (editorRoot) {
       editorRoot.style.display = 'grid';
-      editorRoot.style.height = 'calc(100vh - 160px)';
-      editorRoot.style.minHeight = '480px';
-      var form = document.querySelector('form');
-      if (form && form.parentNode) {
-        form.parentNode.insertBefore(editorRoot, form);
-      } else {
-        document.body.prepend(editorRoot);
-      }
       var styleRow = styleField.closest('.flex-container, .form-row, fieldset > div');
       if (styleRow) styleRow.style.display = 'none';
+      // Scroll the editor into view
+      setTimeout(function() { editorRoot.scrollIntoView({behavior: 'smooth', block: 'start'}); }, 200);
     }
 
     var layerSlug = "{{ original.slug|escapejs }}";
