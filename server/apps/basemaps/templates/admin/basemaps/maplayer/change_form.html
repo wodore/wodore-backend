@@ -137,6 +137,7 @@
     var layerProfile = "{{ original.profile|escapejs }}";
     var layerRole = "{{ original.role|escapejs }}";
     var previewUrl = "{% url 'admin:basemaps_maplayer_preview_live' %}";
+    var csrfToken = document.querySelector("[name=csrfmiddlewaretoken]")?.value || "";
     var basemapSelect = document.getElementById("wd-basemap-select");
     var lintPanel = document.getElementById("wd-lint-panel");
     var statusEl = document.getElementById("wd-preview-status");
@@ -252,6 +253,7 @@
 
     // ── Live refresh loop ───────────────────────────────────────────
     var refreshTimer = null;
+    var requestId = 0;
     function debounce(fn, ms) {
       return function() {
         clearTimeout(refreshTimer);
@@ -266,18 +268,24 @@
         return;
       }
       jsonStatusEl.textContent = "checking…";
+      var thisRequest = ++requestId;
       fetch(previewUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": csrfToken,
+        },
         body: JSON.stringify({
           style_json: raw,
           basemap_slug: basemapSelect ? basemapSelect.value : null,
           profile: layerProfile,
           slug: layerSlug,
+          object_id: {{ object_id|default:'null' }},
         }),
       })
         .then(function(r) { return r.json(); })
         .then(function(data) {
+          if (thisRequest !== requestId) return; // stale response
           if (data.error && !data.style) {
             jsonStatusEl.innerHTML = '<span class="err">JSON error</span>';
             renderLint(data.lint || [], data.styl_available !== false);

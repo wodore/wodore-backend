@@ -7,7 +7,7 @@ absolutization) plus the basemap composition for overlays, then
 returns:
 
 * the renderable MapLibre style document
-* styl findings (E/W codes with line positions when the binary is on PATH)
+* styl findings (via the existing ``validation.run_styl`` helper)
 * subset walker findings (for subset-profile rows or any document)
 * the resolved basemap's slug (when an overlay asked for one)
 
@@ -17,16 +17,12 @@ document; the lint findings highlight gutter lines in the editor.
 """
 
 import json
-import shutil
-import subprocess
-from pathlib import Path
-from tempfile import NamedTemporaryFile
 from typing import Any
 
 from django.http import HttpRequest, HttpResponse, JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
+from server.apps.basemaps.api import basemap_composition
 from server.apps.basemaps.models import MapLayer
 from server.apps.basemaps.resolution import (
     absolutize_urls,
@@ -35,55 +31,49 @@ from server.apps.basemaps.resolution import (
     substitute_env_tree,
 )
 from server.apps.basemaps.seed_lib import compose_basemap_style
-from server.apps.basemaps.validation import validate_subset_style
-
-#: styl binary lookup (None = not on PATH; the endpoint reports a hint)
-_STYL: str | None = shutil.which("styl")
+from server.apps.basemaps.validation import run_styl, validate_subset_style
 
 
-def _styl_findings(style_json: str) -> list[dict[str, Any]]:
-    """Run the styl linter on a raw style document; return findings."""
-    if _STYL is None:
-        return []
-    try:
-        with NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-            f.write(style_json)
-            path = f.name
-        result = subprocess.run(
-            [_STYL, "lint", path],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        Path(path).unlink(missing_ok=True)
-    except (OSError, subprocess.TimeoutExpired):
+def _normalize_sprite(doc: dict[str, Any]) -> dict[str, Any]:
+    """Normalize the sprite field to array-of-dicts (spec allows str)."""
+    sprite = doc.get("sprite")
+    if isinstance(sprite, str):
+        doc["sprite"] = [{"id": "default", "url": sprite}]
+    elif sprite is None:
+        empty_sprite: list[dict[str, str]] = []
+        doc["sprite"] = empty_sprite
+    return doc
+
+
+def _styl_findings(
+    doc: dict[str, Any], ignored_rules: list[str] | None
+) -> list[dict[str, Any]]:
+    """Run the styl linter via the existing helper; return findings."""
+    ignored: list[str] = ignored_rules or []
+    if ignored == ["*"]:
+        return []  # wholesale skip (external-derived styles)
+    result = run_styl(doc, ignored)
+    if result is None:
         return []
     findings: list[dict[str, Any]] = []
-    for line in (result.stdout + result.stderr).splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        # styl output format: path:line:col: [Exxx] message
-        # or: path: [Exxx] message
-        parts = line.split(":", 3)
-        if len(parts) >= 3 and parts[1].strip().isdigit():
-            findings.append(
-                {
-                    "source": "styl",
-                    "severity": "error" if "[E" in line else "warning",
-                    "line": int(parts[1].strip()),
-                    "message": parts[-1].strip() if len(parts) > 3 else line,
-                }
-            )
-        elif "[E" in line or "[W" in line:
-            findings.append(
-                {
-                    "source": "styl",
-                    "severity": "error" if "[E" in line else "warning",
-                    "line": None,
-                    "message": line,
-                }
-            )
+    for msg in result.errors:
+        findings.append(
+            {
+                "source": "styl",
+                "severity": "error",
+                "line": None,
+                "message": msg,
+            }
+        )
+    for msg in result.warnings:
+        findings.append(
+            {
+                "source": "styl",
+                "severity": "warning",
+                "line": None,
+                "message": msg,
+            }
+        )
     return findings
 
 
@@ -106,10 +96,113 @@ def _walker_findings(doc: dict[str, Any]) -> list[dict[str, Any]]:
         ]
 
 
-@csrf_exempt
+def _resolve_document(
+    doc: dict[str, Any],
+    layer: MapLayer | None,
+    tile_url: str,
+) -> dict[str, Any]:
+    """Resolve a document through the serve-time pipeline."""
+    resolved = substitute_env_tree(doc)
+    # Parameter tokens: the row's authored defaults, or empty for a
+    # document that has no row yet (live editing before save)
+    if layer is not None and layer.pk:
+        values = layer.authored_parameter_values()
+        for link in layer.layer_parameters.select_related("parameter"):
+            if values.get(link.parameter.slug) is None:
+                served = link.parameter.serve_time_value()
+                if served is not None:
+                    values[link.parameter.slug] = served
+    else:
+        values: dict[str, Any] = {}
+    resolved = resolve_tokens(resolved, values)
+    api_url = ""
+    resolved = absolutize_urls(resolved, tile_url, api_url=api_url)
+    return _normalize_sprite(resolved)
+
+
+def _compose_overlay_on_basemap(
+    overlay_doc: dict[str, Any],
+    overlay_layer: MapLayer,
+    basemap_slug: str,
+    tile_url: str,
+) -> tuple[dict[str, Any], str | None]:
+    """Compose an overlay on a basemap for preview (frontend parity)."""
+    basemap = MapLayer.pick_variant(
+        MapLayer.objects.filter(
+            slug=basemap_slug, role=MapLayer.Role.basemap, is_active=True
+        ),
+        spec=None,
+        profile=MapLayer.Profile.full,
+    )
+    if basemap is None or basemap.style is None:
+        return overlay_doc, None
+
+    # Resolve the basemap through the same pipeline
+    basemap_doc = _resolve_document(dict(basemap.style), basemap, tile_url)
+
+    # Compose OTHER overlays' basemap blocks (the one being edited is
+    # excluded — it's the overlay we're previewing). The edited
+    # overlay's own block is REMOVED from the basemap (the frontend
+    # hides wd-basemap-<slug>-* layers while the overlay is active).
+    all_blocks, _inputs = basemap_composition(basemap)
+    if all_blocks:
+        basemap_doc = compose_basemap_style(
+            basemap_doc, all_blocks, anchors=basemap.anchors
+        )
+    # The edited overlay's block stays in the basemap — hide it (the
+    # frontend hides wd-basemap-<slug>-* layers while the overlay is
+    # active); the simplest preview equivalent is to remove those layers
+    overlay_prefix = _overlay_block_prefix(overlay_layer)
+    if overlay_prefix:
+        basemap_doc["layers"] = [
+            layer
+            for layer in basemap_doc.get("layers", [])
+            if not str(layer.get("id", "")).startswith(overlay_prefix)
+        ]
+
+    # Append the overlay's sources/sprite/layers on top
+    for key, source in (overlay_doc.get("sources") or {}).items():
+        basemap_doc.setdefault("sources", {}).setdefault(key, source)
+    overlay_sprite = overlay_doc.get("sprite") or []
+    if isinstance(overlay_sprite, str):
+        overlay_sprite = [{"id": "default", "url": overlay_sprite}]
+    existing_ids = {
+        s.get("id") for s in (basemap_doc.get("sprite") or []) if isinstance(s, dict)
+    }
+    for sprite in overlay_sprite:
+        if isinstance(sprite, dict) and sprite.get("id") not in existing_ids:
+            basemap_doc.setdefault("sprite", []).append(sprite)
+    # Overlay layers append at the END (above everything — the frontend
+    # appends overlay layers via addLayer which places them on top)
+    for layer in overlay_doc.get("layers") or []:
+        basemap_doc.setdefault("layers", []).append(layer)
+    if overlay_doc.get("glyphs"):
+        basemap_doc.setdefault("glyphs", overlay_doc["glyphs"])
+
+    return basemap_doc, basemap.slug
+
+
+def _overlay_block_prefix(layer: MapLayer) -> str:
+    """The wd-basemap-<slug>-* prefix from the overlay's config.basemap."""
+    block = (layer.config or {}).get("basemap")
+    if isinstance(block, dict):
+        return str(block.get("id_prefix", ""))
+    return ""
+
+
 @require_POST
 def preview_live(request: HttpRequest) -> HttpResponse:
-    """POST body: {style_json: str, basemap_slug: str|null, profile: str}."""
+    """POST body: {style_json: str, basemap_slug: str|null, profile: str, slug: str, object_id: int}."""
+    # Permission: only users who can EDIT map layers get previews —
+    # the endpoint resolves env tokens (including API keys) and must
+    # not leak them to read-only staff
+    if not request.user.is_authenticated:
+        return JsonResponse({"error": "Authentication required"}, status=403)
+    from django.contrib.admin.sites import site as admin_site
+
+    if not admin_site.has_permission(request):
+        return JsonResponse({"error": "Permission denied"}, status=403)
+
     try:
         body = json.loads(request.body)
     except (json.JSONDecodeError, KeyError):
@@ -118,6 +211,15 @@ def preview_live(request: HttpRequest) -> HttpResponse:
     raw_style = body.get("style_json", "")
     basemap_slug = body.get("basemap_slug") or None
     profile = body.get("profile", "")
+    slug = body.get("slug", "")
+    object_id = body.get("object_id")
+
+    # Find the row (may be None for unsaved — live editing)
+    layer: MapLayer | None = None
+    if object_id:
+        layer = MapLayer.objects.filter(pk=object_id).first()
+    elif slug:
+        layer = MapLayer.objects.filter(slug=slug).first()
 
     # Parse the editor content
     try:
@@ -137,11 +239,25 @@ def preview_live(request: HttpRequest) -> HttpResponse:
             }
         )
 
-    # Lint (always: walker on any doc; styl when available)
-    lint = _styl_findings(raw_style)
+    if not isinstance(doc, dict):
+        return JsonResponse(
+            {
+                "error": "style must be a JSON object",
+                "lint": [
+                    {
+                        "source": "json",
+                        "severity": "error",
+                        "line": None,
+                        "message": "top-level document must be an object",
+                    }
+                ],
+            }
+        )
+
+    # Lint
+    styl_ignored = (layer.styl_ignored_rules if layer else None) or []
+    lint = _styl_findings(doc, styl_ignored)
     if profile != "subset":
-        # full-profile rows: walker findings are informational, not
-        # blocking — the doc is ALLOWED to leave the subset whitelist
         walker = _walker_findings(doc)
         for w in walker:
             w["severity"] = "info"
@@ -149,93 +265,20 @@ def preview_live(request: HttpRequest) -> HttpResponse:
     else:
         lint += _walker_findings(doc)
 
-    # Resolve the document (serve-time pipeline, minus volatile params)
-    resolved = substitute_env_tree(doc)
-    resolved = resolve_tokens(resolved, {})
     tile_url = resolve_setting("MARTIN_TILE_URL")
-    resolved = absolutize_urls(resolved, tile_url, api_url="")
+    resolved = _resolve_document(doc, layer, tile_url)
 
     # For overlays: compose on the requested basemap
     basemap_used = None
-    if basemap_slug:
-        basemap = MapLayer.objects.filter(
-            slug=basemap_slug, role=MapLayer.Role.basemap, is_active=True
-        ).first()
-        if basemap is not None and basemap.style is not None:
-            basemap_doc = basemap.style
-            # resolve basemap tokens too
-            basemap_doc = substitute_env_tree(basemap_doc)
-            basemap_doc = resolve_tokens(basemap_doc, {})
-            basemap_doc = absolutize_urls(basemap_doc, tile_url, api_url="")
-
-            # compose basemap blocks (the reverse: our overlay's block
-            # would be in the basemap — but we're previewing the
-            # overlay, so we want the basemap's blocks MINUS ours)
-            blocks, _inputs = _basemap_blocks_excluding(basemap, body.get("slug", ""))
-            if blocks:
-                basemap_doc = compose_basemap_style(
-                    dict(basemap_doc), blocks, anchors=basemap.anchors
-                )
-
-            # append the overlay's sources/sprite/layers on top
-            for key, source in (resolved.get("sources") or {}).items():
-                basemap_doc.setdefault("sources", {})[key] = source
-            for sprite in resolved.get("sprite") or []:
-                if isinstance(sprite, dict):
-                    sprite_id = sprite.get("id")
-                    existing = {
-                        s.get("id")
-                        for s in (basemap_doc.get("sprite") or [])
-                        if isinstance(s, dict)
-                    }
-                    if sprite_id not in existing:
-                        basemap_doc.setdefault("sprite", []).append(sprite)
-                elif isinstance(sprite, str) and sprite not in (
-                    basemap_doc.get("sprite") or []
-                ):
-                    basemap_doc.setdefault("sprite", []).append(sprite)
-            for layer in resolved.get("layers") or []:
-                basemap_doc.setdefault("layers", []).append(layer)
-            if resolved.get("glyphs"):
-                basemap_doc.setdefault("glyphs", resolved["glyphs"])
-
-            resolved = basemap_doc
-            basemap_used = basemap.slug
+    if basemap_slug and layer is not None:
+        resolved, basemap_used = _compose_overlay_on_basemap(
+            resolved, layer, basemap_slug, tile_url
+        )
 
     return JsonResponse(
         {
             "style": resolved,
             "lint": lint,
             "basemap": basemap_used,
-            "styl_available": _STYL is not None,
         }
     )
-
-
-def _basemap_blocks_excluding(
-    basemap: MapLayer, exclude_slug: str
-) -> tuple[list[dict[str, Any]], list[str]]:
-    """Collect basemap blocks from overlay rows, excluding one slug."""
-
-    if (
-        basemap.role != MapLayer.Role.basemap
-        or basemap.profile == MapLayer.Profile.subset
-    ):
-        return [], []
-    overlays = (
-        MapLayer.objects.filter(role=MapLayer.Role.overlay, is_active=True)
-        .only("pk", "slug", "spec", "profile", "modified", "config", "role")
-        .order_by("pk")
-    )
-    blocks: list[dict[str, Any]] = []
-    inputs: list[str] = []
-    seen: set[str] = set()
-    for overlay in overlays:
-        if overlay.slug == exclude_slug or overlay.slug in seen:
-            continue
-        block = (overlay.config or {}).get("basemap")
-        if isinstance(block, dict) and block.get("layers"):
-            blocks.append(block)
-            inputs.append(f"basemap-block:{overlay.pk}:{overlay.modified.isoformat()}")
-            seen.add(overlay.slug)
-    return blocks, inputs
