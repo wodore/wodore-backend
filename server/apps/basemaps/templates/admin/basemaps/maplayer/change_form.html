@@ -62,8 +62,7 @@
   </style>
 {% endblock %}
 
-{% block after_field_sets %}
-  {{ block.super }}
+{% block form_top %}
   {% if object_id and original and original.style is not None %}
   <div class="wd-style-editor" id="wd-style-editor">
     <div class="wd-editor-col">
@@ -272,4 +271,19 @@
   })();
   </script>
   {% endif %}
+{% endblock %}
+
+{% block after_field_sets %}
+  {{ block.super }}
+  {# Hide the raw style textarea row (CodeMirror replaced it) #}
+  <style>#id_style { display: none !important; } [for=id_style] { display: none !important; }</style>
+  <script>
+  (function() {
+    var styleField = document.getElementById('id_style');
+    if (styleField) {
+      var row = styleField.closest('div');
+      if (row) row.style.display = 'none';
+    }
+  })();
+  </script>
 {% endblock %}
