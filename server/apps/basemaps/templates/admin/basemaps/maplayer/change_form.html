@@ -193,13 +193,18 @@
       });
     }, 100);
 
-    // Insert the tab bar + panels at the END of the body (visible —
-    // NOT inside the form or its siblings which are flex/hidden NAV)
+    // Insert tab system between the breadcrumb and the form
     var container = document.createElement('div');
     container.style.cssText = 'margin: 0 auto 20px; max-width: 100%; padding: 0 16px;';
     container.appendChild(tabBar);
     TAB_DEFS.forEach(function(def) { container.appendChild(panels[def.id]); });
-    document.body.appendChild(container);
+    // Find the form and insert BEFORE it (between breadcrumb and form)
+    var form = document.querySelector('form');
+    if (form && form.parentNode) {
+      form.parentNode.insertBefore(container, form);
+    } else {
+      document.body.appendChild(container);
+    }
 
     // ── Style editor: move into the Style tab ─────────────────
     var editorRoot = document.getElementById('wd-style-editor-root');
