@@ -88,8 +88,8 @@
     </div>
   </div>
 
-  {# Pretty-printed style JSON (server-side, fast) #}
-  <script type="application/json" id="wd-style-data">{{ wd_pretty_style|default:'{}' }}</script>
+  {# Pretty-printed style JSON (server-side; |safe: server-generated, not user input) #}
+  <script type="application/json" id="wd-style-data">{{ wd_pretty_style|safe|default:'{}' }}</script>
 
   <script src="https://unpkg.com/codemirror@5.65.18/lib/codemirror.js"></script>
   <script src="https://unpkg.com/codemirror@5.65.18/mode/javascript/javascript.js"></script>
