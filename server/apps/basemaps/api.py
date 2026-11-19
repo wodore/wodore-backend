@@ -56,6 +56,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from copy import deepcopy
 from datetime import datetime
 from http import HTTPStatus
 from typing import Any
@@ -79,6 +80,7 @@ from server.apps.api.controller import (
 )
 from server.apps.api.error_codes import ErrorCode
 from server.apps.api.query import dump_sparse, dump_sparse_list, sparse_fields_query
+from server.apps.basemaps.seed_lib import compose_basemap_style
 from server.apps.translations import LanguageQuery, override
 
 from .models import (
@@ -412,7 +414,8 @@ def _style_url(
     if layer.style is not None:
         url = style_endpoint_url(layer.slug, layer.spec, profile=profile)
         if token is None:
-            token = style_version(layer)
+            _blocks, block_inputs = basemap_composition(layer)
+            token = style_version(layer, extra_inputs=block_inputs)
         if token:
             separator = "&" if "?" in url else "?"
             url = f"{url}{separator}v={token}"
@@ -428,6 +431,7 @@ def style_version(
     versions: dict[str, Any] | None = None,
     epoch: str | None = None,
     now: datetime | None = None,
+    extra_inputs: list[str] | None = None,
 ) -> str | None:
     """URL version token for one layer's style documents (``?v=``).
 
@@ -469,6 +473,10 @@ def style_version(
             layer.modified.isoformat(),
             version_digest(consumed),
             epoch,
+            # basemap composition inputs: the overlay rows whose blocks
+            # the endpoint merged in — a block change rotates every
+            # basemap URL that carries it (owner 2026-11-17)
+            *(extra_inputs or []),
         )
     )
     return hashlib.sha256(source.encode()).hexdigest()[:12]
@@ -482,7 +490,8 @@ def _resolved_entry(layer: MapLayer, profile: str | None = None) -> dict[str, An
     the pre-profile URL); the entry always reports the resolved row's
     own ``profile``/``version``.
     """
-    token = style_version(layer)
+    _blocks, block_inputs = basemap_composition(layer)
+    token = style_version(layer, extra_inputs=block_inputs)
     coverage_bbox = None
     if layer.coverage and layer.coverage.bbox:
         coverage_bbox = list(layer.coverage.bbox)
@@ -547,7 +556,7 @@ def _resolved_entry(layer: MapLayer, profile: str | None = None) -> dict[str, An
         "style_url": _style_url(layer, token, profile),
         "style_version": token,
         "modified": layer.modified.isoformat(),
-        "config": layer.config,
+        "config": _catalog_config(layer),
         "interaction": layer.interaction,
         "anchors": layer.anchors,
         "parameters": parameters,
@@ -556,6 +565,21 @@ def _resolved_entry(layer: MapLayer, profile: str | None = None) -> dict[str, An
         "license": license_payload,
         "legend": _legend_payload(layer),
     }
+
+
+def _catalog_config(layer: MapLayer) -> dict[str, Any] | None:
+    """Serve-time config for the catalog: the basemap BLOCK is stripped.
+
+    The block carries raw ``{{env:…}}`` tile URLs (server-side
+    secrets plumbing) and is a serve-time composition detail — the
+    catalog consumer needs ``id_prefix`` only, and the frontend
+    contract documents it (Opus review: no block in the API).
+    """
+    if not layer.config:
+        return None
+    config = dict(layer.config)
+    config.pop("basemap", None)
+    return config or None
 
 
 def _legend_payload(layer: MapLayer) -> dict[str, Any] | None:
@@ -860,6 +884,55 @@ class MapCatalogController(ApiController):
 # ── Style endpoint (plain view, hidden from the OpenAPI schema) ───────
 
 
+def basemap_composition(
+    layer: MapLayer,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Overlay basemap blocks for one basemap row + their version inputs.
+
+    Shared by the style endpoint, the catalog token and the cache key
+    (Opus review B1/B2): ONE collector so all three agree on what a
+    composed basemap contains.
+
+    * subset-profile basemap rows are NOT composed (the block's SDF
+      halo paints and operators are subset-forbidden, and the Leaflet
+      fallback cannot tint anyway);
+    * ONE block per overlay SLUG — variant rows share the parent's
+      config, so collecting per row would inject duplicate layer ids
+      (the frontend's style gate rejects duplicates); the full-profile
+      row wins, else the first active variant;
+    * returns ``(blocks, inputs)`` — the inputs fold into the immutable
+      version token AND the style-body cache digest, so an overlay
+      block edit rotates URLs and bodies together.
+    """
+    if (
+        layer.role != MapLayer.Role.basemap
+        or layer.profile == MapLayer.Profile.subset
+        or layer.style is None
+    ):
+        return [], []
+    overlays = (
+        MapLayer.objects.filter(role=MapLayer.Role.overlay, is_active=True)
+        .only("pk", "slug", "spec", "profile", "modified", "config", "role")
+        .order_by("pk")
+    )
+    by_slug: dict[str, tuple[int, MapLayer, dict[str, Any]]] = {}
+    for overlay in overlays:
+        block = (overlay.config or {}).get("basemap")
+        if not (isinstance(block, dict) and block.get("layers")):
+            continue
+        rank = 0 if overlay.profile != MapLayer.Profile.subset else 1
+        current = by_slug.get(overlay.slug)
+        if current is None or rank < current[0]:
+            by_slug[overlay.slug] = (rank, overlay, block)
+    blocks: list[dict[str, Any]] = []
+    inputs: list[str] = []
+    for slug in sorted(by_slug):
+        _rank, overlay, block = by_slug[slug]
+        blocks.append(block)
+        inputs.append(f"basemap-block:{overlay.pk}:{overlay.modified.isoformat()}")
+    return blocks, inputs
+
+
 def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
     """Serve a layer style — resolved by default, tokenized opt-in.
 
@@ -910,6 +983,24 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
         response.headers["Cache-Control"] = REVALIDATE_CACHE_CONTROL
         return response
 
+    # Basemap composition (owner 2026-11-17): overlay basemap blocks
+    # (config.basemap — "my POIs, not the basemap's") merge in at SERVE
+    # time, so admin edits to either row survive and no re-seed is
+    # needed. The composed document is what gets resolved, cached,
+    # digested and ETagged; the contributing overlay rows' modified
+    # stamps fold into the immutable version token (a block change
+    # rotates every basemap URL that carries it).
+    #
+    # Subset-profile basemap rows (Leaflet fallback) are NOT composed:
+    # the block carries SDF halo paints and operators the subset
+    # whitelist forbids, and the fallback renderer cannot tint anyway.
+    style_doc = layer.style
+    blocks, block_inputs = basemap_composition(layer)
+    if blocks:
+        style_doc = compose_basemap_style(
+            deepcopy(style_doc), blocks, anchors=layer.anchors
+        )
+
     from .tile_assets import (
         asset_versions,
         consumed_versions,
@@ -921,8 +1012,19 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
     # Per-style digest: only the version groups this style's asset URLs
     # consume — a hut-data edit re-keys the huts overlay, not the
     # basemaps. Placeholder-aware, so it runs on the authored style
-    # before resolution (absolutization preserves paths).
-    consumed = consumed_versions(layer.style, versions)
+    # before resolution (absolutization preserves paths) — the COMPOSED
+    # document for basemaps (the injected sprite URLs consume their
+    # own version groups).
+    consumed = consumed_versions(style_doc, versions)
+    if block_inputs:
+        # Fold the composition inputs into the digest TOO — the digest
+        # feeds the style-body cache key, so an overlay-block edit must
+        # not keep serving the pre-edit composed body under the old key
+        # (Opus review B2: the token rotated but the cache did not).
+        consumed = {
+            **consumed,
+            **{f"basemap-block:{i}": value for i, value in enumerate(block_inputs)},
+        }
     if not tokenized:
         # Resolved mode bakes serve-time values into volatile
         # parameters — the cache key and ETag must rotate with them, or
@@ -945,7 +1047,9 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
     # below — an immutable stamp can never pair a token with a body it
     # does not describe. Stale/missing token: current content under the
     # bounded-staleness catalog policy (s-maxage=60), never immutable.
-    token = style_version(layer, versions=versions, epoch=epoch)
+    token = style_version(
+        layer, versions=versions, epoch=epoch, extra_inputs=block_inputs
+    )
     versioned = token is not None and request.GET.get("v") == token
     cache_control = (
         IMMUTABLE_CACHE_CONTROL if versioned else REVALIDATE_EDGE_CACHE_CONTROL
@@ -976,7 +1080,7 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
                 values[link.parameter.slug] = served
 
     payload = resolve_style(
-        layer.style,
+        style_doc,
         values,
         tokenized=tokenized,
         api_url=api_url,

@@ -541,18 +541,22 @@ class TransportVectorContractTests(SimpleTestCase):
         assert all(icon.startswith(prefix) for icon in TRANSPORT_ICONS.values())
         assert TRANSPORT_ICON_FALLBACK == prefix + "mono/transport.transport"
 
-    def test_circle_layer_contract(self) -> None:
-        circle = TRANSPORT_STYLE["layers"][0]
-        assert circle["id"] == "transport-stops"
-        assert circle["type"] == "circle"
-        assert circle["source-layer"] == "stops"
-        # nothing below z11; icons take over exactly at z14 (exclusive)
-        assert circle["minzoom"] == 11
-        assert circle["maxzoom"] == 14
-        # zoomed out: ONE marker per stop group — parent stations plus
-        # standalone (parentless) stops; parented platforms hide behind
-        # their station (case-folded OR: any/all not subset-whitelisted)
-        assert circle["filter"] == [
+    def test_primitives_layer_contract(self) -> None:
+        """z11–z13.99 renders PRIMITIVE mode markers, not anonymous dots
+        (owner 2026-11-17) — one marker per stop group, collision-active."""
+        from server.apps.basemaps.seed_lib import (
+            TRANSPORT_MODES,
+            TRANSPORT_PRIMITIVE_FALLBACK,
+            TRANSPORT_PRIMITIVES,
+        )
+
+        band = TRANSPORT_STYLE_SUBSET["layers"][0]
+        assert band["id"] == "transport-stops-primitives"
+        assert band["type"] == "symbol"
+        assert band["source-layer"] == "stops"
+        assert band["minzoom"] == 11
+        assert band["maxzoom"] == 14  # exclusive: mono icons take over
+        assert band["filter"] == [
             "case",
             ["==", ["get", "location_type"], 1],
             True,
@@ -560,35 +564,53 @@ class TransportVectorContractTests(SimpleTestCase):
             True,
             False,
         ]
-        # SMALL zoomed-out dots (z11 1.5/2 → z13 3/4), stations larger
-        radius = circle["paint"]["circle-radius"]
-        assert radius[0] == "interpolate"
-        assert radius[3] == 11
-        assert radius[4] == ["case", ["==", ["get", "location_type"], 1], 2.0, 1.5]
-        assert radius[5] == 13
-        assert radius[6] == ["case", ["==", ["get", "location_type"], 1], 4.0, 3.0]
+        # per-mode primitive sprite names in TRANSPORT_MODES priority
+        # order, the root primitive as the fallback — literal names
+        # (concat is not subset-whitelisted)
+        expr = band["layout"]["icon-image"]
+        assert expr[0] == "case"
+        assert expr[2:-1:2] == [TRANSPORT_PRIMITIVES[s] for s, _ in TRANSPORT_MODES]
+        assert expr[-1] == TRANSPORT_PRIMITIVE_FALLBACK
+        # collision-active: NO allow-overlap (the loser hides instead of
+        # stacking — owner 2026-11-17)
+        assert "icon-allow-overlap" not in band["layout"]
+        # small: z11 0.16 → z13 0.28 (48px primitives → 7.7–13.4px)
+        size = band["layout"]["icon-size"]
+        assert size[3] == 11 and size[4] == 0.16
+        assert size[5] == 13 and size[6] == 0.28
 
     def test_icon_layer_contract(self) -> None:
-        """Two icon bands: one icon per stop GROUP through z16.99
-        (neighborhood declutter — the same filter as the circles),
-        platform detail from z17 (exclusive handover)."""
-        group = TRANSPORT_STYLE_SUBSET["layers"][1]
-        assert group["id"] == "transport-stops-icons"
-        assert group["type"] == "symbol"
+        """Stations reveal their mono glyph a zoom early (z13); the
+        neighborhood band follows at z14; platform detail from z17
+        (exclusive handover). The neighborhood band is collision-active
+        (no allow-overlap) — platforms keep overlap (they cluster)."""
+        by_id = {l["id"]: l for l in TRANSPORT_STYLE_SUBSET["layers"]}
+
+        stations = by_id["transport-stops-icons-stations"]
+        assert stations["type"] == "symbol"
+        assert stations["minzoom"] == 13
+        assert stations["maxzoom"] == 14
+        # STATIONS only — the interchange hierarchy gets the mono glyph
+        # while plain stops are still primitives
+        assert stations["filter"] == ["==", ["get", "location_type"], 1]
+        assert "icon-allow-overlap" not in stations["layout"]
+
+        group = by_id["transport-stops-icons"]
         assert group["minzoom"] == 14
         assert group["maxzoom"] == 17
-        # still one icon per stop group at neighborhood zooms
-        assert group["filter"] == TRANSPORT_STYLE_SUBSET["layers"][0]["filter"]
-        assert group["layout"]["icon-allow-overlap"] is True
+        # one icon per stop group at neighborhood zooms (same filter as
+        # the primitives band)
+        assert group["filter"] == by_id["transport-stops-primitives"]["filter"]
+        assert "icon-allow-overlap" not in group["layout"]
         assert group["layout"]["icon-size"][3] == 14
 
-        detail = TRANSPORT_STYLE_SUBSET["layers"][2]
-        assert detail["id"] == "transport-stops-icons-detail"
+        detail = by_id["transport-stops-icons-detail"]
         assert detail["minzoom"] == 17
         # platform detail only — the parent station would sit
         # redundantly mid-road between its platforms (the reported
         # "3 icons for 2 bus stops")
         assert detail["filter"] == ["==", ["get", "location_type"], 0]
+        # platforms legitimately cluster millimetres apart — overlap OK
         assert detail["layout"]["icon-allow-overlap"] is True
         assert detail["layout"]["icon-size"][3] == 17  # ramp continues
 
@@ -615,8 +637,10 @@ class TransportVectorContractTests(SimpleTestCase):
             assert icon == TRANSPORT_ICONS.get(slug, TRANSPORT_ICON_FALLBACK)
             assert condition[1] == ["in", f"[{basic_type}]", haystack]
         assert icon_expr[-1] == TRANSPORT_ICON_FALLBACK
-        # the color chain (circles) keeps the full palette mapping
-        color_expr = TRANSPORT_STYLE_SUBSET["layers"][0]["paint"]["circle-color"]
+        # the color chain keeps the full palette mapping — the tint now
+        # lives on the icon bands (FULL doc: SDF icon-color paint)
+        bands = {l["id"]: l for l in TRANSPORT_STYLE["layers"] if l["type"] == "symbol"}
+        color_expr = bands["transport-stops-primitives"]["paint"]["icon-color"]
         assert color_expr[2:-1:2] == [
             TRANSPORT_FALLBACK_COLORS[slug] for slug, _ in TRANSPORT_MODES
         ]
@@ -707,7 +731,8 @@ class TransportVectorContractTests(SimpleTestCase):
         from server.apps.basemaps.seed_lib import transport_style
 
         styled = transport_style({"rail": "#ff0000"})
-        color_expr = styled["layers"][0]["paint"]["circle-color"]
+        bands = {l["id"]: l for l in styled["layers"] if l["type"] == "symbol"}
+        color_expr = bands["transport-stops-primitives"]["paint"]["icon-color"]
         assert color_expr[2] == "#ff0000"  # rail (first mode) overridden
         assert color_expr[4] != "#ff0000"  # tram keeps the fallback
 
@@ -1014,7 +1039,9 @@ class TestSeedTagging:
         # the hut-style look: SDF pack, tinted icons, selected plates
         assert full.style["sprite"][0]["url"].endswith("/sdf_sprite/transport")
         assert [layer["id"] for layer in full.style["layers"]] == [
-            "transport-stops",
+            "transport-stops-primitives",
+            "transport-stops-icons-major",
+            "transport-stops-icons-stations",
             "transport-stops-selected",
             "transport-stops-icons",
             "transport-stops-selected-detail",
@@ -1025,17 +1052,21 @@ class TestSeedTagging:
         assert twin.version == SUBSET_REVISION
         assert twin.style is not None
         assert twin.min_zoom == 11
-        # small circles z11-z13.99 hand over to mono icons at z14
+        # primitives z11–z13.99, stations mono a zoom early, then the
+        # neighborhood and detail bands
         assert [layer["id"] for layer in twin.style["layers"]] == [
-            "transport-stops",
+            "transport-stops-primitives",
+            "transport-stops-icons-stations",
             "transport-stops-icons",
             "transport-stops-icons-detail",
         ]
         assert twin.style["layers"][0]["minzoom"] == 11
         assert twin.style["layers"][0]["maxzoom"] == 14
-        assert twin.style["layers"][1]["minzoom"] == 14
-        assert twin.style["layers"][1]["maxzoom"] == 17
-        assert twin.style["layers"][2]["minzoom"] == 17
+        assert twin.style["layers"][1]["minzoom"] == 13
+        assert twin.style["layers"][1]["maxzoom"] == 14
+        assert twin.style["layers"][2]["minzoom"] == 14
+        assert twin.style["layers"][2]["maxzoom"] == 17
+        assert twin.style["layers"][3]["minzoom"] == 17
         # slug-level config (filter) rides the row
         assert twin.config is not None
         assert "filters" in twin.config
@@ -1161,9 +1192,21 @@ class TestDumpCommand:
         assert "restaurant--medium--subset.json" in names
         body = json.loads((tmp_path / "huts--medium--full.json").read_text())
         assert body["version"] == 8
-        # styl-ignored (["*"]) rows are skipped + manifested — the seed
-        # list is the single source of truth the CI job reads.
-        assert "world-satellite-hybrid--high--full.json" not in names
+        # styl-ignored (["*"]) rows are STILL WRITTEN + manifested:
+        # the styl job skips them via _skipped.txt, but the MapLibre
+        # validator needs the real (composed) documents — the basemap
+        # blocks only exist in the dump since the serve-time
+        # composition landed (owner 2026-11-17).
+        assert "world-satellite-hybrid--high--full.json" in names
+        assert (
+            "wd-outdoor-base-ofm-hill--high--full.json" in names
+        )  # styl-skipped basemap, written + composed
+        ofm = json.loads(
+            (tmp_path / "wd-outdoor-base-ofm-hill--high--full.json").read_text()
+        )
+        assert any(
+            layer["id"].startswith("wd-basemap-transit-") for layer in ofm["layers"]
+        )
         manifest = (tmp_path / "_skipped.txt").read_text().split()
         assert "world-satellite-hybrid" in manifest
         assert "ch-swisstopo-light" in manifest  # variant-level ["*"]
@@ -1618,3 +1661,167 @@ class TransportModeExtrasParityTests(SimpleTestCase):
             assert seed_lib_by_code[code], f"code {code} missing in seed_lib"
         # the extras key name is stable API for other readers
         assert migration.GTFS_EXTRA_KEY == "gtfs_route_type"
+
+
+class TransportBasemapBlockTests(SimpleTestCase):
+    """The overlay's BASEMAP presence: "my POIs, not the basemap's"
+    (owner 2026-11-17). config.basemap blocks compose into basemap
+    documents at SERVE time (and in the CI dump); always-replace rides
+    the wd-basemap-<slug>-* layer-id namespace — no replaces list."""
+
+    def test_block_contract(self) -> None:
+        from server.apps.basemaps.seed_lib import (
+            TRANSPORT_BASEMAP_SPRITE_ID,
+            transport_basemap_block,
+        )
+
+        block = transport_basemap_block()
+        # own sprite id (add-once ids must not collide with the overlay's)
+        assert block["sprite"][0]["id"] == TRANSPORT_BASEMAP_SPRITE_ID
+        assert block["sprite"][0]["id"] != "wd-transport"
+        # namespaced layer ids — the always-replace contract prefix
+        ids = [layer["id"] for layer in block["layers"]]
+        assert ids == [
+            "wd-basemap-transit-stations",
+            "wd-basemap-transit-stations-label",
+        ]
+        # stations only, LATER than the overlay floor (z13 vs z11)
+        icon = block["layers"][0]
+        assert icon["minzoom"] == 13
+        assert icon["filter"] == ["==", ["get", "location_type"], 1]
+        # the icon chain uses the BASEMAP sprite prefix, not the overlay's
+        names = icon["layout"]["icon-image"][2:-1:2]
+        assert names and all(
+            n.startswith(TRANSPORT_BASEMAP_SPRITE_ID + ":") for n in names
+        )
+        # the block rides the overlay-slot anchors — ONE mechanism for
+        # overlays and blocks (no per-basemap name lists)
+        assert block["slot"] == "routes"
+
+    def test_compose_anchors_into_the_slot_anchor(self) -> None:
+        from server.apps.basemaps.seed_lib import (
+            compose_basemap_style,
+            transport_basemap_block,
+        )
+
+        empty: dict[str, Any] = {}
+        doc: dict[str, Any] = {
+            "version": 8,
+            "sources": {},
+            "layers": [
+                {"id": "background", "type": "background", "layout": empty},
+                {"id": "road_path_oneway_symbol", "type": "symbol", "layout": empty},
+                {"id": "later", "type": "symbol", "layout": empty},
+            ],
+        }
+        anchors: dict[str, Any] = {
+            "routes": {"before": "road_path_oneway_symbol"},
+        }
+        out = compose_basemap_style(doc, [transport_basemap_block()], anchors=anchors)
+        ids = [layer["id"] for layer in out["layers"]]
+        # inserted BEFORE the slot anchor — the freed native POI slot
+        assert ids == [
+            "background",
+            "wd-basemap-transit-stations",
+            "wd-basemap-transit-stations-label",
+            "road_path_oneway_symbol",
+            "later",
+        ]
+
+    def test_compose_falls_back_to_the_label_band(self) -> None:
+        """No anchors (anchorless basemap) → the label band."""
+        from server.apps.basemaps.seed_lib import (
+            compose_basemap_style,
+            transport_basemap_block,
+        )
+
+        doc: dict[str, Any] = {
+            "version": 8,
+            "layers": [
+                {"id": "bg", "type": "background"},
+                {
+                    "id": "place-label",
+                    "type": "symbol",
+                    "layout": {"text-field": "x"},
+                },
+            ],
+        }
+        out = compose_basemap_style(doc, [transport_basemap_block()])
+        ids = [layer["id"] for layer in out["layers"]]
+        assert ids.index("wd-basemap-transit-stations") == 1
+
+    def test_compose_merges_sprite_and_sources_without_collisions(self) -> None:
+        from server.apps.basemaps.seed_lib import (
+            TRANSPORT_BASEMAP_SPRITE_ID,
+            compose_basemap_style,
+            transport_basemap_block,
+        )
+
+        doc: dict[str, Any] = {
+            "version": 8,
+            "sprite": [{"id": "ofm", "url": "x"}],
+            "sources": {"openmaptiles": {"type": "vector"}},
+            "layers": [],
+        }
+        out = compose_basemap_style(doc, [transport_basemap_block()])
+        assert [s["id"] for s in out["sprite"]] == [
+            "ofm",
+            TRANSPORT_BASEMAP_SPRITE_ID,
+        ]
+        assert "wd-basemap-transitland-stops" in out["sources"]
+        assert "openmaptiles" in out["sources"]
+
+
+@pytest.mark.django_db
+class TestTransportBasemapServing:
+    """Serve-time composition: the endpoint serves the composed basemap
+    (never the bare fixture), overlays stay un-composed, and the
+    immutable version token folds the contributing overlay rows."""
+
+    def test_basemap_style_serves_the_composed_document(self) -> None:
+        from django.core.management import call_command
+
+        from server.apps.basemaps.models import MapLayer
+
+        call_command("map_seed", verbosity=0)
+        response = Client().get("/v1/map/styles/wd-outdoor-base-ofm-hill.json")
+        assert response.status_code == 200
+        layers = [layer["id"] for layer in response.json()["layers"]]
+        assert "wd-basemap-transit-stations" in layers
+        assert "wd-basemap-transit-stations-label" in layers
+        # the native transit POIs are gone — ours replace them
+        assert "poi_transit" not in layers
+        # the injected sprite rides along
+        sprites = {s["id"] for s in response.json()["sprite"]}
+        assert "wd-basemap-transport" in sprites
+        # B1 regression: NO duplicate layer ids — the frontend's style
+        # gate rejects duplicates, and per-row block collection used to
+        # inject every block layer twice (variant rows share config)
+        assert len(layers) == len(set(layers)), (
+            f"duplicate layer ids: {sorted(x for x in layers if layers.count(x) > 1)}"
+        )
+        # B2 regression: catalog token == endpoint token (the immutable
+        # ?v= URL only works when both compute the same value)
+        catalog = Client().get("/v1/map/layers/wd-outdoor-base-ofm-hill")
+        assert catalog.status_code == 200
+        catalog_version = catalog.json()["style_version"]
+        assert catalog_version is not None
+        assert catalog_version == response.headers["X-Map-Style-Version"]
+
+        # overlay styles stay un-composed
+        overlay = Client().get("/v1/map/styles/transport-stops.json")
+        overlay_ids = [layer["id"] for layer in overlay.json()["layers"]]
+        assert "wd-basemap-transit-stations" not in overlay_ids
+
+        # the token rotates when a contributing overlay row changes
+        before = Client().get("/v1/map/styles/wd-outdoor-base-ofm-hill.json")
+        row = MapLayer.objects.filter(
+            slug="transport-stops", profile=MapLayer.Profile.full
+        ).first()
+        assert row is not None
+        row.save(update_fields=["modified"])  # bumps modified
+        after = Client().get("/v1/map/styles/wd-outdoor-base-ofm-hill.json")
+        assert (
+            before.headers["X-Map-Style-Version"]
+            != after.headers["X-Map-Style-Version"]
+        )

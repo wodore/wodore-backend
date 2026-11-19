@@ -2202,6 +2202,45 @@ TRANSPORT_ICONS: dict[str, str] = {
 }
 TRANSPORT_ICON_FALLBACK = "wd-transport:mono/transport.transport"
 
+#: Route-type → PRIMITIVE marker (every kind carries one — aliases
+#: resolve). The zoomed-out band shows these instead of anonymous dots:
+#: the mode reads as a shape (rail portrait, road capsule, water hull,
+#: air delta) long before the mono glyphs take over at z14.
+TRANSPORT_PRIMITIVES: dict[str, str] = {
+    "rail": "wd-transport:primitive/transport.transport.rail",
+    "tram": "wd-transport:primitive/transport.transport.tram",
+    "metro": "wd-transport:primitive/transport.transport.metro",
+    "funicular": "wd-transport:primitive/transport.transport.funicular",
+    "gondola": "wd-transport:primitive/transport.transport.gondola",
+    "cablecar": "wd-transport:primitive/transport.transport.cablecar",
+    "ferry": "wd-transport:primitive/transport.transport.ferry",
+    "trolleybus": "wd-transport:primitive/transport.transport.trolleybus",
+    "monorail": "wd-transport:primitive/transport.transport.monorail",
+    "bus": "wd-transport:primitive/transport.transport.bus",
+}
+TRANSPORT_PRIMITIVE_FALLBACK = "wd-transport:primitive/transport.transport"
+
+#: Collision priority (FULL only — symbol-sort-key is not in the subset
+#: layout whitelist): stations first, plain stops after — a station's
+#: marker wins the box when two would cover each other.
+_TRANSPORT_SORT_KEY: list[Any] = [
+    "case",
+    ["==", ["get", "location_type"], 1],
+    0,
+    1,
+]
+
+#: Importance proxy (FULL only — ``length`` is not subset-whitelisted):
+#: Transitland carries no importance field, but every stop carries its
+#: route onestop ids as a serialized list — its STRING LENGTH grows
+#: monotonically with route count. >50 chars ≈ 3+ routes ≈ a major
+#: interchange (owner decision 2026-11-17).
+_TRANSPORT_IMPORTANT: list[Any] = [
+    ">",
+    ["length", ["get", "route_onestop_ids"]],
+    50,
+]
+
 
 def _transport_style_base(colors: dict[str, str] | None = None) -> dict[str, Any]:
     """The transport-stops SUBSET twin: the leaflet-renderable document.
@@ -2246,6 +2285,12 @@ def _transport_style_base(colors: dict[str, str] | None = None) -> dict[str, Any
     the full-profile document.
     """
     palette = {**TRANSPORT_FALLBACK_COLORS, **(colors or {})}
+    # The twin itself paints no colors anymore: non-SDF icons ignore
+    # icon-color, and the tinted circle band became the primitives
+    # band (2026-11-17). ``colors`` stays in the signature for
+    # call-site stability (map_seed passes the live palette through to
+    # :func:`transport_style`); the full document owns every tint.
+    _ = palette
 
     icon_image: list[Any] = ["case"]
     for slug, basic_type in TRANSPORT_MODES:
@@ -2253,15 +2298,13 @@ def _transport_style_base(colors: dict[str, str] | None = None) -> dict[str, Any
         icon_image += [_route_type_present(basic_type), icon]
     icon_image.append(TRANSPORT_ICON_FALLBACK)
 
-    def radius(small: float, large: float) -> list[Any]:
-        # Stations (location_type 1) render one notch larger than plain
-        # stops/platforms — the interchange hierarchy at a glance.
-        return [
-            "case",
-            ["==", ["get", "location_type"], 1],
-            large,
-            small,
+    primitive_image: list[Any] = ["case"]
+    for slug, basic_type in TRANSPORT_MODES:
+        primitive_image += [
+            _route_type_present(basic_type),
+            TRANSPORT_PRIMITIVES[slug],
         ]
+    primitive_image.append(TRANSPORT_PRIMITIVE_FALLBACK)
 
     return {
         "version": 8,
@@ -2300,55 +2343,67 @@ def _transport_style_base(colors: dict[str, str] | None = None) -> dict[str, Any
         "glyphs": GLYPHS,
         "layers": [
             {
-                "id": "transport-stops",
-                "type": "circle",
+                # zoomed-out band: PRIMITIVE mode markers — the mode
+                # reads as a shape (rail/road/water/air family) instead
+                # of an anonymous colored dot. One marker per stop
+                # GROUP (stations + standalone; parented platforms hide
+                # behind their station — see _TRANSPORT_CIRCLE_FILTER).
+                # icon-allow-overlap stays OFF (default): the collision
+                # engine hides a losing marker instead of stacking two
+                # on top of each other (owner 2026-11-17).
+                "id": "transport-stops-primitives",
+                "type": "symbol",
                 "source": TRANSPORT_SOURCE_ID,
                 "source-layer": "stops",
                 "minzoom": 11,
                 # exclusive: at z14 the mono icons take over
                 "maxzoom": 14,
-                # zoomed out: one marker per stop GROUP (stations +
-                # standalone stops; parented platforms hide behind their
-                # station — see _TRANSPORT_CIRCLE_FILTER)
                 "filter": _TRANSPORT_CIRCLE_FILTER,
-                "paint": {
-                    "circle-color": _transport_color_expr(palette),
-                    "circle-stroke-color": "#F6F6F6",
-                    "circle-stroke-width": [
+                "layout": {
+                    "icon-image": primitive_image,
+                    "icon-size": [
                         "interpolate",
                         ["linear"],
                         ["zoom"],
                         11,
-                        0,
+                        0.16,
                         13,
-                        1,
+                        0.28,
                     ],
-                    # SMALL zoomed-out dots: z11 barely-there, z13 still
-                    # modest — the icons carry the detail from z14.
-                    "circle-radius": [
+                },
+            },
+            {
+                # STATIONS get their mono glyph EARLY (z13, one zoom
+                # before the regular band) — interchanges stay
+                # recognizable while plain stops are still primitives.
+                # Stations only (location_type 1); the FULL profile
+                # additionally lowers this to z12 for route-rich
+                # interchanges (importance proxy).
+                "id": "transport-stops-icons-stations",
+                "type": "symbol",
+                "source": TRANSPORT_SOURCE_ID,
+                "source-layer": "stops",
+                "minzoom": 13,
+                "maxzoom": 14,
+                "filter": ["==", ["get", "location_type"], 1],
+                "layout": {
+                    "icon-image": icon_image,
+                    "icon-size": [
                         "interpolate",
                         ["linear"],
                         ["zoom"],
-                        11,
-                        radius(1.5, 2.0),
                         13,
-                        radius(3.0, 4.0),
-                    ],
-                    "circle-opacity": [
-                        "interpolate",
-                        ["linear"],
-                        ["zoom"],
-                        11,
-                        0.7,
-                        12,
-                        1,
+                        0.3,
+                        14,
+                        0.35,
                     ],
                 },
             },
             {
                 # neighborhood icon band: STILL one icon per stop group
-                # (same filter as the circles) — decluttered until the
-                # detail band takes over at z17 (exclusive maxzoom)
+                # (same filter as the primitives) — decluttered until the
+                # detail band takes over at z17 (exclusive maxzoom);
+                # collision-active (no allow-overlap): the loser hides.
                 "id": "transport-stops-icons",
                 "type": "symbol",
                 "source": TRANSPORT_SOURCE_ID,
@@ -2367,12 +2422,14 @@ def _transport_style_base(colors: dict[str, str] | None = None) -> dict[str, Any
                         16,
                         0.5,
                     ],
-                    "icon-allow-overlap": True,
                 },
             },
             {
                 # detail band: boarding positions only — the parent
-                # drops out exactly where its platforms take over
+                # drops out exactly where its platforms take over.
+                # Platforms legitimately cluster millimetres apart, so
+                # this band stays overlap-allowed (hiding them would
+                # defeat the detail view).
                 "id": "transport-stops-icons-detail",
                 "type": "symbol",
                 "source": TRANSPORT_SOURCE_ID,
@@ -2511,7 +2568,50 @@ def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
 
     layers: list[dict[str, Any]] = []
     for layer in doc["layers"]:
-        if layer["id"] == "transport-stops-icons":
+        if layer["id"] == "transport-stops-primitives":
+            # tinted SDF primitives + collision priority (full-only:
+            # symbol-sort-key is not subset-whitelisted)
+            layer["paint"] = deepcopy(icon_paint)
+            layer["layout"]["symbol-sort-key"] = deepcopy(_TRANSPORT_SORT_KEY)
+        elif layer["id"] == "transport-stops-icons-stations":
+            # keep ALL stations at z13 (base) — the FULL profile adds a
+            # SEPARATE layer for route-rich interchanges at z12 (Opus
+            # review: replacing the filter here dropped ordinary
+            # stations' z13 glyph in the full profile)
+            layer["paint"] = deepcopy(icon_paint)
+            layer["layout"]["symbol-sort-key"] = deepcopy(_TRANSPORT_SORT_KEY)
+            layers.append(
+                {
+                    # route-rich interchanges reveal a zoom EARLIER —
+                    # the importance proxy is full-only (``length`` op)
+                    "id": "transport-stops-icons-major",
+                    "type": "symbol",
+                    "source": TRANSPORT_SOURCE_ID,
+                    "source-layer": "stops",
+                    "minzoom": 12,
+                    "maxzoom": 14,
+                    "filter": [
+                        "all",
+                        ["==", ["get", "location_type"], 1],
+                        deepcopy(_TRANSPORT_IMPORTANT),
+                    ],
+                    "layout": {
+                        "icon-image": deepcopy(layer["layout"]["icon-image"]),
+                        "icon-size": [
+                            "interpolate",
+                            ["linear"],
+                            ["zoom"],
+                            12,
+                            0.28,
+                            14,
+                            0.35,
+                        ],
+                        "symbol-sort-key": deepcopy(_TRANSPORT_SORT_KEY),
+                    },
+                    "paint": deepcopy(icon_paint),
+                }
+            )
+        elif layer["id"] == "transport-stops-icons":
             layers.append(
                 _selected_plate(
                     "transport-stops-selected",
@@ -2521,6 +2621,7 @@ def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
                 )
             )
             layer["paint"] = deepcopy(icon_paint)
+            layer["layout"]["symbol-sort-key"] = deepcopy(_TRANSPORT_SORT_KEY)
         elif layer["id"] == "transport-stops-icons-detail":
             layers.append(
                 _selected_plate(
@@ -2547,6 +2648,201 @@ def transport_style_subset(colors: dict[str, str] | None = None) -> dict[str, An
 #: Module-level default (fallback palette) — tests import this; the
 #: seed re-builds the document from the live category colors.
 TRANSPORT_STYLE: dict[str, Any] = transport_style()
+
+
+#: Sprite id for the transport overlay's BASEMAP presence. Unique vs
+#: the overlay's own ``wd-transport`` (frontend sprite ids are
+#: add-once — a shared id would let whichever pack loads first shadow
+#: the other) and vs any basemap's native sprite ids.
+TRANSPORT_BASEMAP_SPRITE_ID = "wd-basemap-transport"
+
+#: Layer-id namespace for the basemap presence — the always-replace
+#: contract (owner 2026-11-17): no ``replaces`` list to maintain. The
+#: frontend hides every layer matching ``wd-basemap-<slug>-*`` when
+#: the overlay is active; the ids alone carry the mapping.
+_TRANSPORT_BASEMAP_PREFIX = "wd-basemap-transit"
+
+
+def transport_basemap_block(colors: dict[str, str] | None = None) -> dict[str, Any]:
+    """The transport overlay's BASEMAP presence (config ``basemap``).
+
+    "My POIs, not the basemap's" (owner 2026-11-17): stations show in
+    every basemap when the overlay is OFF — later (z13 vs the overlay's
+    z11) and simpler (station mono glyph + name label, no bands, no
+    hover/selection) — replacing the basemaps' native transit POIs
+    (OFM ``poi_transit``, MTK ``wd-station*`` — both removed). The
+    style endpoint composes this block into basemap documents at SERVE
+    time (map_seed stays fixtures-only; admin edits survive) and the
+    CI dump composes the same way, so the validated document is the
+    served document.
+
+    ``slot`` rides the basemap's overlay-slot anchors (one mechanism
+    for overlays and blocks — ``anchors["routes"]["before"]``, the
+    freed native transit-POI slot); :func:`compose_basemap_style`
+    falls back to the label band for anchorless basemaps.
+    """
+    palette = {**TRANSPORT_FALLBACK_COLORS, **(colors or {})}
+    prefix = TRANSPORT_BASEMAP_SPRITE_ID + ":"
+
+    icon_image: list[Any] = ["case"]
+    for slug, basic_type in TRANSPORT_MODES:
+        icon_image += [
+            _route_type_present(basic_type),
+            prefix + f"mono/transport.transport.{slug}",
+        ]
+    icon_image.append(prefix + "mono/transport.transport")
+
+    return {
+        # The block rides the basemap's OVERLAY-SLOT ANCHORS (one
+        # mechanism for overlays and blocks alike — owner 2026-11-18):
+        # the composer inserts before anchors["routes"].before — the
+        # freed native transit-POI slot, seeded per basemap in
+        # ``anchors`` and served through the catalog (which also
+        # supersedes the frontend's legacy anchor on the removed
+        # wd-station-label). Anchorless basemaps fall back to the
+        # label band (see compose_basemap_style).
+        "slot": "routes",
+        # The always-replace namespace, explicit for the frontend (the
+        # layer-id prefix cannot be derived from the overlay slug —
+        # hide every `${id_prefix}*` layer while this overlay is
+        # active).
+        "id_prefix": _TRANSPORT_BASEMAP_PREFIX + "-",
+        "sprite": [
+            {
+                "id": TRANSPORT_BASEMAP_SPRITE_ID,
+                "url": "{{env:MARTIN_TILE_URL}}/sdf_sprite/transport",
+            }
+        ],
+        "sources": {
+            "wd-basemap-transitland-stops": {
+                "type": "vector",
+                "tiles": ["{{env:MARTIN_TILE_URL}}/transitland_stops/{z}/{x}/{y}.mlt"],
+                "encoding": "mlt",
+                "minzoom": 11,
+                "maxzoom": 14,
+            }
+        },
+        "layers": [
+            {
+                # stations only — the interchange hierarchy reads even
+                # without the overlay; z13+ = later than the overlay's
+                # z11 floor (owner: much later, simpler)
+                "id": f"{_TRANSPORT_BASEMAP_PREFIX}-stations",
+                "type": "symbol",
+                "source": "wd-basemap-transitland-stops",
+                "source-layer": "stops",
+                "minzoom": 13,
+                "filter": ["==", ["get", "location_type"], 1],
+                "layout": {
+                    "icon-image": icon_image,
+                    "icon-size": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        13,
+                        0.3,
+                        16,
+                        0.45,
+                    ],
+                },
+                "paint": {
+                    "icon-color": _transport_color_expr(palette),
+                    "icon-halo-color": "#ffffff",
+                    "icon-halo-width": _size_ladder(_AMENITY_HALO_STOPS),
+                    "icon-halo-blur": 0,
+                },
+            },
+            {
+                # name label from z14, mirroring the OFM POI label
+                # conventions (anchor left, offset, Barlow+Noto, pale
+                # halo) — "close to what the OSM layer did"
+                "id": f"{_TRANSPORT_BASEMAP_PREFIX}-stations-label",
+                "type": "symbol",
+                "source": "wd-basemap-transitland-stops",
+                "source-layer": "stops",
+                "minzoom": 14,
+                "filter": ["==", ["get", "location_type"], 1],
+                "layout": {
+                    "text-field": ["coalesce", ["get", "stop_name"], ""],
+                    "text-font": ["Barlow Semi Condensed Regular", "Noto Sans Regular"],
+                    "text-size": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        14,
+                        10,
+                        16,
+                        12,
+                    ],
+                    "text-anchor": "left",
+                    "text-offset": [0.9, 0],
+                    "text-max-width": 9,
+                },
+                "paint": {
+                    "text-color": "hsla(220, 14%, 42%, 1)",
+                    "text-halo-blur": 0.5,
+                    "text-halo-color": "rgba(242, 247, 244, 0.9)",
+                    "text-halo-width": 1,
+                },
+            },
+        ],
+    }
+
+
+def compose_basemap_style(
+    doc: dict[str, Any],
+    blocks: list[dict[str, Any]],
+    anchors: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Merge overlay basemap blocks into a basemap style document.
+
+    Generic serve/dump-time composition (owner 2026-11-17, slot
+    anchors 2026-11-18):
+
+    * sprite entries append (deduped by id — a basemap's own ids win);
+    * sources merge (existing ids win);
+    * each block inserts before its SLOT's anchor —
+      ``anchors[block["slot"]]["before"]``, the SAME insertion-point
+      system the frontend uses for overlays (one mechanism, no
+      per-basemap name lists in the block). No anchor for the slot
+      (anchorless basemap): before the first symbol layer carrying a
+      ``text-field`` (the label band — POIs belong there); no symbols
+      at all: append.
+
+    The caller passes a copy; this mutates and returns ``doc``.
+    """
+    for block in blocks:
+        doc.setdefault("sprite", [])
+        known = {s.get("id") for s in doc["sprite"] if isinstance(s, dict)}
+        for entry in block.get("sprite", []):
+            if entry.get("id") not in known:
+                doc["sprite"].append(deepcopy(entry))
+        for sid, source in block.get("sources", {}).items():
+            doc.setdefault("sources", {}).setdefault(sid, deepcopy(source))
+        layers = block.get("layers", [])
+        if not layers:
+            continue
+        index: int | None = None
+        slot = block.get("slot")
+        if slot and isinstance(anchors, dict):
+            slot_anchor = anchors.get(slot)
+            if isinstance(slot_anchor, dict) and slot_anchor.get("before"):
+                ids = [layer.get("id") for layer in doc["layers"]]
+                if slot_anchor["before"] in ids:
+                    index = ids.index(slot_anchor["before"])
+        if index is None:
+            # label-band fallback: first symbol layer with a text field
+            for i, layer in enumerate(doc["layers"]):
+                if layer.get("type") == "symbol" and "text-field" in (
+                    layer.get("layout") or {}
+                ):
+                    index = i
+                    break
+        if index is None:
+            doc["layers"].extend(deepcopy(layers))
+        else:
+            doc["layers"][index:index] = deepcopy(layers)
+    return doc
 
 
 def osm_raster_style() -> dict[str, Any]:

@@ -27,11 +27,13 @@ an invalid document).
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, override
 
 from django.core.management.base import BaseCommand, CommandError
 
+from server.apps.basemaps import seed_lib as lib
 from server.apps.basemaps.management.commands.map_seed import LAYERS, PARAMETERS
 from server.apps.basemaps.models import MapLayer
 from server.apps.basemaps.resolution import resolve_tokens
@@ -78,6 +80,14 @@ class Command(BaseCommand):
         out.mkdir(parents=True, exist_ok=True)
         written = 0
         skipped: list[str] = []
+        # Overlay basemap blocks (config.basemap) — the dump must write
+        # the COMPOSED basemap documents (the served shape), or the CI
+        # validators would never see the injected layers.
+        blocks = [
+            parent["config"]["basemap"]
+            for parent in LAYERS
+            if (parent.get("config") or {}).get("basemap")
+        ]
         for parent in LAYERS:
             variants = [parent, *parent.get("variants", [])]
             for variant in variants:
@@ -88,14 +98,22 @@ class Command(BaseCommand):
                 )
                 if style is None:
                     continue
+                if parent.get("role") == MapLayer.Role.basemap and blocks:
+                    anchors = variant.get("anchors", parent.get("anchors"))
+                    style = lib.compose_basemap_style(
+                        deepcopy(style), blocks, anchors=anchors
+                    )
                 profile = variant.get(
                     "profile", parent.get("profile", MapLayer.Profile.full)
                 )
                 spec = variant.get("spec", MapLayer.Spec.medium)
                 if _effective_styl_ignored(variant, parent) == ["*"]:
                     skipped.append(parent["slug"])
-                    self.stdout.write(f"skipped (styl-ignored): {parent['slug']}")
-                    continue
+                    self.stdout.write(
+                        f"styl-skipped (still written + composed, so the "
+                        f"MapLibre validator sees the real document): "
+                        f"{parent['slug']}"
+                    )
                 name = f"{parent['slug']}--{spec}--{profile}.json"
                 target = out / name
                 resolved = resolve_tokens(style, _PARAMETER_DEFAULTS)
