@@ -208,16 +208,13 @@ def preview_live(request: HttpRequest) -> HttpResponse:
     """
     # Permission: CHANGE permission on this model — not just staff.
     # The endpoint resolves env tokens (including API keys) and must
-    # not leak them to read-only staff (Opus review B2).
-    from django.contrib.auth.models import User
-
+    # not leak them to read-only staff (Opus review B2). NOTE: the
+    # isinstance check against django.contrib.auth.models.User was
+    # WRONG — this project uses a CUSTOM user model (accounts.User);
+    # has_perm works on both, no isinstance needed.
     if not request.user.is_authenticated:
         return JsonResponse({"error": "Authentication required"}, status=403)
-    # Model-level change permission — not just staff: the endpoint
-    # resolves env tokens (including API keys) and must not leak them
-    # to read-only staff (Opus review B2).
-    user = request.user
-    if not isinstance(user, User) or not user.has_perm("basemaps.change_maplayer"):
+    if not request.user.has_perm("basemaps.change_maplayer"):
         return JsonResponse(
             {"error": "You need change permission on map layers"}, status=403
         )
