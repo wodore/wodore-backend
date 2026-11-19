@@ -193,16 +193,17 @@
       });
     }, 100);
 
-    // Insert the tab bar + panels before the form's submit row
-    var submitRow = document.querySelector('.submit-row');
+    // Insert the tab bar + panels AFTER the form (outside — the form is a
+    // collapsed flex container that zeroes any injected children)
+    var form = document.querySelector('form');
     var container = document.createElement('div');
+    container.style.cssText = 'margin: 0 0 20px;';
     container.appendChild(tabBar);
     TAB_DEFS.forEach(function(def) { container.appendChild(panels[def.id]); });
-    if (submitRow) {
-      submitRow.parentNode.insertBefore(container, submitRow);
+    if (form && form.parentNode) {
+      form.parentNode.insertBefore(container, form.nextSibling);
     } else {
-      var form = document.querySelector('form');
-      if (form) form.appendChild(container);
+      document.querySelector('main, #content, body').appendChild(container);
     }
 
     // ── Style editor: move into the Style tab ─────────────────
