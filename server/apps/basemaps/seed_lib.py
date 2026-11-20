@@ -2102,38 +2102,76 @@ TRANSPORT_FALLBACK_COLORS: dict[str, str] = {
 }
 
 
-def _route_type_present(basic_type: int) -> list[Any]:
-    """Boolean expression: the stop's ``route_types_basic`` JSON string
+def _route_type_conditions(basic_type: int, *, subset: bool) -> list[list[Any]]:
+    """Boolean expressions: the stop's ``route_types_basic`` JSON string
     carries the given basic GTFS type.
 
     Transitland serializes the sorted distinct codes comma-space
-    separated (``"[2, 3]"``, ``"[3]"``, ``"[0, 2, 11]"``) — a code is
-    present iff the string contains one of the four EXACT positions:
-    ``"[<code>]"`` (only element), ``"[<code>, "`` (first of several),
-    ``", <code>, "`` (middle) or ``", <code>]"`` (last). The
-    position-delimited needles are unambiguous across ALL basic codes
-    — shorter ``"[<code>"``/``", <code>"`` prefixes would make metro (1)
-    false-match trolleybus (11) and monorail (12) strings.
-    No regex (MapLibre has none) and no ``any``/``all`` (not in the
-    subset whitelist) — a four-branch ``case`` folds the OR.
-    Subset walker-safe operators only (``case``/``in``/``get``).
+    separated (``"[2, 3]"``, ``"[3]"``, ``"[0, 2, 11]"``) — MVT
+    properties cannot carry arrays. MapLibre has no regex and no
+    string replace, so membership is substring-position based:
+
+    * SUBSET (whitelist: case/in/get only): the four EXACT
+      delimiter-bounded positions ``"[<c>]"``, ``"[<c>, "``,
+      ``", <c>, "``, ``", <c>]"``. Shorter prefixes would make metro
+      (1) false-match trolleybus (11) and monorail (12) strings.
+    * FULL: normalize once via ``let`` — ``", " + slice(s, 1, -1) + ","``
+      turns ``"[0, 2, 11]"`` into ``", 0, 2, 11,"`` so the single
+      needle ``", <c>,"`` is exact by construction (both sides always
+      delimited). ``to-string`` of a missing property yields "null"/
+      "" → the normalized string matches nothing.
+
+    ``let``/``var``/``concat``/``slice``/``to-string`` are outside the
+    subset whitelist — subset documents MUST pass ``subset=True``.
     """
     haystack = ["get", "route_types_basic"]
-    return [
-        "case",
-        ["in", f"[{basic_type}]", haystack],
-        True,
-        ["in", f"[{basic_type}, ", haystack],
-        True,
-        ["in", f", {basic_type}, ", haystack],
-        True,
-        ["in", f", {basic_type}]", haystack],
-        True,
-        False,
-    ]
+    if subset:
+        return [
+            ["in", needle, haystack]
+            for needle in (
+                f"[{basic_type}]",
+                f"[{basic_type}, ",
+                f", {basic_type}, ",
+                f", {basic_type}]",
+            )
+        ]
+    return [["in", f", {basic_type},", ["var", "rt"]]]
 
 
-def _transport_color_expr(colors: dict[str, str]) -> list[Any]:
+#: FULL-profile normalization input: ``"[0, 2, 11]"`` → ``", 0, 2, 11,"``
+_RT_NORMALIZED = [
+    "concat",
+    ", ",
+    ["slice", ["to-string", ["get", "route_types_basic"]], 1, -1],
+    ",",
+]
+
+
+def _route_type_case(
+    outputs: dict[str, Any],
+    fallback: Any,
+    *,
+    subset: bool,
+) -> list[Any]:
+    """Flat first-match case chain: TRANSPORT_MODES priority → output.
+
+    The old nested shape (``case`` inside ``case``) is folded flat —
+    a mode's conditions sit contiguous, so the first match still picks
+    the same mode in the same priority order. FULL wraps the chain in
+    a ``let`` binding the normalized haystack (see
+    :func:`_route_type_conditions`).
+    """
+    expr: list[Any] = ["case"]
+    for slug, basic_type in TRANSPORT_MODES:
+        for cond in _route_type_conditions(basic_type, subset=subset):
+            expr += [cond, outputs[slug]]
+    expr.append(fallback)
+    if subset:
+        return expr
+    return ["let", "rt", _RT_NORMALIZED, expr]
+
+
+def _transport_color_expr(colors: dict[str, str], *, subset: bool = False) -> list[Any]:
     """Case chain: the stop's dominant mode color (TRANSPORT_MODES
     priority order, neutral fallback last).
 
@@ -2141,11 +2179,11 @@ def _transport_color_expr(colors: dict[str, str]) -> list[Any]:
     category-driven and reads the same rows at serve time, so map and
     legend cannot drift apart at seed time.
     """
-    color_expr: list[Any] = ["case"]
-    for slug, basic_type in TRANSPORT_MODES:
-        color_expr += [_route_type_present(basic_type), colors[slug]]
-    color_expr.append(colors["other"])
-    return color_expr
+    return _route_type_case(
+        {slug: colors[slug] for slug, _ in TRANSPORT_MODES},
+        colors["other"],
+        subset=subset,
+    )
 
 
 #: Zoom-dependent parent-station handling (owner decision 2026-10-30):
@@ -2295,15 +2333,17 @@ def _transport_style_base(colors: dict[str, str] | None = None) -> dict[str, Any
     icon_image: list[Any] = ["case"]
     for slug, basic_type in TRANSPORT_MODES:
         icon = TRANSPORT_ICONS.get(slug, TRANSPORT_ICON_FALLBACK)
-        icon_image += [_route_type_present(basic_type), icon]
+        for cond in _route_type_conditions(basic_type, subset=True):
+            icon_image += [cond, icon]
     icon_image.append(TRANSPORT_ICON_FALLBACK)
 
     primitive_image: list[Any] = ["case"]
     for slug, basic_type in TRANSPORT_MODES:
-        primitive_image += [
-            _route_type_present(basic_type),
-            TRANSPORT_PRIMITIVES[slug],
-        ]
+        for cond in _route_type_conditions(basic_type, subset=True):
+            primitive_image += [
+                cond,
+                TRANSPORT_PRIMITIVES[slug],
+            ]
     primitive_image.append(TRANSPORT_PRIMITIVE_FALLBACK)
 
     return {
@@ -2686,10 +2726,11 @@ def transport_basemap_block(colors: dict[str, str] | None = None) -> dict[str, A
 
     icon_image: list[Any] = ["case"]
     for slug, basic_type in TRANSPORT_MODES:
-        icon_image += [
-            _route_type_present(basic_type),
-            prefix + f"mono/transport.transport.{slug}",
-        ]
+        for cond in _route_type_conditions(basic_type, subset=True):
+            icon_image += [
+                cond,
+                prefix + f"mono/transport.transport.{slug}",
+            ]
     icon_image.append(prefix + "mono/transport.transport")
 
     return {
@@ -2746,7 +2787,7 @@ def transport_basemap_block(colors: dict[str, str] | None = None) -> dict[str, A
                     ],
                 },
                 "paint": {
-                    "icon-color": _transport_color_expr(palette),
+                    "icon-color": _transport_color_expr(palette, subset=True),
                     "icon-halo-color": "#ffffff",
                     "icon-halo-width": _size_ladder(_AMENITY_HALO_STOPS),
                     "icon-halo-blur": 0,

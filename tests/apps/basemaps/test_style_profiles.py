@@ -566,10 +566,13 @@ class TransportVectorContractTests(SimpleTestCase):
         ]
         # per-mode primitive sprite names in TRANSPORT_MODES priority
         # order, the root primitive as the fallback — literal names
-        # (concat is not subset-whitelisted)
+        # (concat is not subset-whitelisted). Flat case: four
+        # delimiter-position branches per mode (values repeat 4×)
         expr = band["layout"]["icon-image"]
         assert expr[0] == "case"
-        assert expr[2:-1:2] == [TRANSPORT_PRIMITIVES[s] for s, _ in TRANSPORT_MODES]
+        assert expr[2:-1:2] == [
+            TRANSPORT_PRIMITIVES[s] for s, _ in TRANSPORT_MODES for _ in range(4)
+        ]
         assert expr[-1] == TRANSPORT_PRIMITIVE_FALLBACK
         # collision-active: NO allow-overlap (the loser hides instead of
         # stacking — owner 2026-11-17)
@@ -627,24 +630,28 @@ class TransportVectorContractTests(SimpleTestCase):
 
         icon_expr = TRANSPORT_STYLE_SUBSET["layers"][1]["layout"]["icon-image"]
         assert icon_expr[0] == "case"
+        # flat case: four delimiter-position branches per mode
         conditions = icon_expr[1:-1:2]
         values = icon_expr[2:-1:2]
-        assert len(conditions) == len(values) == len(TRANSPORT_MODES)
+        assert len(conditions) == len(values) == 4 * len(TRANSPORT_MODES)
         haystack = ["get", "route_types_basic"]
-        for (slug, basic_type), condition, icon in zip(
-            TRANSPORT_MODES, conditions, values, strict=True
-        ):
+        for i, (slug, basic_type) in enumerate(TRANSPORT_MODES):
+            icon = values[4 * i]
             assert icon == TRANSPORT_ICONS.get(slug, TRANSPORT_ICON_FALLBACK)
-            assert condition[1] == ["in", f"[{basic_type}]", haystack]
+            assert conditions[4 * i] == ["in", f"[{basic_type}]", haystack]
+            assert conditions[4 * i + 3] == ["in", f", {basic_type}]", haystack]
         assert icon_expr[-1] == TRANSPORT_ICON_FALLBACK
         # the color chain keeps the full palette mapping — the tint now
         # lives on the icon bands (FULL doc: SDF icon-color paint)
         bands = {l["id"]: l for l in TRANSPORT_STYLE["layers"] if l["type"] == "symbol"}
         color_expr = bands["transport-stops-primitives"]["paint"]["icon-color"]
-        assert color_expr[2:-1:2] == [
+        # FULL documents bind the normalized haystack in a let — the
+        # case chain lives at ["let", "rt", <normalize>, <case>]
+        assert color_expr[0] == "let"
+        assert color_expr[3][2:-1:2] == [
             TRANSPORT_FALLBACK_COLORS[slug] for slug, _ in TRANSPORT_MODES
         ]
-        assert color_expr[-1] == TRANSPORT_FALLBACK_COLORS["other"]
+        assert color_expr[3][-1] == TRANSPORT_FALLBACK_COLORS["other"]
 
     def test_full_style_sdf_halo_and_selection_contract(self) -> None:
         """The FULL document carries the hut-style look (owner decision
@@ -662,14 +669,14 @@ class TransportVectorContractTests(SimpleTestCase):
         mode_colors = [TRANSPORT_FALLBACK_COLORS[s] for s, _ in TRANSPORT_MODES]
         for icon_id in ("transport-stops-icons", "transport-stops-icons-detail"):
             paint = layers[icon_id]["paint"]
-            assert paint["icon-color"][0] == "case"
-            assert paint["icon-color"][2:-1:2] == mode_colors
-            assert paint["icon-color"][-1] == TRANSPORT_FALLBACK_COLORS["other"]
+            assert paint["icon-color"][0] == "let"
+            assert paint["icon-color"][3][2:-1:2] == mode_colors
+            assert paint["icon-color"][3][-1] == TRANSPORT_FALLBACK_COLORS["other"]
             # hover recolors ONLY the halo (mode color); rest stays white
             halo = paint["icon-halo-color"]
             assert halo[0] == "case"
             assert halo[1] == ["boolean", ["feature-state", "hovered"], False]
-            assert halo[2][2:-1:2] == mode_colors
+            assert halo[2][3][2:-1:2] == mode_colors
             assert halo[-1] == "#ffffff"
             # crisp outline, zoom-scaled width ladder
             assert paint["icon-halo-blur"] == 0
@@ -714,6 +721,136 @@ class TransportVectorContractTests(SimpleTestCase):
         )
         assert "promoteId" not in TRANSPORT_STYLE_SUBSET["sources"]["transitland_stops"]
 
+    def test_route_type_expressions_behavior_unchanged(self) -> None:
+        """The flat-case/let refactor of _route_type_present must be
+        behavior-identical to the old nested-case form.
+
+        A minimal evaluator for the handful of operators both shapes
+        use (case/in/get/let/var/concat/slice/to-string) runs BOTH the
+        old expression (reconstructed inline) and the new FULL and
+        SUBSET chains against every edge-case haystack — including the
+        metro(1)/trolleybus(11)/monorail(12) false-match traps.
+        """
+        import re
+
+        op_shape = re.compile(r"^[a-z][a-z0-9-]*$")
+        empty_env: dict[str, object] = {}
+
+        def ev(
+            expr: object, feature: dict[str, object], env: dict[str, object]
+        ) -> object:
+            if not isinstance(expr, list) or not expr:
+                return expr
+            if not isinstance(expr[0], str) or not op_shape.match(expr[0]):
+                return expr
+            op, args = expr[0], expr[1:]
+            if op == "get":
+                return feature.get(args[0])
+            if op == "var":
+                return env[args[0]]
+            if op == "let":
+                bound: dict[str, object] = {
+                    **env,
+                    args[0]: ev(args[1], feature, env),
+                }
+                return ev(args[2], feature, bound)
+            if op == "case":
+                # args has the "case" head stripped: conditions sit at
+                # EVEN indices, values at odd — indexing from 1 would
+                # test VALUES as conditions
+                for i in range(0, len(args) - 1, 2):
+                    if ev(args[i], feature, env):
+                        return ev(args[i + 1], feature, env)
+                return ev(args[-1], feature, env)
+            if op == "in":
+                needle = ev(args[0], feature, env)
+                hay = ev(args[1], feature, env)
+                if not isinstance(hay, str):
+                    return False  # MapLibre: in with null haystack → false
+                return str(needle) in hay
+            if op == "concat":
+                return "".join(
+                    "" if ev(a, feature, env) is None else str(ev(a, feature, env))
+                    for a in args
+                )
+            if op == "slice":
+                s = ev(args[0], feature, env)
+                return (s if isinstance(s, str) else "")[args[1] : args[2]]
+            if op == "to-string":
+                v = ev(args[0], feature, env)
+                if v is None:
+                    return "null"  # JS String(null)
+                return str(v).lower() if isinstance(v, bool) else str(v)
+            raise AssertionError(f"unexpected operator {op}")
+
+        def old_present(code: int) -> list[object]:  # the pre-refactor form
+            hay = ["get", "route_types_basic"]
+            return [
+                "case",
+                ["in", f"[{code}]", hay],
+                True,
+                ["in", f"[{code}, ", hay],
+                True,
+                ["in", f", {code}, ", hay],
+                True,
+                ["in", f", {code}]", hay],
+                True,
+                False,
+            ]
+
+        from server.apps.basemaps.seed_lib import (
+            TRANSPORT_MODES,
+            _route_type_case,
+        )
+
+        full = _route_type_case(
+            {slug: slug for slug, _ in TRANSPORT_MODES}, "other", subset=False
+        )
+        subset = _route_type_case(
+            {slug: slug for slug, _ in TRANSPORT_MODES}, "other", subset=True
+        )
+
+        haystacks = [
+            "[1]",
+            "[11]",
+            "[12]",
+            "[0, 1, 12]",
+            "[3, 11]",
+            "[2, 3]",
+            "[2]",
+            "[]",
+            "[0, 2, 11]",
+            "[7, 11]",
+            "[12, 2]",
+        ]
+        for raw in haystacks + [None]:
+            feature: dict[str, object] = (
+                {} if raw is None else {"route_types_basic": raw}
+            )
+            # old chain: first mode whose old_present() holds
+            expected = "other"
+            for slug, code in TRANSPORT_MODES:
+                if ev(old_present(code), feature, empty_env):
+                    expected = slug
+                    break
+            assert ev(full, feature, empty_env) == expected, (
+                raw,
+                "full",
+                expected,
+            )
+            assert ev(subset, feature, empty_env) == expected, (
+                raw,
+                "subset",
+                expected,
+            )
+        # the delimiter traps: 1 must NOT match 11/12 contexts;
+        # monorail(12) outranks trolleybus(11) in TRANSPORT_MODES
+        trap: dict[str, object] = {"route_types_basic": "[11, 12]"}
+        assert ev(full, trap, empty_env) == "monorail"
+        assert ev(subset, trap, empty_env) == "monorail"
+        assert ev(full, {"route_types_basic": "[11]"}, empty_env) == "trolleybus"
+        assert ev(subset, {"route_types_basic": "[1]"}, empty_env) == "metro"
+
     def test_no_clustering_anywhere(self) -> None:
         for source in TRANSPORT_STYLE["sources"].values():
             for key in (
@@ -733,8 +870,11 @@ class TransportVectorContractTests(SimpleTestCase):
         styled = transport_style({"rail": "#ff0000"})
         bands = {l["id"]: l for l in styled["layers"] if l["type"] == "symbol"}
         color_expr = bands["transport-stops-primitives"]["paint"]["icon-color"]
-        assert color_expr[2] == "#ff0000"  # rail (first mode) overridden
-        assert color_expr[4] != "#ff0000"  # tram keeps the fallback
+        # FULL documents bind the normalized haystack in a let — the
+        # case chain with one branch per mode lives at index 3
+        assert color_expr[0] == "let"
+        assert color_expr[3][2] == "#ff0000"  # rail (first mode) overridden
+        assert color_expr[3][4] != "#ff0000"  # tram keeps the fallback
 
     def test_style_passes_walker(self) -> None:
         """The subset twin is walker-clean — the whitelist admits

@@ -5,6 +5,7 @@
   {{ block.super }}
   <link rel="stylesheet" href="https://unpkg.com/codemirror@5.65.18/lib/codemirror.css" />
   <link rel="stylesheet" href="https://unpkg.com/codemirror@5.65.18/theme/material-darker.css" />
+  <link rel="stylesheet" href="https://unpkg.com/codemirror@5.65.18/addon/fold/foldgutter.css" />
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.14.0/dist/maplibre-gl.css" />
   <style>
     #wd-style-editor-root { display: block; }
@@ -39,6 +40,8 @@
     }
     .CodeMirror-gutters { background: #263238; border-right: 1px solid #374151; }
     .CodeMirror-linenumber { color: #546e7a; }
+    .CodeMirror-foldmarker { color: #f59e0b; text-shadow: none; font-family: monospace; cursor: pointer; }
+    .cm-foldgutter-open:after, .cm-foldgutter-folded:after { color: #78909c; cursor: pointer; }
     .wd-map-canvas {
       flex: 1 1 0; min-height: 300px; border: 1px solid var(--border-color, #374151); border-radius: 6px;
     }
@@ -129,6 +132,14 @@
 
     // General: render directly, no second-level tab bar anymore
     if (generalWrap) generalWrap.removeAttribute("x-show");
+    // Unfold's fieldset.html binds x-show="activeTab == 'general'" on
+    // every non-stacked fieldset MODULE — the promoted Style/Config
+    // tabs live outside the General tab, so their modules must drop it
+    // or they stay display:none (empty panels).
+    [styleWrap, configWrap].forEach(function (w) {
+      var module = w.querySelector(":scope > fieldset.module");
+      if (module) module.removeAttribute("x-show");
+    });
     var oldNav = fieldsetsArea.querySelector("nav");
     if (oldNav) oldNav.remove();
 
@@ -200,6 +211,9 @@
   <script src="https://unpkg.com/codemirror@5.65.18/lib/codemirror.js"></script>
   <script src="https://unpkg.com/codemirror@5.65.18/mode/javascript/javascript.js"></script>
   <script src="https://unpkg.com/codemirror@5.65.18/addon/edit/closebrackets.js"></script>
+  <script src="https://unpkg.com/codemirror@5.65.18/addon/fold/foldcode.js"></script>
+  <script src="https://unpkg.com/codemirror@5.65.18/addon/fold/foldgutter.js"></script>
+  <script src="https://unpkg.com/codemirror@5.65.18/addon/fold/brace-fold.js"></script>
 
   {% comment %}
     MapLibre GL v6 via ESM — v5's UMD bundle lacks the full MLT tile
@@ -265,8 +279,9 @@
       mode: { name: "javascript", json: true },
       theme: "material-darker",
       lineNumbers: true, autoCloseBrackets: true, lineWrapping: false,
+      foldGutter: true,
+      gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter", "wd-lint-gutter"],
       indentUnit: 2, tabSize: 2,
-      gutters: ["CodeMirror-linenumbers", "wd-lint-gutter"],
     });
     cm.on("change", function() { styleField.value = cm.getValue(); });
 
@@ -294,6 +309,7 @@
         var m = document.createElement("div");
         m.className = "wd-g-" + worst;
         m.textContent = items.length > 1 ? items.length + "×" : "●";
+        m.title = items.map(function (f) { return (f.severity + ": " + f.message); }).join("\n");
         cm.setGutterMarker(parseInt(lineNo, 10) - 1, "wd-lint-gutter", m);
       });
     }
