@@ -126,7 +126,7 @@ def _compose_overlay_on_basemap(
     overlay_layer: MapLayer,
     basemap_slug: str,
     tile_url: str,
-) -> tuple[dict[str, Any], str | None]:
+) -> tuple[dict[str, Any], str | None, list[dict[str, str]]]:
     """Compose an overlay on a basemap for preview (frontend parity)."""
     basemap = MapLayer.pick_variant(
         MapLayer.objects.filter(
@@ -136,7 +136,7 @@ def _compose_overlay_on_basemap(
         profile=MapLayer.Profile.full,
     )
     if basemap is None or basemap.style is None:
-        return overlay_doc, None
+        return overlay_doc, None, []
 
     # S1 fix: compose blocks FIRST (on the raw basemap document),
     # THEN resolve — the blocks carry {{env:…}} tokens that the
@@ -162,18 +162,35 @@ def _compose_overlay_on_basemap(
     basemap_doc = _resolve_document(basemap_doc, basemap, tile_url)
 
     # Append the overlay's sources/sprite/layers on top
+    compose_warnings: list[dict[str, str]] = []
     for key, source in (overlay_doc.get("sources") or {}).items():
-        basemap_doc.setdefault("sources", {}).setdefault(key, source)
+        existing = basemap_doc.setdefault("sources", {}).get(key)
+        if existing is not None and existing != source:
+            compose_warnings.append(
+                {
+                    "source": "compose",
+                    "severity": "warning",
+                    "message": f"source id '{key}' exists in the basemap with a different "
+                    "definition — the basemap's wins; icon/tile lookups may miss",
+                }
+            )
+        else:
+            basemap_doc["sources"].setdefault(key, source)
     overlay_sprite = overlay_doc.get("sprite") or []
     if isinstance(overlay_sprite, str):
         overlay_sprite = [{"id": "default", "url": overlay_sprite}]
+
     # MapLibre rejects duplicate sprite URLs in one style. The overlay
-    # and the basemap block for the same content family (transport,
-    # …) share a sprite URL under different ids: drop the basemap
-    # entries whose URL an overlay sprite also brings — the block that
-    # owned them had its layers removed by the prefix filter above, so
-    # nothing references them anymore, and the overlay's layers
-    # reference the overlay's sprite id.
+    # and the basemap block for the same content family (transport, …)
+    # share a sprite URL under different ids: drop the basemap entries
+    # whose URL an overlay sprite also brings — but only when no
+    # REMAINING layer still references them ("<id>:" icon/pattern
+    # references); the prefix filter above usually removed their
+    # layers, yet basemap-native layers may legitimately use them.
+    def _sprite_still_referenced(layers: list[dict[str, Any]], sid: str) -> bool:
+        needle = sid + ":"
+        return any(needle in json.dumps(layer) for layer in layers)
+
     overlay_urls = {
         s.get("url") for s in overlay_sprite if isinstance(s, dict) and s.get("url")
     }
@@ -181,14 +198,38 @@ def _compose_overlay_on_basemap(
         basemap_doc["sprite"] = [
             s
             for s in basemap_doc["sprite"]
-            if not (isinstance(s, dict) and s.get("url") in overlay_urls)
+            if not (
+                isinstance(s, dict)
+                and s.get("url") in overlay_urls
+                and s.get("id")
+                and not _sprite_still_referenced(
+                    basemap_doc.get("layers") or [], str(s["id"])
+                )
+            )
         ]
+    # The overlay is the document being edited — on an id collision its
+    # sprite replaces the basemap's entry (with a warning: basemap
+    # layers referencing that id now resolve against the overlay sheet)
     existing_ids = {
         s.get("id") for s in (basemap_doc.get("sprite") or []) if isinstance(s, dict)
     }
     for sprite in overlay_sprite:
-        if isinstance(sprite, dict) and sprite.get("id") not in existing_ids:
-            basemap_doc.setdefault("sprite", []).append(sprite)
+        if not (isinstance(sprite, dict) and sprite.get("id")):
+            continue
+        sid = str(sprite["id"])
+        if sid in existing_ids:
+            basemap_doc["sprite"] = [
+                s for s in basemap_doc["sprite"] if s.get("id") != sid
+            ]
+            compose_warnings.append(
+                {
+                    "source": "compose",
+                    "severity": "warning",
+                    "message": f"sprite id '{sid}' collides between basemap and overlay — "
+                    "the overlay's sheet wins",
+                }
+            )
+        basemap_doc.setdefault("sprite", []).append(sprite)
     # Overlay layers append at the END (above everything — the frontend
     # appends overlay layers via addLayer which places them on top)
     for layer in overlay_doc.get("layers") or []:
@@ -196,7 +237,14 @@ def _compose_overlay_on_basemap(
     if overlay_doc.get("glyphs"):
         basemap_doc.setdefault("glyphs", overlay_doc["glyphs"])
 
-    return basemap_doc, basemap.slug
+    return (
+        basemap_doc,
+        basemap.slug,
+        [
+            {"source": w["source"], "severity": w["severity"], "message": w["message"]}
+            for w in compose_warnings
+        ],
+    )
 
 
 def _overlay_block_prefix(layer: MapLayer) -> str:
@@ -255,6 +303,13 @@ def preview_live(request: HttpRequest) -> HttpResponse:
     profile = body.get("profile", "")
     slug = body.get("slug", "")
     object_id = body.get("object_id")
+    if object_id is not None and not isinstance(object_id, int):
+        # json.loads can deliver floats/strings ("1_0", "１") — never
+        # let them reach the ORM as pk lookups
+        try:
+            object_id = int(object_id)
+        except (TypeError, ValueError):
+            object_id = None
 
     # Find the row (may be None for unsaved — live editing)
     layer: MapLayer | None = None
@@ -313,9 +368,10 @@ def preview_live(request: HttpRequest) -> HttpResponse:
     # For overlays: compose on the requested basemap
     basemap_used = None
     if basemap_slug and layer is not None:
-        resolved, basemap_used = _compose_overlay_on_basemap(
+        resolved, basemap_used, compose_warnings = _compose_overlay_on_basemap(
             resolved, layer, basemap_slug, tile_url
         )
+        lint = compose_warnings + lint
 
     return JsonResponse(
         {
