@@ -1,0 +1,565 @@
+{% extends "admin/change_form.html" %}
+{% load i18n %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <link rel="stylesheet" href="https://unpkg.com/codemirror@5.65.18/lib/codemirror.css" />
+  <link rel="stylesheet" href="https://unpkg.com/codemirror@5.65.18/theme/material-darker.css" />
+  <link rel="stylesheet" href="https://unpkg.com/codemirror@5.65.18/addon/fold/foldgutter.css" />
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.14.0/dist/maplibre-gl.css" />
+  <style>
+    #wd-style-editor-root { display: block; }
+    .wd-style-grid {
+      display: grid; grid-template-columns: minmax(400px, 1fr) minmax(400px, 1fr);
+      gap: 10px; margin: 12px 0 8px;
+      height: calc(100vh - 240px); min-height: 480px;
+    }
+    @media (max-width: 1200px) { .wd-style-grid { grid-template-columns: 1fr; height: auto; } }
+    .wd-editor-col, .wd-map-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+    /* Equal toolbars → equal canvas heights in both columns; nowrap +
+       hidden overflow so a long status never wraps onto the canvas */
+    .wd-style-grid .wd-toolbar {
+      display: flex; gap: 8px; align-items: center; flex-wrap: nowrap;
+      overflow: hidden; font-size: 13px;
+      height: 32px; flex: 0 0 32px;
+    }
+    .wd-toolbar select, .wd-toolbar button, .wd-toolbar label.wd-btn {
+      font-size: 12px; padding: 3px 10px; border: 1px solid var(--border-color, #374151);
+      border-radius: 4px; background: var(--bg-inset, #1a1a2e); color: var(--text, #e0e0e0); cursor: pointer;
+    }
+    .wd-toolbar button:hover, .wd-toolbar label.wd-btn:hover { background: var(--bg-hover, #263238); }
+    .wd-status { font-size: 12px; opacity: 0.8; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .wd-status .ok { color: #22c55e; opacity: 1; }
+    .wd-status .err { color: #ef4444; opacity: 1; }
+    /* the zoom readout never shrinks — it is short and load-bearing */
+    #wd-zoom { flex: 0 0 auto; overflow: visible; }
+    /* CodeMirror appends INTO .wd-cm-host — the host is the flex child
+       that grows; CM fills it (height:100% = internal-scroll recipe). */
+    .wd-cm-host { flex: 1 1 0; min-height: 300px; display: flex; }
+    .wd-cm-host .CodeMirror {
+      flex: 1 1 0; height: 100%; border: 1px solid var(--border-color, #374151);
+      border-radius: 6px; font-size: 12px; line-height: 1.45;
+    }
+    .CodeMirror-gutters { background: #263238; border-right: 1px solid #374151; }
+    .CodeMirror-linenumber { color: #546e7a; }
+    .CodeMirror-foldmarker { color: #f59e0b; text-shadow: none; font-family: monospace; cursor: pointer; }
+    .cm-foldgutter-open:after, .cm-foldgutter-folded:after { color: #78909c; cursor: pointer; }
+    .wd-map-canvas {
+      flex: 1 1 0; min-height: 300px; border: 1px solid var(--border-color, #374151); border-radius: 6px;
+    }
+    .wd-lint-panel {
+      max-height: 100px; overflow-y: auto; border: 1px solid var(--border-color, #374151);
+      border-radius: 6px; padding: 3px 8px; font-size: 11.5px;
+      font-family: monospace; line-height: 1.4; background: var(--bg-inset, #1a1a2e);
+    }
+    .wd-lint-panel:empty { display: none; }
+    .wd-lint-ok { color: #22c55e; padding: 2px 0; }
+    .wd-lint-item { display: flex; gap: 5px; align-items: baseline; padding: 1px 0; }
+    .wd-lint-item .src { font-size: 9.5px; padding: 0 3px; border-radius: 3px; font-weight: 600; white-space: nowrap; }
+    .wd-lint-item .src.styl { background: #c35; color: #fff; }
+    .wd-lint-item .src.subset { background: #68a; color: #fff; }
+    .wd-lint-item .src.json { background: #d73; color: #fff; }
+    .wd-lint-item .line-no { color: #64748b; min-width: 2.5em; text-align: right; }
+    .wd-lint-item.error .msg { color: #ef4444; }
+    .wd-lint-item.warning .msg { color: #d97706; }
+    .wd-lint-item.info .msg { color: #3b82f6; }
+    .wd-g-error { color: #ef4444 !important; font-weight: bold; }
+    .wd-g-warning { color: #d97706 !important; }
+    .wd-g-info { color: #3b82f6 !important; }
+    /* The raw style textarea stays visible until CodeMirror mounts (JS
+       hides it then) — if the CDN or the module fails, the classic
+       textarea remains the editing surface. */
+  </style>
+{% endblock %}
+
+{% block after_field_sets %}
+  {{ block.super }}
+
+  {% comment %}
+    Style editor root (placed by the tab-promotion script below).
+    Two equal columns (JSON editor | map) + a full-width lint strip below
+    — the lint panel must live OUTSIDE the grid or the editor column
+    ends up shorter than the map column.
+  {% endcomment %}
+  {% if object_id and original and original.style is not None %}
+  <div id="wd-style-editor-root" style="display:none">
+    <div class="wd-style-grid">
+      <div class="wd-editor-col">
+        <div class="wd-toolbar">
+          <strong>Style JSON</strong>
+          <span class="wd-status" id="wd-json-status"></span>
+          <button type="button" id="wd-collapse-btn">Collapse</button>
+          <button type="button" id="wd-expand-btn">Expand</button>
+          <button type="button" id="wd-export-btn">Export</button>
+          <label class="wd-btn" for="wd-import-file">Import</label>
+          <input type="file" id="wd-import-file" accept=".json" style="display:none" />
+        </div>
+        {# CM appends INTO its host — the host must be the growing flex child #}
+        <div class="wd-cm-host"></div>
+      </div>
+      <div class="wd-map-col">
+        <div class="wd-toolbar">
+          <strong>Preview</strong>
+          {% if original.role == "overlay" %}
+            <label for="wd-basemap-select">Basemap:</label>
+            <select id="wd-basemap-select"><option value="">— standalone —</option></select>
+          {% endif %}
+          <span class="wd-status" id="wd-zoom">z–</span>
+          <span class="wd-status" id="wd-preview-status"></span>
+        </div>
+        <div class="wd-map-canvas" id="wd-map-canvas"></div>
+      </div>
+    </div>
+    <div class="wd-lint-panel" id="wd-lint-panel"></div>
+  </div>
+
+  {{ wd_pretty_style|default:'{}'|json_script:"wd-style-data" }}
+  {% endif %}
+
+  {% comment %}
+    Tab promotion: Style & Config fieldset tabs → top-level Unfold tabs.
+    Runs synchronously BEFORE Alpine initializes (Alpine loads deferred), so
+    the moved containers and added nav links get bound by Alpine's first scan.
+    The Style tab gains sub-tabs (Settings | Editor) when the editor exists.
+  {% endcomment %}
+  <script>
+  (function () {
+    "use strict";
+    var nav = document.getElementById("tabs-items");
+    var fieldsetsArea = document.querySelector('div[x-data][x-show="activeTab == \'general\'"]');
+    if (!nav || !fieldsetsArea) return;
+
+    var generalLink = nav.querySelector('a[href="#general"]');
+    var styleWrap = fieldsetsArea.querySelector(".tab-wrapper.fieldset-style");
+    var configWrap = fieldsetsArea.querySelector(".tab-wrapper.fieldset-config");
+    var generalWrap = fieldsetsArea.querySelector(".tab-wrapper.fieldset-general");
+    if (!generalLink || !styleWrap || !configWrap) return;
+
+    // General: render directly, no second-level tab bar anymore
+    if (generalWrap) generalWrap.removeAttribute("x-show");
+    // Unfold's fieldset.html binds x-show="activeTab == 'general'" on
+    // every non-stacked fieldset MODULE — the promoted Style/Config
+    // tabs live outside the General tab, so their modules must drop it
+    // or they stay display:none (empty panels).
+    [styleWrap, configWrap].forEach(function (w) {
+      var module = w.querySelector(":scope > fieldset.module");
+      if (module) module.removeAttribute("x-show");
+    });
+    var oldNav = fieldsetsArea.querySelector("nav");
+    if (oldNav) oldNav.remove();
+
+    // Style container: top-level tab with Settings | Editor sub-tabs
+    var editorRoot = document.getElementById("wd-style-editor-root");
+    var styleContainer = document.createElement("div");
+    styleContainer.setAttribute("x-data", "{ styleSub: 'settings' }");
+    styleContainer.setAttribute("x-show", "activeTab == 'style'");
+    styleWrap.setAttribute("x-show", "styleSub == 'settings'");
+    styleContainer.appendChild(styleWrap);
+    if (editorRoot) {
+      var subnavWrap = document.createElement("div");
+      subnavWrap.className = "border-b border-base-200 dark:border-base-800";
+      var subnav = document.createElement("nav");
+      subnav.className = "flex flex-row items-center *:border-x *:border-transparent *:font-medium *:text-important *:first:border-l-0 *:cursor-pointer *:relative *:py-2 *:px-3.5 *:hover:text-primary-600 dark:*:hover:text-primary-500 dark:*:border-transparent [&>.active]:bg-white dark:[&>.active]:bg-base-900 [&>.active]:border-base-200 dark:[&>.active]:border-base-800  [&>.active]:text-primary-600 dark:[&>.active]:text-primary-500 [&>.active]:after:absolute [&>.active]:after:content-[''] [&>.active]:after:-bottom-px [&>.active]:after:left-0 [&>.active]:after:right-0 [&>.active]:after:h-px [&>.active]:after:bg-white dark:[&>.active]:after:bg-base-900";
+      var settingsLink = document.createElement("a");
+      settingsLink.textContent = "{% trans 'Settings' %}";
+      settingsLink.setAttribute("x-on:click", "styleSub = 'settings'");
+      settingsLink.setAttribute("x-bind:class", "{'active': styleSub == 'settings'}");
+      var editorLink = document.createElement("a");
+      editorLink.textContent = "{% trans 'Editor' %}";
+      editorLink.setAttribute("x-on:click", "styleSub = 'editor'");
+      editorLink.setAttribute("x-bind:class", "{'active': styleSub == 'editor'}");
+      subnav.appendChild(settingsLink);
+      subnav.appendChild(editorLink);
+      subnavWrap.appendChild(subnav);
+      styleContainer.insertBefore(subnavWrap, styleWrap);
+      editorRoot.setAttribute("x-show", "styleSub == 'editor'");
+      styleContainer.appendChild(editorRoot);
+    }
+    fieldsetsArea.parentNode.insertBefore(styleContainer, fieldsetsArea.nextSibling);
+
+    // Config container: top-level tab
+    var configContainer = document.createElement("div");
+    configContainer.setAttribute("x-show", "activeTab == 'config'");
+    configWrap.removeAttribute("x-show");
+    configContainer.appendChild(configWrap);
+    styleContainer.parentNode.insertBefore(configContainer, styleContainer.nextSibling);
+
+    // Top-level nav links: General | Style | Config | <inlines…>
+    function makeLink(label, slug) {
+      var a = document.createElement("a");
+      a.href = "#" + slug;
+      a.setAttribute("x-on:click", "activeTab = '" + slug + "'");
+      a.setAttribute("x-bind:class", "{'active': activeTab == '" + slug + "'}");
+      a.textContent = label;
+      return a;
+    }
+    generalLink.after(makeLink("{% filter escapejs %}{% trans 'Style' %}{% endfilter %}", "style"), makeLink("{% filter escapejs %}{% trans 'Config' %}{% endfilter %}", "config"));
+
+    // Surface validation errors: Unfold's own tab error badges lived on
+    // the removed nav. Switch to the first promoted tab carrying an
+    // .errorlist (hash pre-Alpine → body x-init picks it up; the Style
+    // sub-tab flips to Editor so the error is next to the JSON).
+    var errTarget = null;
+    if (styleWrap.querySelector(".errorlist")) {
+      errTarget = "style";
+      styleContainer.setAttribute("x-data", "{ styleSub: 'editor' }");
+    } else if (configWrap.querySelector(".errorlist")) {
+      errTarget = "config";
+    }
+    if (errTarget && !window.location.hash) {
+      window.location.hash = "#" + errTarget;
+    }
+  })();
+  </script>
+
+  {% if object_id and original and original.style is not None %}
+  <script src="https://unpkg.com/codemirror@5.65.18/lib/codemirror.js"></script>
+  <script src="https://unpkg.com/codemirror@5.65.18/mode/javascript/javascript.js"></script>
+  <script src="https://unpkg.com/codemirror@5.65.18/addon/edit/closebrackets.js"></script>
+  <script src="https://unpkg.com/codemirror@5.65.18/addon/fold/foldcode.js"></script>
+  <script src="https://unpkg.com/codemirror@5.65.18/addon/fold/foldgutter.js"></script>
+  <script src="https://unpkg.com/codemirror@5.65.18/addon/fold/brace-fold.js"></script>
+
+  {% comment %}
+    MapLibre GL v6 via ESM — v5's UMD bundle lacks the full MLT tile
+    decoder ("only optional string fields are implemented"), v6 dropped
+    UMD entirely. Named imports; module scripts are deferred so the
+    classic tab-promotion script below still runs first.
+    v6 loads its tile-parsing worker from a sibling .mjs via
+    new Worker(url) — browsers refuse cross-origin workers, so the
+    self-contained worker source is fetched and re-served as a
+    same-origin blob through setWorkerUrl (CSP worker-src allows
+    blob:).
+  {% endcomment %}
+  <script type="module">
+  import { Map, NavigationControl, ScaleControl, Popup, setWorkerUrl } from "https://unpkg.com/maplibre-gl@6.14.0/dist/maplibre-gl.mjs";
+
+  // Same-origin blob worker (browsers refuse cross-origin Worker
+  // scripts). Failure is non-fatal: the map just won't render tiles —
+  // CodeMirror + lint keep working.
+  try {
+    const r = await fetch("https://unpkg.com/maplibre-gl@6.14.0/dist/maplibre-gl-worker.mjs");
+    if (!r.ok) throw new Error("worker fetch " + r.status);
+    setWorkerUrl(URL.createObjectURL(new Blob([await r.text()], {type: "text/javascript"})));
+  } catch (e) {
+    console.warn("wd style editor: map worker unavailable, map preview disabled", e);
+  }
+
+  const initEditor = function() {
+    "use strict";
+
+    var styleField = document.getElementById("id_style");
+    if (!styleField) return;
+    // The tab promotion must have run (editor promoted into the Style
+    // tab) — otherwise keep the classic textarea surface entirely.
+    var editorRoot = document.getElementById("wd-style-editor-root");
+    if (!editorRoot || !editorRoot.hasAttribute("x-show")) return;
+
+    var layerSlug = "{{ original.slug|escapejs }}";
+    var layerProfile = "{{ original.profile|escapejs }}";
+    var layerRole = "{{ original.role|escapejs }}";
+    var objectId = {{ original.pk|default:'null' }};
+    var previewUrl = "{% url 'admin:basemaps_maplayer_preview_live' %}";
+    var basemapSelect = document.getElementById("wd-basemap-select");
+    var lintPanel = document.getElementById("wd-lint-panel");
+    var statusEl = document.getElementById("wd-preview-status");
+    var jsonStatusEl = document.getElementById("wd-json-status");
+
+    // Prefer the form field's CURRENT value (a failed save re-renders
+    // with the user's edit, not the stored style); pretty-print it in
+    // JS. The server-provided pretty string is only a fallback.
+    var prettyValue = (function () {
+      var raw = (styleField.value || "").trim();
+      if (raw) {
+        try { return JSON.stringify(JSON.parse(raw), null, 2); } catch (e) { return raw; }
+      }
+      var el = document.getElementById("wd-style-data");
+      try { return el ? JSON.parse(el.textContent) : "{}"; } catch (e) { return "{}"; }
+    })();
+
+    // ── CodeMirror ─────────────────────────────────────────────
+    var cmHost = document.querySelector(".wd-cm-host");
+    var cm = CodeMirror(cmHost, {
+      value: prettyValue,
+      mode: { name: "javascript", json: true },
+      theme: "material-darker",
+      lineNumbers: true, autoCloseBrackets: true, lineWrapping: false,
+      foldGutter: true,
+      gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter", "wd-lint-gutter"],
+      indentUnit: 2, tabSize: 2,
+    });
+    cm.on("change", function() { styleField.value = cm.getValue(); });
+
+    // NOW the raw textarea can step back — CodeMirror is the surface.
+    // Field-level validation errors attached to the hidden row are
+    // surfaced in the lint panel instead.
+    var styleRow = styleField.closest('.flex-container, .form-row, fieldset > div');
+    if (styleRow) styleRow.style.display = 'none';
+    var fieldErrors = [];
+    (styleRow ? styleRow.querySelectorAll('.errorlist li') : []).forEach(function (li) {
+      fieldErrors.push({source: "django", severity: "error", message: li.textContent});
+    });
+
+    // ── Lint ───────────────────────────────────────────────────
+    function setGutter(findings) {
+      cm.clearGutter("wd-lint-gutter");
+      var byLine = {};
+      findings.forEach(function(f) { if (f.line) (byLine[f.line] = byLine[f.line] || []).push(f); });
+      Object.keys(byLine).forEach(function(lineNo) {
+        var items = byLine[lineNo];
+        var worst = items.reduce(function(acc, f) {
+          var rank = {error: 0, warning: 1, info: 2};
+          return rank[f.severity] < rank[acc] ? f.severity : acc;
+        }, "info");
+        var m = document.createElement("div");
+        m.className = "wd-g-" + worst;
+        m.textContent = items.length > 1 ? items.length + "×" : "●";
+        m.title = items.map(function (f) { return (f.severity + ": " + f.message); }).join("\n");
+        cm.setGutterMarker(parseInt(lineNo, 10) - 1, "wd-lint-gutter", m);
+      });
+    }
+    function renderLint(findings) {
+      lintPanel.textContent = "";
+      var visible = findings.filter(function(f) {
+        if (f.source === "subset" && f.severity === "info" && layerProfile !== "subset") return false;
+        return true;
+      });
+      if (visible.length === 0) {
+        var ok = document.createElement("div");
+        ok.className = "wd-lint-ok"; ok.textContent = "✓ no findings";
+        lintPanel.appendChild(ok);
+        return;
+      }
+      visible.forEach(function(f) {
+        var el = document.createElement("div");
+        el.className = "wd-lint-item " + f.severity;
+        var src = document.createElement("span");
+        src.className = "src " + (f.severity === "info" ? "info" : f.source);
+        src.textContent = f.source; el.appendChild(src);
+        if (f.line) {
+          var ln = document.createElement("span");
+          ln.className = "line-no"; ln.textContent = "L" + f.line; el.appendChild(ln);
+        }
+        var msg = document.createElement("span");
+        msg.className = "msg"; msg.textContent = f.message; el.appendChild(msg);
+        lintPanel.appendChild(el);
+      });
+    }
+
+    // ── MapLibre (worker failure above leaves this dead — CodeMirror
+    //    and the lint preview still work without it) ──────────────
+    var map = null;
+    try {
+      map = new Map({
+        container: "wd-map-canvas",
+        style: {version: 8, layers: [], sources: {}},
+        center: [8.2, 46.8], zoom: 7,
+      });
+      map.addControl(new NavigationControl());
+      map.addControl(new ScaleControl());
+    } catch (e) {
+      console.warn("wd style editor: map unavailable", e);
+    }
+    // Debug/console affordance: window.__wdMap (used by E2E tests too)
+    window.__wdMap = map;
+
+    // ── Live zoom level readout ───────────────────────────────
+    var zoomEl = document.getElementById("wd-zoom");
+    if (map && zoomEl) {
+      var showZoom = function() { zoomEl.textContent = "z" + Math.round(map.getZoom() * 10) / 10; };
+      map.on("zoom", showZoom);
+      map.on("move", showZoom);
+      showZoom();
+    }
+
+    // ── Click popup: every rendered feature's properties ──────
+    if (map) {
+      var esc = function(s) {
+        return String(s).replace(/[&<>"']/g, function(c) {
+          return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c];
+        });
+      };
+      map.on("click", function(e) {
+        var feats;
+        try { feats = map.queryRenderedFeatures(e.point); } catch (err) { return; }
+        if (!feats.length) return;
+        var parts = feats.slice(0, 3).map(function(f) {
+          var props = Object.keys(f.properties || {}).sort().map(function(k) {
+            var v = f.properties[k];
+            return "<tr><td>" + esc(k) + "</td><td>" +
+              esc(typeof v === "string" ? v : JSON.stringify(v)) + "</td></tr>";
+          }).join("");
+          return "<div style=\"margin-bottom:8px\"><strong>" + esc(f.layer && f.layer.id || "?") + "</strong>" +
+            "<table style=\"border-collapse:collapse;font-size:11px\"><tbody>" + props + "</tbody></table></div>";
+        });
+        parts.push("<div style=\"opacity:0.6;font-size:10px\">" + feats.length + " feature" + (feats.length > 1 ? "s" : "") + " at this point (first 3 shown)</div>");
+        var popup = new Popup({maxWidth: "360px"})
+          .setLngLat(e.lngLat)
+          .setHTML('<div style="max-height:300px;overflow-y:auto">' + parts.join("") + "</div>")
+          .addTo(map);
+        window.__wdPopup = popup;
+      });
+    }
+
+    // ── Basemap selector ───────────────────────────────────────
+    if (basemapSelect && layerRole === "overlay") {
+      fetch("/v1/map/layers?role=basemap&fields=slug,name")
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          (data.data || []).forEach(function(entry) {
+            var o = document.createElement("option");
+            o.value = entry.slug; o.textContent = entry.name || entry.slug;
+            basemapSelect.appendChild(o);
+          });
+          basemapSelect.value = "wd-outdoor-base-mtk-hill";
+          refresh();
+        })
+        .catch(function() { refresh(); });
+      basemapSelect.addEventListener("change", function() { refresh(); });
+    }
+
+    // ── Live refresh ───────────────────────────────────────
+    var requestId = 0;
+    var editorVisible = function() {
+      var el = document.getElementById('wd-style-editor-root');
+      return !!el && el.offsetWidth > 0;
+    };
+    // each debounce() call gets its OWN timer — sharing one would let
+    // the resize handler and the edit handler cancel each other
+    function debounce(fn, ms) { var t = null; return function() { clearTimeout(t); t = setTimeout(fn, ms); }; }
+    var csrfToken = (function () {
+      var inp = document.querySelector('input[name=csrfmiddlewaretoken]');
+      return inp ? inp.value : '';
+    })();
+    function refresh() {
+      // Applying a style while the container is display:none leaves
+      // MapLibre with a blank canvas (no repaint ever fires) — only
+      // refresh while the Editor sub-tab is actually visible; the
+      // visibility observer below triggers the first refresh.
+      if (!editorVisible()) return;
+      var raw = cm.getValue();
+      if (!raw.trim()) { jsonStatusEl.textContent = "empty"; return; }
+      jsonStatusEl.textContent = "checking…";
+      var thisRequest = ++requestId;
+      fetch(previewUrl, {
+        method: "POST",
+        headers: {"Content-Type": "application/json", "X-CSRFToken": csrfToken},
+        body: JSON.stringify({
+          style_json: raw,
+          basemap_slug: basemapSelect ? basemapSelect.value : null,
+          profile: layerProfile, slug: layerSlug, object_id: objectId,
+        }),
+      })
+        .then(function(r) {
+          if (!r.ok) {
+            if (thisRequest === requestId) {
+              jsonStatusEl.classList.remove("ok");
+              jsonStatusEl.classList.add("err");
+              jsonStatusEl.textContent = "HTTP " + r.status + (r.status === 403 ? " — reload the page" : "");
+            }
+            return null;
+          }
+          return r.json();
+        })
+        .then(function(data) {
+          if (!data || thisRequest !== requestId) return;
+          var lint = (data.lint || []).concat(fieldErrors);
+          if (data.error && !data.style) {
+            jsonStatusEl.classList.remove("ok");
+            jsonStatusEl.classList.add("err");
+            jsonStatusEl.textContent = "JSON error";
+            renderLint(lint.length ? lint : [{source: "json", severity: "error", message: String(data.error)}]);
+            setGutter(data.lint || []);
+            return;
+          }
+          jsonStatusEl.textContent = "✓"; jsonStatusEl.classList.remove("err"); jsonStatusEl.classList.add("ok");
+          renderLint(lint); setGutter(data.lint || []);
+          if (data.style && map) {
+            map.setStyle(data.style, {diff: true});
+            statusEl.textContent = (data.style.layers || []).length + " layers" + (data.basemap ? " · on " + data.basemap : "");
+          }
+        })
+        .catch(function() { if (thisRequest !== requestId) return; jsonStatusEl.textContent = "request failed"; });
+    }
+    cm.on("change", debounce(refresh, 600));
+    if (fieldErrors.length) { renderLint(fieldErrors); }
+
+    // ── Visibility: the map must apply its style (and paint) while
+    //    visible — resize + refresh on every show of the Editor
+    //    sub-tab / Style top-level tab ──
+    var editorRoot = document.getElementById("wd-style-editor-root");
+    if (editorRoot) {
+      var ensureSize = debounce(function() {
+        if (editorRoot.offsetWidth > 0) {
+          try { if (map) map.resize(); } catch (e) {}
+          cm.refresh();
+          refresh();
+        }
+      }, 150);
+      var visObserver = new MutationObserver(ensureSize);
+      visObserver.observe(editorRoot, {attributes: true, attributeFilter: ["style"]});
+      var styleContainer = editorRoot.parentNode;
+      if (styleContainer) {
+        visObserver.observe(styleContainer, {attributes: true, attributeFilter: ["style"]});
+      }
+    }
+
+    // If the editor is ALREADY visible when the module finishes loading
+    // (~1 MB fetch), no style attribute will change to kick off the
+    // first refresh — run it directly.
+    if (editorVisible()) {
+      try { if (map) map.resize(); } catch (e) {}
+      cm.refresh();
+      refresh();
+    }
+
+    // ── Export / Import / Collapse / Expand ──────────────────
+    document.getElementById("wd-collapse-btn").addEventListener("click", function() {
+      // fold ONLY the top-level keys (indent depth 1) — the style's
+      // skeleton (name / glyphs / sources / layers…) stays visible
+      // while every long array collapses behind it
+      cm.operation(function() {
+        for (var i = 0; i < cm.lineCount(); i++) {
+          var line = cm.getLine(i);
+          var indent = (line.match(/^\s*/) || [""])[0].length / 2;
+          if (indent !== 1) continue;
+          var pos = CodeMirror.Pos(i, 0);
+          if (CodeMirror.fold.brace && CodeMirror.fold.brace(cm, pos)) {
+            cm.foldCode(pos, CodeMirror.fold.brace, "fold");
+          }
+        }
+      });
+    });
+    document.getElementById("wd-expand-btn").addEventListener("click", function() {
+      cm.execCommand("unfoldAll");
+    });
+    document.getElementById("wd-export-btn").addEventListener("click", function() {
+      var a = document.createElement("a");
+      var url = URL.createObjectURL(new Blob([cm.getValue()], {type: "application/json"}));
+      a.href = url;
+      a.download = layerSlug + "--" + layerProfile + ".json";
+      document.body.appendChild(a); a.click(); a.remove();
+      // revoking synchronously can cancel the download in Firefox
+      setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+    });
+    document.getElementById("wd-import-file").addEventListener("change", function(e) {
+      var file = e.target.files[0]; if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function() {
+        try { cm.setValue(JSON.stringify(JSON.parse(reader.result), null, 2)); }
+        catch (err) { alert("Invalid JSON: " + err.message); }
+      };
+      reader.readAsText(file); e.target.value = "";
+    });
+  };
+
+  // Module scripts run before DOMContentLoaded, but the top-level await
+  // above delays this continuation past it — guard both cases.
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initEditor);
+  } else {
+    initEditor();
+  }
+  </script>
+  {% endif %}
+{% endblock %}

@@ -8,7 +8,7 @@ live style preview (MapLibre GL, resolved mode) via ``<id>/preview/``.
 
 from __future__ import annotations
 
-from typing import override
+from typing import Any, override
 
 from django.contrib import admin
 from django.http import HttpRequest, HttpResponse
@@ -42,6 +42,7 @@ class MapLayerParameterInline(admin.TabularInline[MapLayerParameter, MapLayer]):
 
     model = MapLayerParameter
     tab = True
+    verbose_name_plural = _("Parameters")
     extra = 0
     autocomplete_fields = ("parameter",)
 
@@ -51,6 +52,7 @@ class MapLayerCategoryInline(admin.TabularInline[MapLayerCategory, MapLayer]):
 
     model = MapLayerCategory
     tab = True
+    verbose_name_plural = _("Categories")
     extra = 0
     autocomplete_fields = ("category",)
 
@@ -60,6 +62,7 @@ class MapLayerAttributionInline(admin.TabularInline[MapLayerAttribution, MapLaye
 
     model = MapLayerAttribution
     tab = True
+    verbose_name_plural = _("Attributions")
     extra = 0
     autocomplete_fields = ("organization",)
 
@@ -191,8 +194,9 @@ class MapLayerAdmin(ModelAdmin):
     readonly_fields = ("style_serving_url",)
     fieldsets = (
         (
-            None,
+            _("General"),
             {
+                "classes": ["tab"],
                 "fields": (
                     "slug",
                     "spec",
@@ -208,12 +212,13 @@ class MapLayerAdmin(ModelAdmin):
                     "show",
                     "is_active",
                     "is_default",
-                )
+                ),
             },
         ),
         (
             _("Style"),
             {
+                "classes": ["tab"],
                 "fields": (
                     "style",
                     "style_url",
@@ -221,18 +226,25 @@ class MapLayerAdmin(ModelAdmin):
                     "min_zoom",
                     "max_zoom",
                     "style_serving_url",
-                )
+                ),
             },
         ),
         (
-            _("Placement & fallback"),
-            {"fields": ("coverage", "fallback_min_zoom", "fallback", "anchors")},
+            _("Config"),
+            {
+                "classes": ["tab"],
+                "fields": (
+                    "coverage",
+                    "fallback_min_zoom",
+                    "fallback",
+                    "anchors",
+                    "config",
+                    "interaction",
+                    "preview_url",
+                    "license",
+                ),
+            },
         ),
-        (
-            _("Content & interaction"),
-            {"fields": ("config", "interaction", "preview_url")},
-        ),
-        (_("Legal"), {"fields": ("license",)}),
     )
 
     @display(description=_("Style"), boolean=True)
@@ -247,6 +259,11 @@ class MapLayerAdmin(ModelAdmin):
                 "<path:object_id>/preview/",
                 self.admin_site.admin_view(self.preview_view),
                 name="basemaps_maplayer_preview",
+            ),
+            path(
+                "preview-live/",
+                self.admin_site.admin_view(self.preview_live_view),
+                name="basemaps_maplayer_preview_live",
             ),
         ]
         return custom + urls
@@ -265,6 +282,31 @@ class MapLayerAdmin(ModelAdmin):
             "title": _("Preview: %(layer)s") % {"layer": layer.slug},
         }
         return render(request, "admin/basemaps/maplayer/preview.html", context)
+
+    def preview_live_view(self, request: HttpRequest) -> HttpResponse:
+        """Live style preview: resolve + lint + compose (admin widget)."""
+        from server.apps.basemaps.preview import preview_live
+
+        return preview_live(request)
+
+    @override
+    def change_view(
+        self,
+        request: HttpRequest,
+        object_id: str,
+        form_url: str = "",
+        extra_context: dict[str, Any] | None = None,
+    ) -> HttpResponse:
+        """Pass the pretty-printed style JSON to the template (fast load)."""
+        import json as _json
+
+        extra_context = extra_context or {}
+        obj = self.get_object(request, object_id)
+        if obj is not None and obj.style is not None:
+            extra_context["wd_pretty_style"] = _json.dumps(
+                obj.style, indent=2, ensure_ascii=False
+            )
+        return super().change_view(request, object_id, form_url, extra_context)
 
     def style_serving_url(self, obj: MapLayer) -> str:
         """The public style endpoint URL for this layer variant."""
