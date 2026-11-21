@@ -31,6 +31,8 @@
     .wd-status { font-size: 12px; opacity: 0.8; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     .wd-status .ok { color: #22c55e; opacity: 1; }
     .wd-status .err { color: #ef4444; opacity: 1; }
+    /* the zoom readout never shrinks — it is short and load-bearing */
+    #wd-zoom { flex: 0 0 auto; overflow: visible; }
     /* CodeMirror appends INTO .wd-cm-host — the host is the flex child
        that grows; CM fills it (height:100% = internal-scroll recipe). */
     .wd-cm-host { flex: 1 1 0; min-height: 300px; display: flex; }
@@ -86,6 +88,8 @@
         <div class="wd-toolbar">
           <strong>Style JSON</strong>
           <span class="wd-status" id="wd-json-status"></span>
+          <button type="button" id="wd-collapse-btn">Collapse</button>
+          <button type="button" id="wd-expand-btn">Expand</button>
           <button type="button" id="wd-export-btn">Export</button>
           <label class="wd-btn" for="wd-import-file">Import</label>
           <input type="file" id="wd-import-file" accept=".json" style="display:none" />
@@ -100,6 +104,7 @@
             <label for="wd-basemap-select">Basemap:</label>
             <select id="wd-basemap-select"><option value="">— standalone —</option></select>
           {% endif %}
+          <span class="wd-status" id="wd-zoom">z–</span>
           <span class="wd-status" id="wd-preview-status"></span>
         </div>
         <div class="wd-map-canvas" id="wd-map-canvas"></div>
@@ -227,7 +232,7 @@
     blob:).
   {% endcomment %}
   <script type="module">
-  import { Map, NavigationControl, ScaleControl, setWorkerUrl } from "https://unpkg.com/maplibre-gl@6.14.0/dist/maplibre-gl.mjs";
+  import { Map, NavigationControl, ScaleControl, Popup, setWorkerUrl } from "https://unpkg.com/maplibre-gl@6.14.0/dist/maplibre-gl.mjs";
 
   // Same-origin blob worker (browsers refuse cross-origin Worker
   // scripts). Failure is non-fatal: the map just won't render tiles —
@@ -358,6 +363,42 @@
     // Debug/console affordance: window.__wdMap (used by E2E tests too)
     window.__wdMap = map;
 
+    // ── Live zoom level readout ───────────────────────────────
+    var zoomEl = document.getElementById("wd-zoom");
+    if (map && zoomEl) {
+      var showZoom = function() { zoomEl.textContent = "z" + Math.round(map.getZoom() * 10) / 10; };
+      map.on("zoom", showZoom);
+      map.on("move", showZoom);
+      showZoom();
+    }
+
+    // ── Click popup: every rendered feature's properties ──────
+    if (map) {
+      var esc = function(s) {
+        return String(s).replace(/[&<>"']/g, function(c) {
+          return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c];
+        });
+      };
+      map.on("click", function(e) {
+        var feats;
+        try { feats = map.queryRenderedFeatures(e.point); } catch (err) { return; }
+        if (!feats.length) return;
+        var parts = feats.slice(0, 3).map(function(f) {
+          var props = Object.keys(f.properties || {}).sort().map(function(k) {
+            return "<tr><td>" + esc(k) + "</td><td>" + esc(JSON.stringify(f.properties[k])).replace(/^"|"$/g, "") + "</td></tr>";
+          }).join("");
+          return "<div style=\"margin-bottom:8px\"><strong>" + esc(f.layer && f.layer.id || "?") + "</strong>" +
+            "<table style=\"border-collapse:collapse;font-size:11px\"><tbody>" + props + "</tbody></table></div>";
+        });
+        parts.push("<div style=\"opacity:0.6;font-size:10px\">" + feats.length + " feature" + (feats.length > 1 ? "s" : "") + " at this point (first 3 shown)</div>");
+        var popup = new Popup({maxWidth: "360px"})
+          .setLngLat(e.lngLat)
+          .setHTML('<div style="max-height:300px;overflow-y:auto">' + parts.join("") + "</div>")
+          .addTo(map);
+        window.__wdPopup = popup;
+      });
+    }
+
     // ── Basemap selector ───────────────────────────────────────
     if (basemapSelect && layerRole === "overlay") {
       fetch("/v1/map/layers?role=basemap&fields=slug,name")
@@ -460,7 +501,26 @@
       refresh();
     }
 
-    // ── Export / Import ────────────────────────────────────────
+    // ── Export / Import / Collapse / Expand ──────────────────
+    document.getElementById("wd-collapse-btn").addEventListener("click", function() {
+      // fold ONLY the top-level keys (indent depth 1) — the style's
+      // skeleton (name / glyphs / sources / layers…) stays visible
+      // while every long array collapses behind it
+      cm.operation(function() {
+        for (var i = 0; i < cm.lineCount(); i++) {
+          var line = cm.getLine(i);
+          var indent = (line.match(/^\s*/) || [""])[0].length / 2;
+          if (indent !== 1) continue;
+          var pos = CodeMirror.Pos(i, 0);
+          if (CodeMirror.fold.brace && CodeMirror.fold.brace(cm, pos)) {
+            cm.foldCode(pos, CodeMirror.fold.brace, "fold");
+          }
+        }
+      });
+    });
+    document.getElementById("wd-expand-btn").addEventListener("click", function() {
+      cm.execCommand("unfoldAll");
+    });
     document.getElementById("wd-export-btn").addEventListener("click", function() {
       var a = document.createElement("a");
       var url = URL.createObjectURL(new Blob([cm.getValue()], {type: "application/json"}));

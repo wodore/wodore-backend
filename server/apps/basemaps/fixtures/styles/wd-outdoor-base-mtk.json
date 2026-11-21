@@ -8372,7 +8372,11 @@
                 "tree",
                 "lodging",
                 "rail",
-                "parking"
+                "parking",
+                "bus_stop",
+                "tram",
+                "station",
+                "halt"
               ]
             ]
           ]
@@ -9983,7 +9987,11 @@
                 "tree",
                 "lodging",
                 "rail",
-                "parking"
+                "parking",
+                "bus_stop",
+                "tram",
+                "station",
+                "halt"
               ]
             ]
           ]
@@ -11413,7 +11421,11 @@
                 "tree",
                 "lodging",
                 "rail",
-                "parking"
+                "parking",
+                "bus_stop",
+                "tram",
+                "station",
+                "halt"
               ]
             ]
           ]
@@ -12832,7 +12844,11 @@
                 "tree",
                 "lodging",
                 "rail",
-                "parking"
+                "parking",
+                "bus_stop",
+                "tram",
+                "station",
+                "halt"
               ]
             ]
           ]

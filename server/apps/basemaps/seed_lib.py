@@ -2462,6 +2462,30 @@ def _transport_style_base(colors: dict[str, str] | None = None) -> dict[str, Any
                         16,
                         0.5,
                     ],
+                    # stop names from mid-band — collision-active, so
+                    # dense streets self-declutter (subset-whitelisted
+                    # text props only)
+                    "text-field": ["get", "stop_name"],
+                    "text-font": [
+                        "Barlow Semi Condensed SemiBold",
+                        "Noto Sans Bold",
+                    ],
+                    "text-size": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        15,
+                        10,
+                        16,
+                        12,
+                    ],
+                    "text-anchor": "top",
+                    "text-offset": [0, 0.85],
+                },
+                "paint": {
+                    "text-color": "#22303c",
+                    "text-halo-color": "#ffffff",
+                    "text-halo-width": 1.4,
                 },
             },
             {
@@ -2491,6 +2515,28 @@ def _transport_style_base(colors: dict[str, str] | None = None) -> dict[str, Any
                         0.65,
                     ],
                     "icon-allow-overlap": True,
+                    # boarding-position names — the payoff of z17+
+                    "text-field": ["get", "stop_name"],
+                    "text-font": [
+                        "Barlow Semi Condensed SemiBold",
+                        "Noto Sans Bold",
+                    ],
+                    "text-size": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        17,
+                        12,
+                        19,
+                        14,
+                    ],
+                    "text-anchor": "top",
+                    "text-offset": [0, 0.9],
+                },
+                "paint": {
+                    "text-color": "#22303c",
+                    "text-halo-color": "#ffffff",
+                    "text-halo-width": 1.6,
                 },
             },
         ],
@@ -2611,14 +2657,20 @@ def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
         if layer["id"] == "transport-stops-primitives":
             # tinted SDF primitives + collision priority (full-only:
             # symbol-sort-key is not subset-whitelisted)
-            layer["paint"] = deepcopy(icon_paint)
+            layer["paint"] = {
+                **deepcopy(layer.get("paint", {})),
+                **deepcopy(icon_paint),
+            }
             layer["layout"]["symbol-sort-key"] = deepcopy(_TRANSPORT_SORT_KEY)
         elif layer["id"] == "transport-stops-icons-stations":
             # keep ALL stations at z13 (base) — the FULL profile adds a
             # SEPARATE layer for route-rich interchanges at z12 (Opus
             # review: replacing the filter here dropped ordinary
             # stations' z13 glyph in the full profile)
-            layer["paint"] = deepcopy(icon_paint)
+            layer["paint"] = {
+                **deepcopy(layer.get("paint", {})),
+                **deepcopy(icon_paint),
+            }
             layer["layout"]["symbol-sort-key"] = deepcopy(_TRANSPORT_SORT_KEY)
             layers.append(
                 {
@@ -2660,7 +2712,10 @@ def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
                     filt=_TRANSPORT_CIRCLE_FILTER,
                 )
             )
-            layer["paint"] = deepcopy(icon_paint)
+            layer["paint"] = {
+                **deepcopy(layer.get("paint", {})),
+                **deepcopy(icon_paint),
+            }
             layer["layout"]["symbol-sort-key"] = deepcopy(_TRANSPORT_SORT_KEY)
         elif layer["id"] == "transport-stops-icons-detail":
             layers.append(
@@ -2671,7 +2726,10 @@ def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
                     filt=_TRANSPORT_ICON_FILTER,
                 )
             )
-            layer["paint"] = deepcopy(icon_paint)
+            layer["paint"] = {
+                **deepcopy(layer.get("paint", {})),
+                **deepcopy(icon_paint),
+            }
         layers.append(layer)
     doc["layers"] = layers
     return doc
