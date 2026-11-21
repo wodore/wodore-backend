@@ -2613,6 +2613,34 @@ def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
     palette = {**TRANSPORT_FALLBACK_COLORS, **(colors or {})}
     doc = _transport_style_base(palette)
 
+    # FULL-only: swap the subset-safe four-needle icon ladders for
+    # the let/var single-needle form (one normalized haystack, one
+    # membership check per mode). The subset twin and the basemap
+    # block keep the four-needle case — let/concat/slice/to-string
+    # are outside the subset whitelist.
+    full_icon_image = _route_type_case(
+        {
+            slug: TRANSPORT_ICONS.get(slug, TRANSPORT_ICON_FALLBACK)
+            for slug, _ in TRANSPORT_MODES
+        },
+        TRANSPORT_ICON_FALLBACK,
+        subset=False,
+    )
+    full_primitive_image = _route_type_case(
+        {slug: TRANSPORT_PRIMITIVES[slug] for slug, _ in TRANSPORT_MODES},
+        TRANSPORT_PRIMITIVE_FALLBACK,
+        subset=False,
+    )
+    icon_swaps = {
+        "transport-stops-primitives": full_primitive_image,
+        "transport-stops-icons-stations": full_icon_image,
+        "transport-stops-icons": full_icon_image,
+        "transport-stops-icons-detail": full_icon_image,
+    }
+    for layer in doc["layers"]:
+        if layer["id"] in icon_swaps:
+            layer["layout"]["icon-image"] = deepcopy(icon_swaps[layer["id"]])
+
     # feature-state (hover/selection) needs a stable per-feature id —
     # promote the Transitland stable key (the #452 lesson: numeric ids
     # churn between feed versions; #453 removed it when nothing used

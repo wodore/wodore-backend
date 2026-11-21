@@ -44,6 +44,14 @@
     .CodeMirror-linenumber { color: #546e7a; }
     .CodeMirror-foldmarker { color: #f59e0b; text-shadow: none; font-family: monospace; cursor: pointer; }
     .cm-foldgutter-open:after, .cm-foldgutter-folded:after { color: #78909c; cursor: pointer; }
+    /* Inline color swatches before every "#rrggbb" token; clicking
+       opens the native picker and rewrites the token in place. */
+    .wd-swatch {
+      display: inline-block; width: 10px; height: 10px; margin: 0 3px 0 0;
+      border: 1px solid rgba(255, 255, 255, 0.45); border-radius: 2px;
+      cursor: pointer; vertical-align: baseline;
+    }
+    .wd-swatch:hover { outline: 1px solid #f59e0b; }
     .wd-map-canvas {
       flex: 1 1 0; min-height: 300px; border: 1px solid var(--border-color, #374151); border-radius: 6px;
     }
@@ -88,7 +96,8 @@
         <div class="wd-toolbar">
           <strong>Style JSON</strong>
           <span class="wd-status" id="wd-json-status"></span>
-          <button type="button" id="wd-collapse-btn">Collapse</button>
+          <button type="button" id="wd-collapse-btn">Layers</button>
+          <button type="button" id="wd-keys-btn">Keys</button>
           <button type="button" id="wd-expand-btn">Expand</button>
           <button type="button" id="wd-export-btn">Export</button>
           <label class="wd-btn" for="wd-import-file">Import</label>
@@ -96,6 +105,7 @@
         </div>
         {# CM appends INTO its host — the host must be the growing flex child #}
         <div class="wd-cm-host"></div>
+        <input type="color" id="wd-color-input" style="position:absolute;left:-200px;top:0;width:1px;height:1px;opacity:0" tabindex="-1" />
       </div>
       <div class="wd-map-col">
         <div class="wd-toolbar">
@@ -267,14 +277,43 @@
 
     // Prefer the form field's CURRENT value (a failed save re-renders
     // with the user's edit, not the stored style); pretty-print it in
-    // JS. The server-provided pretty string is only a fallback.
+    // JS. The server-provided string is only a fallback.
+    // Width-budget formatter (Opus consult): short arrays/objects go
+    // on ONE line ("[\"in\", ", 2,\", [\"var\", \"rt\"]]"), long ones
+    // break per element — the classic style-spec "pretty-compact"
+    // look. Never regex-reflows stringified text (string contents
+    // would bite); this walks the parsed tree.
+    var flatJson = function(node) {
+      if (node === null || typeof node !== "object") return JSON.stringify(node);
+      if (Array.isArray(node)) return "[" + node.map(flatJson).join(", ") + "]";
+      return "{" + Object.keys(node).map(function(k) {
+        return JSON.stringify(k) + ": " + flatJson(node[k]);
+      }).join(", ") + "}";
+    };
+    var formatStyle = function(node) {
+      var MAX = 100;
+      function fmt(n, pad, reserved) {
+        var f = flatJson(n);
+        if (f.length + pad.length + reserved <= MAX || n === null || typeof n !== "object") return f;
+        var inner = pad + "  ";
+        if (Array.isArray(n)) {
+          return "[\n" + n.map(function(el) { return inner + fmt(el, inner, 1); }).join(",\n") + "\n" + pad + "]";
+        }
+        return "{\n" + Object.keys(n).map(function(k) {
+          return inner + JSON.stringify(k) + ": " + fmt(n[k], inner, JSON.stringify(k).length + 2);
+        }).join(",\n") + "\n" + pad + "}";
+      }
+      return fmt(node, "", 0);
+    };
     var prettyValue = (function () {
       var raw = (styleField.value || "").trim();
-      if (raw) {
-        try { return JSON.stringify(JSON.parse(raw), null, 2); } catch (e) { return raw; }
+      var source = raw;
+      if (!source) {
+        var el = document.getElementById("wd-style-data");
+        try { source = el ? JSON.parse(el.textContent) : ""; } catch (e) { source = ""; }
+        return typeof source === "string" ? source : formatStyle(source);
       }
-      var el = document.getElementById("wd-style-data");
-      try { return el ? JSON.parse(el.textContent) : "{}"; } catch (e) { return "{}"; }
+      try { return formatStyle(JSON.parse(source)); } catch (e) { return raw; }
     })();
 
     // ── CodeMirror ─────────────────────────────────────────────
@@ -289,6 +328,100 @@
       indentUnit: 2, tabSize: 2,
     });
     cm.on("change", function() { styleField.value = cm.getValue(); });
+
+    // ── Fold placeholders: show WHAT was folded (Opus consult) ──
+    // Depth-scan of the folded range (string-aware, indentation-
+    // independent): an "id" key inside → the layer/source name;
+    // otherwise an item count; otherwise the key from the fold line.
+    // brace-fold ranges sit INSIDE the brackets — they stay visible,
+    // so the label needs no braces of its own.
+    var foldLabel = function(from, to) {
+      var text = cm.getRange(from, to);
+      var depth = 0, items = 0, sawValue = false, id = null;
+      for (var i = 0; i < text.length; i++) {
+        var c = text[i];
+        if (c === '"') {
+          var j = i + 1;
+          while (j < text.length && text[j] !== '"') j += text[j] === '\\' ? 2 : 1;
+          var tok = text.slice(i, j + 1);
+          if (depth === 0) {
+            sawValue = true;
+            if (tok === '"id"' && id === null) {
+              var m = /^\s*:\s*("(?:[^"\\]|\\.)*")/.exec(text.slice(j + 1));
+              if (m) id = JSON.parse(m[1]);
+            }
+          }
+          i = j; continue;
+        }
+        if (c === "{" || c === "[") depth++;
+        else if (c === "}" || c === "]") depth--;
+        else if (c === "," && depth === 0) items++;
+      }
+      if (id) return id;
+      var line = cm.getLine(from.line) || "";
+      if (/[{[]$/.test(line.trim())) {
+        var key = /"((?:[^"\\]|\\.)*)"\s*:\s*[{[]\s*$/.exec(line);
+        if (key) return key[1] + (sawValue ? " · " + (items + 1) + (items ? " items" : " item") : "");
+      }
+      return sawValue ? (items + 1) + (items ? " items" : " item") : "…";
+    };
+    cm.setOption("foldOptions", {
+      widget: function(from, to) { return "… " + foldLabel(from, to) + " …"; },
+    });
+
+    // ── Color swatches + picker ─────────────────────────────
+    // A bookmark widget renders a small swatch before every
+    // "#rrggbb" string token; clicking opens the native color
+    // picker and rewrites the token (change event then syncs the
+    // form field and refreshes the map preview).
+    var colorBookmarks = [];
+    var colorInput = document.getElementById("wd-color-input");
+    var refreshColorWidgets = function() {
+      colorBookmarks.forEach(function(b) { b.clear(); });
+      colorBookmarks = [];
+      var re = /"(#[0-9a-fA-F]{3,8})"/g;
+      for (var i = 0; i < cm.lineCount(); i++) {
+        var text = cm.getLine(i);
+        if (text.indexOf("#") === -1) continue;
+        re.lastIndex = 0;
+        var m;
+        while ((m = re.exec(text))) {
+          var sw = document.createElement("span");
+          var col = m[1];
+          sw.className = "wd-swatch";
+          sw.style.background = col.length === 4
+            ? "#" + col[1] + col[1] + col[2] + col[2] + col[3] + col[3]
+            : col;
+          sw.title = col + " — click to pick";
+          var bm = cm.setBookmark({line: i, ch: m.index}, {widget: sw, insertLeft: true});
+          sw.addEventListener("mousedown", function(ev) {
+            ev.preventDefault();
+            if (!colorInput) return;
+            // re-resolve at click time: edits elsewhere shifted the
+            // token — the bookmark tracks, static positions would not
+            var p = bm.find();
+            if (!p) return;
+            var m2 = /^"(#[0-9a-fA-F]{3,8})"/.exec(cm.getLine(p.line).substring(p.ch));
+            if (!m2) return;
+            var cur = m2[1];
+            colorInput.value = /^#[0-9a-fA-F]{6}$/.test(cur) ? cur : "#000000";
+            colorInput.onchange = function() {
+              cm.replaceRange(
+                colorInput.value,
+                {line: p.line, ch: p.ch + 1},
+                {line: p.line, ch: p.ch + 1 + cur.length}
+              );
+              colorInput.onchange = null;
+            };
+            colorInput.click();
+          });
+          colorBookmarks.push(bm);
+        }
+      }
+    };
+    var refreshColorsDebounced = debounce(refreshColorWidgets, 500);
+    cm.on("change", refreshColorsDebounced);
+    refreshColorWidgets();
 
     // NOW the raw textarea can step back — CodeMirror is the surface.
     // Field-level validation errors attached to the hidden row are
@@ -383,19 +516,30 @@
         var feats;
         try { feats = map.queryRenderedFeatures(e.point); } catch (err) { return; }
         if (!feats.length) return;
+        var propRow = function(k, v) {
+          // JSON-ish values (arrays/objects serialized by the tile)
+          // get a space-after-comma reformat — readable, no re-parse
+          var text = typeof v === "string" ? v : JSON.stringify(v);
+          if (/^[\[{].*[\]}]$/.test(text) && text.length > 30) {
+            text = text.replace(/,/g, ", ");
+          }
+          return '<div style="display:flex;gap:8px;padding:2px 0;' +
+            'border-bottom:1px solid rgba(128,128,128,.15)">' +
+            '<span style="flex:0 0 42%;color:#667;font-family:ui-monospace,monospace;font-size:10.5px">' + esc(k) + "</span>" +
+            '<span style="flex:1;min-width:0;word-break:break-word;font-size:11.5px">' + esc(text) + "</span></div>";
+        };
         var parts = feats.slice(0, 3).map(function(f) {
           var props = Object.keys(f.properties || {}).sort().map(function(k) {
-            var v = f.properties[k];
-            return "<tr><td>" + esc(k) + "</td><td>" +
-              esc(typeof v === "string" ? v : JSON.stringify(v)) + "</td></tr>";
+            return propRow(k, f.properties[k]);
           }).join("");
-          return "<div style=\"margin-bottom:8px\"><strong>" + esc(f.layer && f.layer.id || "?") + "</strong>" +
-            "<table style=\"border-collapse:collapse;font-size:11px\"><tbody>" + props + "</tbody></table></div>";
+          return '<div style="margin-bottom:10px">' +
+            '<div style="font-weight:600;font-size:12px;margin-bottom:4px;">' + esc(f.layer && f.layer.id || "?") + "</div>" +
+            props + "</div>";
         });
-        parts.push("<div style=\"opacity:0.6;font-size:10px\">" + feats.length + " feature" + (feats.length > 1 ? "s" : "") + " at this point (first 3 shown)</div>");
-        var popup = new Popup({maxWidth: "360px"})
+        parts.push('<div style="opacity:0.55;font-size:10px;margin-top:4px">' + feats.length + " feature" + (feats.length > 1 ? "s" : "") + " at this point — first 3 shown</div>");
+        var popup = new Popup({maxWidth: "420px"})
           .setLngLat(e.lngLat)
-          .setHTML('<div style="max-height:300px;overflow-y:auto">' + parts.join("") + "</div>")
+          .setHTML('<div style="max-height:320px;overflow-y:auto;overflow-x:hidden">' + parts.join("") + "</div>")
           .addTo(map);
         window.__wdPopup = popup;
       });
@@ -513,22 +657,47 @@
       refresh();
     }
 
-    // ── Export / Import / Collapse / Expand ──────────────────
-    document.getElementById("wd-collapse-btn").addEventListener("click", function() {
-      // fold ONLY the top-level keys (indent depth 1) — the style's
-      // skeleton (name / glyphs / sources / layers…) stays visible
-      // while every long array collapses behind it
+    // ── Export / Import / view levels ─────────────────────
+    // Layers: image-3 view — every layer object folded, its NAME in
+    //   the placeholder, top-level keys folded too.
+    // Keys: image-2 view — layer scalars (id/type/source/minzoom)
+    //   visible, paint/layout/filter folded to [… N items …].
+    // Expand: everything open.
+    var foldAllAt = function(minIndent, maxIndent) {
       cm.operation(function() {
         for (var i = 0; i < cm.lineCount(); i++) {
           var line = cm.getLine(i);
           var indent = (line.match(/^\s*/) || [""])[0].length / 2;
-          if (indent !== 1) continue;
+          if (indent < minIndent || indent > maxIndent) continue;
           var pos = CodeMirror.Pos(i, 0);
           if (CodeMirror.fold.brace && CodeMirror.fold.brace(cm, pos)) {
             cm.foldCode(pos, CodeMirror.fold.brace, "fold");
           }
         }
       });
+    };
+    document.getElementById("wd-collapse-btn").addEventListener("click", function() {
+      cm.execCommand("unfoldAll");
+      // image-3 view: each layer object folded with its NAME in the
+      // placeholder — the "layers" array itself stays EXPANDED
+      // (folding it would hide the name markers); other top-level
+      // keys (sprite/sources) fold away
+      foldAllAt(2, 2);
+      cm.operation(function() {
+        for (var i = 0; i < cm.lineCount(); i++) {
+          var line = cm.getLine(i);
+          var indent = (line.match(/^\s*/) || [""])[0].length / 2;
+          if (indent !== 1 || /^\s*"layers"/.test(line)) continue;
+          var pos = CodeMirror.Pos(i, 0);
+          if (CodeMirror.fold.brace && CodeMirror.fold.brace(cm, pos)) {
+            cm.foldCode(pos, CodeMirror.fold.brace, "fold");
+          }
+        }
+      });
+    });
+    document.getElementById("wd-keys-btn").addEventListener("click", function() {
+      cm.execCommand("unfoldAll");
+      foldAllAt(3, 3);
     });
     document.getElementById("wd-expand-btn").addEventListener("click", function() {
       cm.execCommand("unfoldAll");
@@ -546,7 +715,7 @@
       var file = e.target.files[0]; if (!file) return;
       var reader = new FileReader();
       reader.onload = function() {
-        try { cm.setValue(JSON.stringify(JSON.parse(reader.result), null, 2)); }
+        try { cm.setValue(formatStyle(JSON.parse(reader.result))); }
         catch (err) { alert("Invalid JSON: " + err.message); }
       };
       reader.readAsText(file); e.target.value = "";
