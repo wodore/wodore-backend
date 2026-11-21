@@ -1176,14 +1176,18 @@ class TestSeedTagging:
         assert (full.spec, full.profile) == ("medium", "full")
         assert full.min_zoom == 11
         assert full.style is not None
-        # the hut-style look: SDF pack, tinted icons, selected plates
+        # the hut-style look: SDF pack, tinted icons, selected plates.
+        # The FULL upgrade splices a selected-plate before each icon
+        # band; the label layers precede their bands (collision order).
         assert full.style["sprite"][0]["url"].endswith("/sdf_sprite/transport")
         assert [layer["id"] for layer in full.style["layers"]] == [
             "transport-stops-primitives",
             "transport-stops-icons-major",
             "transport-stops-icons-stations",
+            "transport-stops-labels",
             "transport-stops-selected",
             "transport-stops-icons",
+            "transport-stops-labels-detail",
             "transport-stops-selected-detail",
             "transport-stops-icons-detail",
         ]
@@ -1193,20 +1197,27 @@ class TestSeedTagging:
         assert twin.style is not None
         assert twin.min_zoom == 11
         # primitives z11–z13.99, stations mono a zoom early, then the
-        # neighborhood and detail bands
+        # labels+neighborhood and labels+detail bands (labels BEFORE
+        # their icons: the later layer wins cross-layer collision)
         assert [layer["id"] for layer in twin.style["layers"]] == [
             "transport-stops-primitives",
             "transport-stops-icons-stations",
+            "transport-stops-labels",
             "transport-stops-icons",
+            "transport-stops-labels-detail",
             "transport-stops-icons-detail",
         ]
         assert twin.style["layers"][0]["minzoom"] == 11
         assert twin.style["layers"][0]["maxzoom"] == 14
         assert twin.style["layers"][1]["minzoom"] == 13
         assert twin.style["layers"][1]["maxzoom"] == 14
-        assert twin.style["layers"][2]["minzoom"] == 14
+        # labels from mid-band (z15), icon band from z14
+        assert twin.style["layers"][2]["minzoom"] == 15
         assert twin.style["layers"][2]["maxzoom"] == 17
-        assert twin.style["layers"][3]["minzoom"] == 17
+        assert twin.style["layers"][3]["minzoom"] == 14
+        assert twin.style["layers"][3]["maxzoom"] == 17
+        assert twin.style["layers"][4]["minzoom"] == 17
+        assert twin.style["layers"][5]["minzoom"] == 17
         # slug-level config (filter) rides the row
         assert twin.config is not None
         assert "filters" in twin.config

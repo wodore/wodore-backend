@@ -2123,6 +2123,10 @@ def _route_type_conditions(basic_type: int, *, subset: bool) -> list[list[Any]]:
 
     ``let``/``var``/``concat``/``slice``/``to-string`` are outside the
     subset whitelist — subset documents MUST pass ``subset=True``.
+    Type note: a non-string ``route_types_basic`` (real array →
+    ``"[0,2]"`` without spaces, number, boolean) matches nothing and
+    quietly falls through to the neutral fallback — acceptable until
+    Transitland ever changes the serialization.
     """
     haystack = ["get", "route_types_basic"]
     if subset:
@@ -2440,6 +2444,49 @@ def _transport_style_base(colors: dict[str, str] | None = None) -> dict[str, Any
                 },
             },
             {
+                # stop-name labels for the NEIGHBORHOOD band, from
+                # mid-band (z15). A SEPARATE text-only layer (Opus
+                # review): text on the icon layer couples placement —
+                # a colliding label would hide its icon too, and
+                # text-optional/text-allow-overlap are not
+                # subset-whitelisted. The label layer sits BEFORE its
+                # icon band: MapLibre's cross-layer collision lets the
+                # LATER layer claim the space (verified empirically —
+                # labels after the icons blanked the whole icon band),
+                # so icons place first and labels yield where they
+                # would cover an icon.
+                "id": "transport-stops-labels",
+                "type": "symbol",
+                "source": TRANSPORT_SOURCE_ID,
+                "source-layer": "stops",
+                "minzoom": 15,
+                "maxzoom": 17,
+                "filter": _TRANSPORT_CIRCLE_FILTER,
+                "layout": {
+                    "text-field": ["get", "stop_name"],
+                    "text-font": [
+                        "Barlow Semi Condensed SemiBold",
+                        "Noto Sans Bold",
+                    ],
+                    "text-size": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        15,
+                        10,
+                        16,
+                        12,
+                    ],
+                    "text-anchor": "top",
+                    "text-offset": [0, 0.85],
+                },
+                "paint": {
+                    "text-color": "#22303c",
+                    "text-halo-color": "#ffffff",
+                    "text-halo-width": 1.4,
+                },
+            },
+            {
                 # neighborhood icon band: STILL one icon per stop group
                 # (same filter as the primitives) — decluttered until the
                 # detail band takes over at z17 (exclusive maxzoom);
@@ -2462,9 +2509,21 @@ def _transport_style_base(colors: dict[str, str] | None = None) -> dict[str, Any
                         16,
                         0.5,
                     ],
-                    # stop names from mid-band — collision-active, so
-                    # dense streets self-declutter (subset-whitelisted
-                    # text props only)
+                },
+            },
+            {
+                # boarding-position names — the payoff of z17+. Same
+                # text-only layering rationale as the neighborhood
+                # labels: BEFORE the detail icon band (later layer
+                # claims collision space), detail icons stay
+                # overlap-allowed, the labels declutter.
+                "id": "transport-stops-labels-detail",
+                "type": "symbol",
+                "source": TRANSPORT_SOURCE_ID,
+                "source-layer": "stops",
+                "minzoom": 17,
+                "filter": _TRANSPORT_ICON_FILTER,
+                "layout": {
                     "text-field": ["get", "stop_name"],
                     "text-font": [
                         "Barlow Semi Condensed SemiBold",
@@ -2474,18 +2533,18 @@ def _transport_style_base(colors: dict[str, str] | None = None) -> dict[str, Any
                         "interpolate",
                         ["linear"],
                         ["zoom"],
-                        15,
-                        10,
-                        16,
+                        17,
                         12,
+                        19,
+                        14,
                     ],
                     "text-anchor": "top",
-                    "text-offset": [0, 0.85],
+                    "text-offset": [0, 0.9],
                 },
                 "paint": {
                     "text-color": "#22303c",
                     "text-halo-color": "#ffffff",
-                    "text-halo-width": 1.4,
+                    "text-halo-width": 1.6,
                 },
             },
             {
@@ -2515,28 +2574,6 @@ def _transport_style_base(colors: dict[str, str] | None = None) -> dict[str, Any
                         0.65,
                     ],
                     "icon-allow-overlap": True,
-                    # boarding-position names — the payoff of z17+
-                    "text-field": ["get", "stop_name"],
-                    "text-font": [
-                        "Barlow Semi Condensed SemiBold",
-                        "Noto Sans Bold",
-                    ],
-                    "text-size": [
-                        "interpolate",
-                        ["linear"],
-                        ["zoom"],
-                        17,
-                        12,
-                        19,
-                        14,
-                    ],
-                    "text-anchor": "top",
-                    "text-offset": [0, 0.9],
-                },
-                "paint": {
-                    "text-color": "#22303c",
-                    "text-halo-color": "#ffffff",
-                    "text-halo-width": 1.6,
                 },
             },
         ],

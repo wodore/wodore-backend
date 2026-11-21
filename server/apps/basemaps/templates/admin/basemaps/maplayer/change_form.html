@@ -385,7 +385,9 @@
         if (!feats.length) return;
         var parts = feats.slice(0, 3).map(function(f) {
           var props = Object.keys(f.properties || {}).sort().map(function(k) {
-            return "<tr><td>" + esc(k) + "</td><td>" + esc(JSON.stringify(f.properties[k])).replace(/^"|"$/g, "") + "</td></tr>";
+            var v = f.properties[k];
+            return "<tr><td>" + esc(k) + "</td><td>" +
+              esc(typeof v === "string" ? v : JSON.stringify(v)) + "</td></tr>";
           }).join("");
           return "<div style=\"margin-bottom:8px\"><strong>" + esc(f.layer && f.layer.id || "?") + "</strong>" +
             "<table style=\"border-collapse:collapse;font-size:11px\"><tbody>" + props + "</tbody></table></div>";
@@ -448,9 +450,19 @@
           profile: layerProfile, slug: layerSlug, object_id: objectId,
         }),
       })
-        .then(function(r) { return r.json(); })
+        .then(function(r) {
+          if (!r.ok) {
+            if (thisRequest === requestId) {
+              jsonStatusEl.classList.remove("ok");
+              jsonStatusEl.classList.add("err");
+              jsonStatusEl.textContent = "HTTP " + r.status + (r.status === 403 ? " — reload the page" : "");
+            }
+            return null;
+          }
+          return r.json();
+        })
         .then(function(data) {
-          if (thisRequest !== requestId) return;
+          if (!data || thisRequest !== requestId) return;
           var lint = (data.lint || []).concat(fieldErrors);
           if (data.error && !data.style) {
             jsonStatusEl.classList.remove("ok");
