@@ -100,9 +100,17 @@ def _resolve_document(
     doc: dict[str, Any],
     layer: MapLayer | None,
     tile_url: str,
+    parameter_overrides: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Resolve a document through the serve-time pipeline."""
-    resolved = substitute_env_tree(doc)
+    """Resolve a document through the serve-time pipeline.
+
+    ``parameter_overrides`` (the editor's Parameters panel) win over
+    the row's authored/serve-time values — live experimentation
+    without saving.
+    """
+    from .resolution import strip_style_comments
+
+    resolved = strip_style_comments(substitute_env_tree(doc))
     # Parameter tokens: the row's authored defaults, or empty for a
     # document that has no row yet (live editing before save)
     if layer is not None and layer.pk:
@@ -114,10 +122,38 @@ def _resolve_document(
                     values[link.parameter.slug] = served
     else:
         values: dict[str, Any] = {}
+    if parameter_overrides:
+        values.update(parameter_overrides)
     resolved = resolve_tokens(resolved, values)
     api_url = ""
     resolved = absolutize_urls(resolved, tile_url, api_url=api_url)
     return _normalize_sprite(resolved)
+
+
+def _layer_parameters_info(layer: MapLayer | None) -> list[dict[str, Any]]:
+    """The layer's parameter panel data (editor UI): slug, kind, and
+    the effective value the preview currently resolves tokens with."""
+    if layer is None or not layer.pk:
+        return []
+    authored = layer.authored_parameter_values()
+    info: list[dict[str, Any]] = []
+    for link in layer.layer_parameters.select_related("parameter").order_by(
+        "parameter__slug"
+    ):
+        param = link.parameter
+        value = authored.get(param.slug)
+        if value is None and link.default_override is not None:
+            value = link.default_override
+        if value is None:
+            value = param.serve_time_value()
+        info.append(
+            {
+                "slug": param.slug,
+                "kind": param.kind,
+                "value": value,
+            }
+        )
+    return info
 
 
 def _compose_overlay_on_basemap(
@@ -256,7 +292,8 @@ def _overlay_block_prefix(layer: MapLayer) -> str:
 
 @require_POST
 def preview_live(request: HttpRequest) -> HttpResponse:
-    """POST body: {style_json: str, basemap_slug: str|null, profile: str, slug: str, object_id: int}.
+    """POST body: {style_json: str, basemap_slug: str|null, profile: str,
+    slug: str, object_id: int, parameter_values: {slug: value}|null}.
 
     CSRF: the editor posts with ``X-CSRFToken`` carrying the form's
     ``csrfmiddlewaretoken`` value — Django's CSRF validator accepts
@@ -296,6 +333,9 @@ def preview_live(request: HttpRequest) -> HttpResponse:
     basemap_slug = body.get("basemap_slug") or None
     profile = body.get("profile", "")
     slug = body.get("slug", "")
+    parameter_values = body.get("parameter_values")
+    if parameter_values is not None and not isinstance(parameter_values, dict):
+        parameter_values = None
     object_id = body.get("object_id")
     if object_id is not None and not isinstance(object_id, int):
         # json.loads can deliver floats/strings ("1_0", "１") — never
@@ -357,7 +397,7 @@ def preview_live(request: HttpRequest) -> HttpResponse:
         lint += _walker_findings(doc)
 
     tile_url = resolve_setting("MARTIN_TILE_URL")
-    resolved = _resolve_document(doc, layer, tile_url)
+    resolved = _resolve_document(doc, layer, tile_url, parameter_values)
 
     # For overlays: compose on the requested basemap
     basemap_used = None
@@ -372,5 +412,6 @@ def preview_live(request: HttpRequest) -> HttpResponse:
             "style": resolved,
             "lint": lint,
             "basemap": basemap_used,
+            "parameters": _layer_parameters_info(layer),
         }
     )

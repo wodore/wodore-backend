@@ -6,6 +6,7 @@
   <link rel="stylesheet" href="https://unpkg.com/codemirror@5.65.18/lib/codemirror.css" />
   <link rel="stylesheet" href="https://unpkg.com/codemirror@5.65.18/theme/material-darker.css" />
   <link rel="stylesheet" href="https://unpkg.com/codemirror@5.65.18/addon/fold/foldgutter.css" />
+  <link rel="stylesheet" href="https://unpkg.com/codemirror@5.65.18/addon/hint/show-hint.css" />
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.14.0/dist/maplibre-gl.css" />
   <style>
     #wd-style-editor-root { display: block; }
@@ -42,8 +43,13 @@
     }
     .CodeMirror-gutters { background: #263238; border-right: 1px solid #374151; }
     .CodeMirror-linenumber { color: #546e7a; }
-    .CodeMirror-foldmarker { color: #f59e0b; text-shadow: none; font-family: monospace; cursor: pointer; }
-    .cm-foldgutter-open:after, .cm-foldgutter-folded:after { color: #78909c; cursor: pointer; }
+    .CodeMirror-foldmarker { color: #f59e0b; text-shadow: none; font-family: monospace; cursor: pointer; font-size: 15px; }
+    .cm-foldgutter-open:after, .cm-foldgutter-folded:after { color: #90a4ae; cursor: pointer; font-size: 16px; font-weight: 700; }
+    /* Parameter overrides panel (map column) */
+    .wd-params { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 6px 8px; border: 1px dashed var(--border-color, #374151); border-radius: 6px; font-size: 12px; flex: 0 0 auto; }
+    .wd-params .wd-param { display: flex; gap: 6px; align-items: center; }
+    .wd-params .wd-param label { font-family: ui-monospace, monospace; font-size: 11px; opacity: 0.85; }
+    .wd-params input { width: 90px; font-size: 12px; padding: 2px 6px; border: 1px solid var(--border-color, #374151); border-radius: 4px; background: var(--bg-inset, #1a1a2e); color: var(--text, #e0e0e0); }
     /* Inline color swatches before every "#rrggbb" token; clicking
        opens the native picker and rewrites the token in place. */
     .wd-swatch {
@@ -105,7 +111,7 @@
         </div>
         {# CM appends INTO its host — the host must be the growing flex child #}
         <div class="wd-cm-host"></div>
-        <input type="color" id="wd-color-input" style="position:absolute;left:-200px;top:0;width:1px;height:1px;opacity:0" tabindex="-1" />
+        <input type="color" id="wd-color-input" style="position:fixed;left:-200px;top:0;width:1px;height:1px;opacity:0" tabindex="-1" />
       </div>
       <div class="wd-map-col">
         <div class="wd-toolbar">
@@ -117,6 +123,9 @@
           <span class="wd-status" id="wd-zoom">z–</span>
           <span class="wd-status" id="wd-preview-status"></span>
         </div>
+        {# Parameter overrides: the row's linked parameters, editable
+           live — values win over authored/serve-time in the preview. #}
+        <div class="wd-params" id="wd-params" style="display:none"></div>
         <div class="wd-map-canvas" id="wd-map-canvas"></div>
       </div>
     </div>
@@ -229,6 +238,7 @@
   <script src="https://unpkg.com/codemirror@5.65.18/addon/fold/foldcode.js"></script>
   <script src="https://unpkg.com/codemirror@5.65.18/addon/fold/foldgutter.js"></script>
   <script src="https://unpkg.com/codemirror@5.65.18/addon/fold/brace-fold.js"></script>
+  <script src="https://unpkg.com/codemirror@5.65.18/addon/hint/show-hint.js"></script>
 
   {% comment %}
     MapLibre GL v6 via ESM — v5's UMD bundle lacks the full MLT tile
@@ -397,6 +407,11 @@
           sw.addEventListener("mousedown", function(ev) {
             ev.preventDefault();
             if (!colorInput) return;
+            // anchor the native picker AT the swatch (position:fixed
+            // input — set its coords right before click)
+            var rect = sw.getBoundingClientRect();
+            colorInput.style.left = Math.max(8, Math.round(rect.left)) + "px";
+            colorInput.style.top = Math.round(rect.bottom + 6) + "px";
             // re-resolve at click time: edits elsewhere shifted the
             // token — the bookmark tracks, static positions would not
             var p = bm.find();
@@ -564,6 +579,9 @@
 
     // ── Live refresh ───────────────────────────────────────
     var requestId = 0;
+    var paramOverrides = {};
+    var knownParams = [];
+    var paramsPanel = document.getElementById("wd-params");
     var editorVisible = function() {
       var el = document.getElementById('wd-style-editor-root');
       return !!el && el.offsetWidth > 0;
@@ -592,6 +610,7 @@
           style_json: raw,
           basemap_slug: basemapSelect ? basemapSelect.value : null,
           profile: layerProfile, slug: layerSlug, object_id: objectId,
+          parameter_values: paramOverrides,
         }),
       })
         .then(function(r) {
@@ -622,11 +641,65 @@
             map.setStyle(data.style, {diff: true});
             statusEl.textContent = (data.style.layers || []).length + " layers" + (data.basemap ? " · on " + data.basemap : "");
           }
+          renderParamsPanel(data.parameters || []);
         })
         .catch(function() { if (thisRequest !== requestId) return; jsonStatusEl.textContent = "request failed"; });
     }
     cm.on("change", debounce(refresh, 600));
     if (fieldErrors.length) { renderLint(fieldErrors); }
+
+    // ── Parameters panel: the row's linked parameters, editable
+    //    live — overrides win over authored/serve-time values in
+    //    the preview (no save needed). #}
+    function renderParamsPanel(params) {
+      if (!paramsPanel) return;
+      const changed = JSON.stringify(params) !== JSON.stringify(knownParams);
+      knownParams = params;
+      if (!params.length) { paramsPanel.style.display = "none"; return; }
+      if (!changed && paramsPanel.style.display !== "none") return; // keep focus while typing
+      paramsPanel.style.display = "flex";
+      paramsPanel.textContent = "";
+      params.forEach(function(p) {
+        const wrap = document.createElement("div");
+        wrap.className = "wd-param";
+        const label = document.createElement("label");
+        label.textContent = "{" + "{" + p.slug + "}" + "}";
+        label.title = p.kind || "";
+        const input = document.createElement("input");
+        input.type = typeof p.value === "number" ? "number" : "text";
+        if (typeof p.value === "number") { input.step = "any"; }
+        input.value = paramOverrides[p.slug] !== undefined ? String(paramOverrides[p.slug]) : (p.value === null || p.value === undefined ? "" : String(p.value));
+        input.addEventListener("input", function() {
+          const v = input.type === "number" ? parseFloat(input.value) : input.value;
+          if (isNaN(v) && input.type === "number") { delete paramOverrides[p.slug]; }
+          else { paramOverrides[p.slug] = v; }
+          refreshDebounced();
+        });
+        wrap.appendChild(label); wrap.appendChild(input);
+        paramsPanel.appendChild(wrap);
+      });
+    }
+    var refreshDebounced = debounce(refresh, 500);
+
+    // ── Token autocomplete: parameter slugs + env tokens. The
+    //    hint inserts slug}} right after the typed double brace.
+    cm.on("keyup", function(_cm, e) {
+      if (e.keyCode !== 123 /* { */ && e.key !== "{") return;
+      const pos = _cm.getCursor();
+      const before = _cm.getRange({line: pos.line, ch: 0}, pos);
+      if (!/\{\{$/.test(before)) return;
+      _cm.showHint({
+        hint: function(cm2) {
+          const cur = cm2.getCursor();
+          const list = knownParams.map(function(p) {
+            return {text: p.slug + "}}", displayText: "{" + "{" + p.slug + "}" + "}"};
+          });
+          list.push({text: "env:MARTIN_TILE_URL}}", displayText: "{" + "{env:MARTIN_TILE_URL}" + "}" + "}"});
+          return {list: list, from: cur, to: cur};
+        },
+        completeSingle: false,
+      });
+    });
 
     // ── Visibility: the map must apply its style (and paint) while
     //    visible — resize + refresh on every show of the Editor
