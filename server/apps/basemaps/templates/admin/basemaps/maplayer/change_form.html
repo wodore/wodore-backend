@@ -83,6 +83,15 @@
     /* The raw style textarea stays visible until CodeMirror mounts (JS
        hides it then) — if the CDN or the module fails, the classic
        textarea remains the editing surface. */
+    /* Mobile: the 12px editor font fills ~40 chars/line and clips —
+       shrink the editor stack and let the toolbar wrap */
+    @media (max-width: 768px) {
+      .wd-cm-host .CodeMirror { font-size: 10px; line-height: 1.35; }
+      .CodeMirror-linenumber { font-size: 9px; }
+      .CodeMirror-foldmarker, .cm-foldgutter-open:after, .cm-foldgutter-folded:after { font-size: 12px; }
+      .wd-style-grid .wd-toolbar { flex-wrap: wrap; height: auto; min-height: 32px; flex: 0 0 auto; overflow: visible; }
+      .wd-swatch { width: 8px; height: 8px; }
+    }
   </style>
 {% endblock %}
 
@@ -123,8 +132,7 @@
           <span class="wd-status" id="wd-zoom">z–</span>
           <span class="wd-status" id="wd-preview-status"></span>
         </div>
-        {# Parameter overrides: the row's linked parameters, editable
-           live — values win over authored/serve-time in the preview. #}
+        {# parameter overrides: live, no save needed #}
         <div class="wd-params" id="wd-params" style="display:none"></div>
         <div class="wd-map-canvas" id="wd-map-canvas"></div>
       </div>
@@ -497,7 +505,9 @@
             sawValue = true;
             if (tok === '"id"' && id === null) {
               var m = /^\s*:\s*("(?:[^"\\]|\\.)*")/.exec(text.slice(j + 1));
-              if (m) id = JSON.parse(m[1]);
+              if (m) {
+                try { id = JSON.parse(m[1]); } catch (parseErr) { id = null; }
+              }
             }
           }
           i = j; continue;
@@ -513,7 +523,7 @@
         // ("id": "x", // note) — match that form; the raw key form
         // only exists pre-transform
         var idNote = /"id":\s*"[^"]*",\s*\/\/ ?(.*)$/m.exec(text);
-        return idNote ? id + " — " + idNote[1] : id;
+        return idNote ? id + "\u0000" + idNote[1] : id;
       }
       var line = cm.getLine(from.line) || "";
       if (/[{[]$/.test(line.trim())) {
@@ -523,7 +533,23 @@
       return sawValue ? (items + 1) + (items ? " items" : " item") : "…";
     };
     cm.setOption("foldOptions", {
-      widget: function(from, to) { return "… " + foldLabel(from, to) + " …"; },
+      widget: function(from, to) {
+        var label = foldLabel(from, to);
+        var sep = label.indexOf("\u0000");
+        if (sep === -1) { return "… " + label + " …"; }
+        // DOM widget: the id inside the marker, the annotation as a
+        // muted // comment after it — reads like the expanded view
+        var node = document.createElement("span");
+        var mark = document.createElement("span");
+        mark.className = "CodeMirror-foldmarker";
+        mark.textContent = "… " + label.substring(0, sep) + " …";
+        var note = document.createElement("span");
+        note.style.cssText = "opacity:0.6;font-size:0.92em;";
+        note.textContent = "  // " + label.substring(sep + 1);
+        node.appendChild(mark);
+        node.appendChild(note);
+        return node;
+      },
     });
 
     // ── Color swatches + picker ─────────────────────────────
