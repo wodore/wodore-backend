@@ -304,7 +304,16 @@
       var MAX = 100;
       function fmt(n, pad, reserved) {
         var f = flatJson(n);
-        if (f.length + pad.length + reserved <= MAX || n === null || typeof n !== "object") return f;
+        var hasComment = false;
+        if (!Array.isArray(n) && n !== null && typeof n === "object") {
+          hasComment = Object.keys(n).some(function(k) {
+            return typeof k === "string" && k.indexOf("//") === 0;
+          });
+        }
+        // objects carrying // comment keys NEVER inline — comment
+        // pairs must sit on their own line for the line-based view
+        // transform below
+        if (!hasComment && (f.length + pad.length + reserved <= MAX || n === null || typeof n !== "object")) return f;
         var inner = pad + "  ";
         if (Array.isArray(n)) {
           return "[\n" + n.map(function(el) { return inner + fmt(el, inner, 1); }).join(",\n") + "\n" + pad + "]";
@@ -315,29 +324,66 @@
       }
       return fmt(node, "", 0);
     };
+    // ── "//" comment syntax ─────────────────────────────
+    // The editor DISPLAYS stored comment keys ("//": "note",
+    // "//2": …) as line comments and lets you TYPE them: a line
+    // starting with // converts to a unique "//n": "text" member on
+    // every sync, so the form field (and the preview POST) always
+    // carry valid JSON. The backend strips // keys before serving
+    // and validating — they never reach clients.
+    var COMMENT_PAIR_RE = /^(\s*)"\/\/[^"\\]*":\s*("(?:[^"\\]|\\.)*"),?$/;
+    var LINE_COMMENT_RE = /^(\s*)\/\/ ?(.*)$/;
+    var jsonToView = function(text) {
+      return text.split("\n").map(function(line) {
+        var m = COMMENT_PAIR_RE.exec(line);
+        if (!m) return line;
+        try { return m[1] + "// " + JSON.parse(m[2]); } catch (e) { return line; }
+      }).join("\n");
+    };
+    var viewToJson = function(text) {
+      var lines = text.split("\n");
+      var n = 0;
+      return lines.map(function(line, i) {
+        var m = LINE_COMMENT_RE.exec(line);
+        if (!m) return line;
+        n += 1;
+        // trailing comma only when a member follows (the next
+        // non-empty line is not a closer)
+        var comma = ",";
+        for (var j = i + 1; j < lines.length; j++) {
+          var t = lines[j].trim();
+          if (!t) continue;
+          if (t[0] === "}" || t[0] === "]") comma = "";
+          break;
+        }
+        return m[1] + '"//' + n + '": ' + JSON.stringify(m[2].trim()) + comma;
+      }).join("\n");
+    };
     var prettyValue = (function () {
       var raw = (styleField.value || "").trim();
       var source = raw;
       if (!source) {
         var el = document.getElementById("wd-style-data");
         try { source = el ? JSON.parse(el.textContent) : ""; } catch (e) { source = ""; }
-        return typeof source === "string" ? source : formatStyle(source);
+        return typeof source === "string" ? source : jsonToView(formatStyle(source));
       }
-      try { return formatStyle(JSON.parse(source)); } catch (e) { return raw; }
+      try { return jsonToView(formatStyle(JSON.parse(source))); } catch (e) { return raw; }
     })();
 
     // ── CodeMirror ─────────────────────────────────────────────
     var cmHost = document.querySelector(".wd-cm-host");
     var cm = CodeMirror(cmHost, {
       value: prettyValue,
-      mode: { name: "javascript", json: true },
+      mode: "javascript",
       theme: "material-darker",
       lineNumbers: true, autoCloseBrackets: true, lineWrapping: false,
       foldGutter: true,
       gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter", "wd-lint-gutter"],
       indentUnit: 2, tabSize: 2,
     });
-    cm.on("change", function() { styleField.value = cm.getValue(); });
+    // (the // comment helpers live above, before prettyValue —
+    // prettyValue's IIFE needs them at definition time)
+    cm.on("change", function() { styleField.value = viewToJson(cm.getValue()); });
 
     // ── Fold placeholders: show WHAT was folded (Opus consult) ──
     // Depth-scan of the folded range (string-aware, indentation-
@@ -497,11 +543,15 @@
     // ── MapLibre (worker failure above leaves this dead — CodeMirror
     //    and the lint preview still work without it) ──────────────
     var map = null;
+    // open AT the overlay's zoom floor — a z7 country view renders
+    // nothing for close-up overlays (the 'accommodations invisible'
+    // lesson) and reviewers think the layer is broken
+    var initialZoom = Math.min(Math.max(({{ original.min_zoom|default:'9' }}) + 0.5, 9), 12);
     try {
       map = new Map({
         container: "wd-map-canvas",
         style: {version: 8, layers: [], sources: {}},
-        center: [8.2, 46.8], zoom: 7,
+        center: [8.2, 46.8], zoom: initialZoom,
       });
       map.addControl(new NavigationControl());
       map.addControl(new ScaleControl());
@@ -510,6 +560,13 @@
     }
     // Debug/console affordance: window.__wdMap (used by E2E tests too)
     window.__wdMap = map;
+
+    // MapLibre's tile eviction aborts in-flight fetches; the aborted
+    // promises surface as noisy uncaught AbortErrors in the console
+    // (raster_tile_source.ts). Benign — swallow just those.
+    window.addEventListener("unhandledrejection", function(ev) {
+      if (ev.reason && ev.reason.name === "AbortError") { ev.preventDefault(); }
+    });
 
     // ── Live zoom level readout ───────────────────────────────
     var zoomEl = document.getElementById("wd-zoom");
@@ -599,7 +656,7 @@
       // refresh while the Editor sub-tab is actually visible; the
       // visibility observer below triggers the first refresh.
       if (!editorVisible()) return;
-      var raw = cm.getValue();
+      var raw = viewToJson(cm.getValue());
       if (!raw.trim()) { jsonStatusEl.textContent = "empty"; return; }
       jsonStatusEl.textContent = "checking…";
       var thisRequest = ++requestId;
@@ -651,15 +708,27 @@
     // ── Parameters panel: the row's linked parameters, editable
     //    live — overrides win over authored/serve-time values in
     //    the preview (no save needed). #}
-    function renderParamsPanel(params) {
+    function renderParamsPanel(params, force) {
       if (!paramsPanel) return;
       const changed = JSON.stringify(params) !== JSON.stringify(knownParams);
       knownParams = params;
       if (!params.length) { paramsPanel.style.display = "none"; return; }
-      if (!changed && paramsPanel.style.display !== "none") return; // keep focus while typing
+      if (!force && !changed && paramsPanel.style.display !== "none") return; // keep focus while typing
+      const collapsed = paramsPanel.dataset.collapsed === "1";
       paramsPanel.style.display = "flex";
       paramsPanel.textContent = "";
-      params.forEach(function(p) {
+      const header = document.createElement("button");
+      header.type = "button";
+      header.className = "wd-btn";
+      header.style.cssText = "border:none;background:none;color:inherit;font-size:11px;cursor:pointer;padding:0;font-weight:600";
+      header.textContent = "Parameters " + (collapsed ? "▸" : "▾");
+      header.addEventListener("click", function() {
+        paramsPanel.dataset.collapsed = collapsed ? "" : "1";
+        renderParamsPanel(knownParams, true);
+      });
+      paramsPanel.appendChild(header);
+      if (!collapsed) {
+        params.forEach(function(p) {
         const wrap = document.createElement("div");
         wrap.className = "wd-param";
         const label = document.createElement("label");
@@ -678,6 +747,7 @@
         wrap.appendChild(label); wrap.appendChild(input);
         paramsPanel.appendChild(wrap);
       });
+      }
     }
     var refreshDebounced = debounce(refresh, 500);
 
