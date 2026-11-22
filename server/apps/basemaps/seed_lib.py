@@ -1053,6 +1053,7 @@ def accommodations_style() -> dict[str, Any]:
                 # member count (1.1× at 2 → 1.8× at ≥ 12; membership
                 # comes from GET /v1/geoplaces/near on click). The
                 # decluttered country view until the raw icons graduate.
+                "//#id": "Server-side clusters (count>1): same per-kind icon as individuals, slightly bigger with member count - the decluttered country view until raw icons graduate",
                 "id": "wd-accommodations-clusters",
                 "type": "symbol",
                 "source": ACCOMMODATIONS_SOURCE_ID,
@@ -1087,6 +1088,7 @@ def accommodations_style() -> dict[str, Any]:
                 # SELECTION PLATE (design review; see the amenity
                 # overlay twin for the rationale) — white plate,
                 # category ring, hover-faint/selected-solid.
+                "//#id": "Selection plate: white circle + category ring, hover-faint / selected-solid (opacity-gated on feature-state)",
                 "id": "wd-accommodations-selected",
                 "type": "circle",
                 "source": ACCOMMODATIONS_SOURCE_ID,
@@ -1151,6 +1153,7 @@ def accommodations_style() -> dict[str, Any]:
             {
                 # SELECTED ICON on top of the plate (declutter-proof).
                 # Frontend sets the filter to the selected slug on click.
+                "//#id": "The selected icon redrawn ON TOP of the plate (declutter-proof) - the frontend sets the filter to the selected slug on click",
                 "id": "wd-accommodations-selected-icon",
                 "type": "symbol",
                 "source": ACCOMMODATIONS_SOURCE_ID,
@@ -1172,6 +1175,7 @@ def accommodations_style() -> dict[str, Any]:
                 },
             },
             {
+                "//#id": "Individual accommodations (unclustered): per-kind tinted icon with the white halo ladder, zoom-scaled by the icon_scale parameter",
                 "id": "wd-accommodations",
                 "type": "symbol",
                 "source": ACCOMMODATIONS_SOURCE_ID,
@@ -1305,6 +1309,7 @@ def _accommodations_style_subset() -> dict[str, Any]:
         # SDF packs are distance fields — see the amenity subset twin)
         "sprite": [
             {
+                "//#id": "Individual accommodations (unclustered): per-kind tinted icon with the white halo ladder, zoom-scaled by the icon_scale parameter",
                 "id": "wd-accommodations",
                 "url": "{{env:MARTIN_TILE_URL}}/sprite/accommodation",
             }
@@ -1315,6 +1320,7 @@ def _accommodations_style_subset() -> dict[str, Any]:
                 # Cluster icons (count-independent here — the subset
                 # whitelist has no ``*`` to scale by count; ~1.35× the
                 # raw size at every zoom).
+                "//#id": "Server-side clusters (count>1): same per-kind icon as individuals, slightly bigger with member count - the decluttered country view until raw icons graduate",
                 "id": "wd-accommodations-clusters",
                 "type": "symbol",
                 "source": ACCOMMODATIONS_SOURCE_ID,
@@ -1337,6 +1343,7 @@ def _accommodations_style_subset() -> dict[str, Any]:
                 },
             },
             {
+                "//#id": "Individual accommodations (unclustered): per-kind tinted icon with the white halo ladder, zoom-scaled by the icon_scale parameter",
                 "id": "wd-accommodations",
                 "type": "symbol",
                 "source": ACCOMMODATIONS_SOURCE_ID,
@@ -2395,6 +2402,7 @@ def _transport_style_base(colors: dict[str, str] | None = None) -> dict[str, Any
                 # icon-allow-overlap stays OFF (default): the collision
                 # engine hides a losing marker instead of stacking two
                 # on top of each other (owner 2026-11-17).
+                "//#id": "z11-14 band: one mode-SHAPED marker per stop group (rail portrait, road capsule) - the mode reads as a shape long before mono glyphs take over at z14",
                 "id": "transport-stops-primitives",
                 "type": "symbol",
                 "source": TRANSPORT_SOURCE_ID,
@@ -2423,6 +2431,7 @@ def _transport_style_base(colors: dict[str, str] | None = None) -> dict[str, Any
                 # Stations only (location_type 1); the FULL profile
                 # additionally lowers this to z12 for route-rich
                 # interchanges (importance proxy).
+                "//#id": "Stations get their mono glyph a zoom EARLY (z13) so interchanges stay recognizable while plain stops are still primitives",
                 "id": "transport-stops-icons-stations",
                 "type": "symbol",
                 "source": TRANSPORT_SOURCE_ID,
@@ -2455,6 +2464,7 @@ def _transport_style_base(colors: dict[str, str] | None = None) -> dict[str, Any
                 # labels after the icons blanked the whole icon band),
                 # so icons place first and labels yield where they
                 # would cover an icon.
+                "//#id": "Stop names from z15 - text-ONLY layer placed BEFORE the icon band (MapLibre cross-layer collision: the later layer claims the space, labels must yield to icons)",
                 "id": "transport-stops-labels",
                 "type": "symbol",
                 "source": TRANSPORT_SOURCE_ID,
@@ -2491,6 +2501,7 @@ def _transport_style_base(colors: dict[str, str] | None = None) -> dict[str, Any
                 # (same filter as the primitives) — decluttered until the
                 # detail band takes over at z17 (exclusive maxzoom);
                 # collision-active (no allow-overlap): the loser hides.
+                "//#id": "z14-17 neighborhood band: one mono icon per stop group, collision-active (the loser hides instead of stacking)",
                 "id": "transport-stops-icons",
                 "type": "symbol",
                 "source": TRANSPORT_SOURCE_ID,
@@ -2517,6 +2528,7 @@ def _transport_style_base(colors: dict[str, str] | None = None) -> dict[str, Any
                 # labels: BEFORE the detail icon band (later layer
                 # claims collision space), detail icons stay
                 # overlap-allowed, the labels declutter.
+                "//#id": "z17+ boarding-position names - same text-before-icons collision rationale as the neighborhood labels",
                 "id": "transport-stops-labels-detail",
                 "type": "symbol",
                 "source": TRANSPORT_SOURCE_ID,
@@ -2553,6 +2565,7 @@ def _transport_style_base(colors: dict[str, str] | None = None) -> dict[str, Any
                 # Platforms legitimately cluster millimetres apart, so
                 # this band stays overlap-allowed (hiding them would
                 # defeat the detail view).
+                "//#id": "z17+ platform detail: the parent station drops out exactly where its platforms take over; overlap-allowed (platforms legitimately cluster millimetres apart)",
                 "id": "transport-stops-icons-detail",
                 "type": "symbol",
                 "source": TRANSPORT_SOURCE_ID,
@@ -2670,6 +2683,7 @@ def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
             # SELECTION PLATE — white plate, mode ring, selected-only
             # (hover lives in the icon halo alone; both opacities gated
             # separately — circle-opacity does not gate the stroke).
+            "//#id": "Selection plate: white circle + FIXED-accent ring, opacity-gated on feature-state selected — the ring never takes the mode color (active must not read as a bigger hover)",
             "id": layer_id,
             "type": "circle",
             "source": TRANSPORT_SOURCE_ID,
@@ -2741,6 +2755,7 @@ def transport_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
                 {
                     # route-rich interchanges reveal a zoom EARLIER —
                     # the importance proxy is full-only (``length`` op)
+                    "//#id": "Route-rich interchanges reveal a zoom EARLY (z12) - importance proxy via route count (full-only: the length op is not subset-whitelisted)",
                     "id": "transport-stops-icons-major",
                     "type": "symbol",
                     "source": TRANSPORT_SOURCE_ID,

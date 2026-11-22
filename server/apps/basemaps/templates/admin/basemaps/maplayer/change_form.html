@@ -167,43 +167,42 @@
     var oldNav = fieldsetsArea.querySelector("nav");
     if (oldNav) oldNav.remove();
 
-    // Style container: top-level tab with Settings | Editor sub-tabs
+    // Settings + Editor as SEPARATE top-level tabs (no second tab
+    // level) — the URL hash stays free for the map view state
+    // (#editor@lat,lng,zoom), parsed below and by the editor init.
     var editorRoot = document.getElementById("wd-style-editor-root");
-    var styleContainer = document.createElement("div");
-    styleContainer.setAttribute("x-data", "{ styleSub: 'settings' }");
-    styleContainer.setAttribute("x-show", "activeTab == 'style'");
-    styleWrap.setAttribute("x-show", "styleSub == 'settings'");
-    styleContainer.appendChild(styleWrap);
+    styleWrap.setAttribute("x-show", "activeTab == 'settings'");
+    styleWrap.id = "settings-group";
+    fieldsetsArea.parentNode.insertBefore(styleWrap, fieldsetsArea.nextSibling);
+    var editorContainer = null;
     if (editorRoot) {
-      var subnavWrap = document.createElement("div");
-      subnavWrap.className = "border-b border-base-200 dark:border-base-800";
-      var subnav = document.createElement("nav");
-      subnav.className = "flex flex-row items-center *:border-x *:border-transparent *:font-medium *:text-important *:first:border-l-0 *:cursor-pointer *:relative *:py-2 *:px-3.5 *:hover:text-primary-600 dark:*:hover:text-primary-500 dark:*:border-transparent [&>.active]:bg-white dark:[&>.active]:bg-base-900 [&>.active]:border-base-200 dark:[&>.active]:border-base-800  [&>.active]:text-primary-600 dark:[&>.active]:text-primary-500 [&>.active]:after:absolute [&>.active]:after:content-[''] [&>.active]:after:-bottom-px [&>.active]:after:left-0 [&>.active]:after:right-0 [&>.active]:after:h-px [&>.active]:after:bg-white dark:[&>.active]:after:bg-base-900";
-      var settingsLink = document.createElement("a");
-      settingsLink.textContent = "{% trans 'Settings' %}";
-      settingsLink.setAttribute("x-on:click", "styleSub = 'settings'");
-      settingsLink.setAttribute("x-bind:class", "{'active': styleSub == 'settings'}");
-      var editorLink = document.createElement("a");
-      editorLink.textContent = "{% trans 'Editor' %}";
-      editorLink.setAttribute("x-on:click", "styleSub = 'editor'");
-      editorLink.setAttribute("x-bind:class", "{'active': styleSub == 'editor'}");
-      subnav.appendChild(settingsLink);
-      subnav.appendChild(editorLink);
-      subnavWrap.appendChild(subnav);
-      styleContainer.insertBefore(subnavWrap, styleWrap);
-      editorRoot.setAttribute("x-show", "styleSub == 'editor'");
-      styleContainer.appendChild(editorRoot);
+      editorContainer = document.createElement("div");
+      // Unfold's getCurrentTab() only resolves hashes whose tab has a
+      // "<slug>-group" element (inline groups carry these natively) —
+      // without the id, #editor deep links never activate the tab
+      editorContainer.id = "editor-group";
+      editorContainer.setAttribute("x-show", "activeTab == 'editor'");
+      editorRoot.removeAttribute("x-show");
+      // Alpine no longer manages the ROOT (the wrapper carries the
+      // x-show) — drop the initial inline display:none or the root
+      // stays invisible inside the visible container
+      editorRoot.style.display = "";
+      editorRoot.dataset.wdPromoted = "1";
+      editorContainer.appendChild(editorRoot);
+      styleWrap.parentNode.insertBefore(editorContainer, styleWrap.nextSibling);
     }
-    fieldsetsArea.parentNode.insertBefore(styleContainer, fieldsetsArea.nextSibling);
 
     // Config container: top-level tab
     var configContainer = document.createElement("div");
+    configContainer.id = "config-group";
     configContainer.setAttribute("x-show", "activeTab == 'config'");
     configWrap.removeAttribute("x-show");
     configContainer.appendChild(configWrap);
-    styleContainer.parentNode.insertBefore(configContainer, styleContainer.nextSibling);
+    (editorContainer || styleWrap).parentNode.insertBefore(
+      configContainer, (editorContainer || styleWrap).nextSibling
+    );
 
-    // Top-level nav links: General | Style | Config | <inlines…>
+    // Top-level nav links: General | Settings | Editor | Config | <inlines…>
     function makeLink(label, slug) {
       var a = document.createElement("a");
       a.href = "#" + slug;
@@ -212,16 +211,34 @@
       a.textContent = label;
       return a;
     }
-    generalLink.after(makeLink("{% filter escapejs %}{% trans 'Style' %}{% endfilter %}", "style"), makeLink("{% filter escapejs %}{% trans 'Config' %}{% endfilter %}", "config"));
+    var navLinks = [
+      makeLink("{% filter escapejs %}{% trans 'Settings' %}{% endfilter %}", "settings"),
+      makeLink("{% filter escapejs %}{% trans 'Editor' %}{% endfilter %}", "editor"),
+      makeLink("{% filter escapejs %}{% trans 'Config' %}{% endfilter %}", "config"),
+    ];
+    if (editorRoot) {
+      generalLink.after(navLinks[0], navLinks[1], navLinks[2]);
+    } else {
+      generalLink.after(navLinks[0], navLinks[2]);
+    }
+
+    // Map-view hash: #<tab>@lat,lng,zoom — stash the full form for
+    // the editor module, then strip the @-part so Unfold's tab
+    // detection (exact hash match) keeps working.
+    var hashMatch = /^#([a-z-]+)@/.exec(window.location.hash);
+    if (hashMatch) {
+      window.__wdMapView = window.location.hash;
+      window.location.hash = "#" + hashMatch[1];
+    }
 
     // Surface validation errors: Unfold's own tab error badges lived on
     // the removed nav. Switch to the first promoted tab carrying an
-    // .errorlist (hash pre-Alpine → body x-init picks it up; the Style
-    // sub-tab flips to Editor so the error is next to the JSON).
+    // .errorlist (hash pre-Alpine → body x-init picks it up).
     var errTarget = null;
     if (styleWrap.querySelector(".errorlist")) {
-      errTarget = "style";
-      styleContainer.setAttribute("x-data", "{ styleSub: 'editor' }");
+      errTarget = "settings";
+    } else if (editorRoot && editorRoot.querySelector(".errorlist")) {
+      errTarget = "editor";
     } else if (configWrap.querySelector(".errorlist")) {
       errTarget = "config";
     }
@@ -273,7 +290,7 @@
     // The tab promotion must have run (editor promoted into the Style
     // tab) — otherwise keep the classic textarea surface entirely.
     var editorRoot = document.getElementById("wd-style-editor-root");
-    if (!editorRoot || !editorRoot.hasAttribute("x-show")) return;
+    if (!editorRoot || editorRoot.dataset.wdPromoted !== "1") return;
 
     var layerSlug = "{{ original.slug|escapejs }}";
     var layerProfile = "{{ original.profile|escapejs }}";
@@ -331,33 +348,109 @@
     // every sync, so the form field (and the preview POST) always
     // carry valid JSON. The backend strips // keys before serving
     // and validating — they never reach clients.
-    var COMMENT_PAIR_RE = /^(\s*)"\/\/[^"\\]*":\s*("(?:[^"\\]|\\.)*"),?$/;
+    var COMMENT_PAIR_RE = /^(\s*)"(\/\/[^"]*)":\s*("(?:[^"\\]|\\.)*"),?$/;
     var LINE_COMMENT_RE = /^(\s*)\/\/ ?(.*)$/;
+    var INLINE_KEY_RE = /^(\s*)"([^"]+)":/;
+    // "//": standalone line comment; "//#key": trailing comment that
+    // renders ON the "key": line — "id": "x", // the note
     var jsonToView = function(text) {
-      return text.split("\n").map(function(line) {
+      var lines = text.split("\n").map(function(line) {
         var m = COMMENT_PAIR_RE.exec(line);
         if (!m) return line;
-        try { return m[1] + "// " + JSON.parse(m[2]); } catch (e) { return line; }
-      }).join("\n");
+        try {
+          var val = JSON.parse(m[3]);
+          if (m[2].indexOf("//#") === 0) {
+            // attach to the FOLLOWING line carrying that key (the
+            // formatter preserves key order — the comment sits right
+            // before its key)
+            return { attach: m[2].slice(3), note: val, indent: m[1] };
+          }
+          return m[1] + "// " + val;
+        } catch (e) { return line; }
+      });
+      // PASS 1 — attach every //#key comment to its key line
+      // (forward first, then backward; same indent). Mutating lines
+      // BEFORE the output pass is the point: the output loop below
+      // would otherwise already have pushed the unmodified line.
+      for (var i = 0; i < lines.length; i++) {
+        var item = lines[i];
+        if (typeof item !== "object" || item === null || !item.attach) continue;
+        var placed = false;
+        // the key must be at the SAME indent; a line at a shallower
+        // indent is the object boundary (its opener/closer) — stop:
+        // without this the scan walks into the neighbouring object
+        // and attaches to ITS id (verified bug)
+        var boundary = function(j) {
+          if (typeof lines[j] !== "string") return false;
+          var ind = (/^(\s*)/.exec(lines[j]) || ["", ""])[1];
+          return ind.length < item.indent.length;
+        };
+        var tryLine = function(j) {
+          if (typeof lines[j] !== "string") return false;
+          var km = INLINE_KEY_RE.exec(lines[j]);
+          if (km && km[1] === item.indent && km[2] === item.attach) {
+            lines[j] = lines[j].replace(/,?$/, "") + ", // " + item.note;
+            return true;
+          }
+          return false;
+        };
+        for (var j = i + 1; j < lines.length && !placed; j++) {
+          if (boundary(j)) break;
+          placed = tryLine(j);
+        }
+        for (var j = i - 1; j >= 0 && !placed; j--) {
+          if (boundary(j)) break;
+          placed = tryLine(j);
+        }
+        if (!placed) lines[i] = item.indent + "// #" + item.attach + ": " + item.note;
+      }
+      // PASS 2 — emit (attach objects are gone or replaced by now)
+      return lines.filter(function(l) { return typeof l === "string"; }).join("\n");
     };
     var viewToJson = function(text) {
       var lines = text.split("\n");
+      var out = [];
       var n = 0;
-      return lines.map(function(line, i) {
-        var m = LINE_COMMENT_RE.exec(line);
-        if (!m) return line;
-        n += 1;
-        // trailing comma only when a member follows (the next
-        // non-empty line is not a closer)
-        var comma = ",";
+      // the next non-empty INPUT line after i — decides trailing
+      // commas for emitted comment members (no comma before a closer)
+      var commaAfter = function(i) {
         for (var j = i + 1; j < lines.length; j++) {
           var t = lines[j].trim();
           if (!t) continue;
-          if (t[0] === "}" || t[0] === "]") comma = "";
+          return (t[0] === "}" || t[0] === "]") ? "" : ",";
+        }
+        return "";
+      };
+      lines.forEach(function(line, i) {
+        // TRAILING comment:  "key": value, // note  → emit a
+        // "//#key": "note" member right after (same object)
+        var tm = /^(\s*)"([^"]+)":[^\/]*?\/\/ ?(.*)$/.exec(line);
+        if (tm) {
+          var bare = line.replace(/\/\/ ?(.*)$/, "").replace(/\s+$/, "");
+          out.push(bare);
+          out.push(tm[1] + '"//#' + tm[2] + '": ' + JSON.stringify(tm[3].trim()) + commaAfter(i));
+          return;
+        }
+        var m = LINE_COMMENT_RE.exec(line);
+        if (!m) { out.push(line); return; }
+        n += 1;
+        out.push(m[1] + '"//' + n + '": ' + JSON.stringify(m[2].trim()) + commaAfter(i));
+      });
+      // trailing-comma normalization: attaching/removing comments can
+      // leave a dangling comma before a closer (JSONC-style views are
+      // comma-lenient; the JSON we emit is not). Line-based — a regex
+      // over the whole text could eat commas inside string values.
+      var joined = out.join("\n").split("\n");
+      for (var k = joined.length - 1; k >= 0; k--) {
+        if (!/,$/.test(joined[k])) continue;
+        for (var k2 = k + 1; k2 < joined.length; k2++) {
+          var t = joined[k2].trim();
+          if (!t) continue;
+          if (t[0] === "}" || t[0] === "]") joined[k] = joined[k].replace(/,$/, "");
           break;
         }
-        return m[1] + '"//' + n + '": ' + JSON.stringify(m[2].trim()) + comma;
-      }).join("\n");
+      }
+      return joined.join("\n");
     };
     var prettyValue = (function () {
       var raw = (styleField.value || "").trim();
@@ -413,7 +506,15 @@
         else if (c === "}" || c === "]") depth--;
         else if (c === "," && depth === 0) items++;
       }
-      if (id) return id;
+      if (id) {
+        // an "//#id" comment inside the folded range rides along —
+        // … wd-accommodations-clusters — what it does …
+        // the editor view shows comments as TRAILING on the id line
+        // ("id": "x", // note) — match that form; the raw key form
+        // only exists pre-transform
+        var idNote = /"id":\s*"[^"]*",\s*\/\/ ?(.*)$/m.exec(text);
+        return idNote ? id + " — " + idNote[1] : id;
+      }
       var line = cm.getLine(from.line) || "";
       if (/[{[]$/.test(line.trim())) {
         var key = /"((?:[^"\\]|\\.)*)"\s*:\s*[{[]\s*$/.exec(line);
@@ -547,11 +648,22 @@
     // nothing for close-up overlays (the 'accommodations invisible'
     // lesson) and reviewers think the layer is broken
     var initialZoom = Math.min(Math.max(({{ original.min_zoom|default:'9' }}) + 0.5, 9), 12);
+    var initialCenter = [8.2, 46.8];
+    // map view from the URL hash (#editor@lat,lng,zoom — the
+    // promotion script strips the @-part for Unfold's tab matching
+    // and stashes the coords for us)
+    var hashState = /^#[a-z-]+@(-?[\d.]+),(-?[\d.]+),([\d.]+)$/.exec(
+      window.__wdMapView || ""
+    );
+    if (hashState) {
+      initialCenter = [parseFloat(hashState[2]), parseFloat(hashState[1])];
+      initialZoom = parseFloat(hashState[3]);
+    }
     try {
       map = new Map({
         container: "wd-map-canvas",
         style: {version: 8, layers: [], sources: {}},
-        center: [8.2, 46.8], zoom: initialZoom,
+        center: initialCenter, zoom: initialZoom,
       });
       map.addControl(new NavigationControl());
       map.addControl(new ScaleControl());
@@ -570,6 +682,22 @@
 
     // ── Live zoom level readout ───────────────────────────────
     var zoomEl = document.getElementById("wd-zoom");
+    // hash sync: #<tab>@lat,lng,zoom (replaceState — no history spam;
+    // only while the editor tab is active)
+    var syncHash = debounce(function() {
+      if (!map) return;
+      var tab = /^#([a-z-]+)/.exec(window.location.hash);
+      if (!tab || tab[1] !== "editor") return;
+      var c = map.getCenter();
+      var next = "#editor@" + c.lat.toFixed(4) + "," + c.lng.toFixed(4) + "," + map.getZoom().toFixed(1);
+      if (next !== window.location.hash) {
+        history.replaceState(null, "", next);
+      }
+    }, 600);
+    if (map) {
+      map.on("moveend", syncHash);
+      map.on("zoomend", syncHash);
+    }
     if (map && zoomEl) {
       var showZoom = function() { zoomEl.textContent = "z" + Math.round(map.getZoom() * 10) / 10; };
       map.on("zoom", showZoom);
