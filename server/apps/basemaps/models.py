@@ -814,13 +814,21 @@ class MapLayer(TimeStampedModel):
         errors: dict[str, str] = {}
 
         if self.style is not None:
+            # Editor comments ("//"-prefixed keys) ride the stored doc
+            # but never reach validators or clients — validate the
+            # STRIPPED document; the stored one keeps the annotations.
+            # (local import — the resolution module's env registry
+            # reads model settings; same pattern as missing_env_names)
+            from .resolution import strip_style_comments
+
+            doc = strip_style_comments(self.style)
             try:
-                validation.validate_style_spec(self.style)
+                validation.validate_style_spec(doc)
             except validation.StyleValidationError as exc:
                 errors["style"] = str(exc)
 
             known = self._linked_parameter_slugs()
-            unknown = validation.unknown_tokens(self.style) - known
+            unknown = validation.unknown_tokens(doc) - known
             if unknown:
                 errors["style"] = (
                     f"Unknown parameter token(s): "
@@ -832,7 +840,7 @@ class MapLayer(TimeStampedModel):
             # clean(), see map_seed._seed_layer_variant).
             if self.profile == self.Profile.subset and "style" not in errors:
                 try:
-                    validation.validate_subset_style(self.style)
+                    validation.validate_subset_style(doc)
                 except validation.StyleValidationError as exc:
                     errors["style"] = str(exc)
 
@@ -847,7 +855,7 @@ class MapLayer(TimeStampedModel):
             # never invokes styl.
             if "style" not in errors:
                 styl_result = validation.run_styl(
-                    self.style, ignored_rules=self.styl_ignored_rules or ()
+                    doc, ignored_rules=self.styl_ignored_rules or ()
                 )
                 if styl_result is not None and styl_result.errors:
                     message = "styl: " + "; ".join(styl_result.errors)

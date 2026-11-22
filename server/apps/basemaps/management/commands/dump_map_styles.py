@@ -36,7 +36,7 @@ from django.core.management.base import BaseCommand, CommandError
 from server.apps.basemaps import seed_lib as lib
 from server.apps.basemaps.management.commands.map_seed import LAYERS, PARAMETERS
 from server.apps.basemaps.models import MapLayer
-from server.apps.basemaps.resolution import resolve_tokens
+from server.apps.basemaps.resolution import resolve_tokens, strip_style_comments
 
 #: Parameter slug → seed default (scalars AND whole expression
 #: subtrees — opacity-curve defaults are interpolate expressions). The
@@ -116,7 +116,9 @@ class Command(BaseCommand):
                     )
                 name = f"{parent['slug']}--{spec}--{profile}.json"
                 target = out / name
-                resolved = resolve_tokens(style, _PARAMETER_DEFAULTS)
+                resolved = resolve_tokens(
+                    strip_style_comments(style), _PARAMETER_DEFAULTS
+                )
                 target.write_text(json.dumps(resolved, indent=2, sort_keys=True))
                 self.stdout.write(f"wrote {name}")
                 written += 1

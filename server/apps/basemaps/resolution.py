@@ -194,6 +194,32 @@ def absolutize_urls(value: Any, tile_server_url: str, api_url: str = "") -> Any:
     return value
 
 
+def strip_style_comments(value: Any) -> Any:
+    (
+        """Drop editor annotation keys (any key starting with ``//``).
+
+    The admin style editor keeps comments as regular JSON object keys
+    — ``"//": "halo band, owner 2026-11-15"`` or """
+        "//2"
+        """ for several
+    on one object. They are valid JSON, survive the round trip through
+    the JSONB column, and never reach clients or validators: every
+    serve/validate/dump pipeline strips them first. Arrays pass their
+    elements through — comments on array items live in the item
+    objects (e.g. inside a layer object of ``layers``).
+    """
+    )
+    if isinstance(value, dict):
+        return {
+            key: strip_style_comments(child)
+            for key, child in value.items()
+            if not (isinstance(key, str) and key.startswith("//"))
+        }
+    if isinstance(value, list):
+        return [strip_style_comments(child) for child in value]
+    return value
+
+
 def resolve_style(
     style: Any,
     parameter_values: dict[str, Any],
@@ -203,12 +229,13 @@ def resolve_style(
 ) -> dict[str, Any]:
     """Full serve-time pipeline for an owned style document.
 
-    Order matters: env substitution may live inside parameter defaults,
-    URL placeholders resolve to the tile server, and root-relative refs
-    are absolutized last (tokens must survive untouched in tokenized
-    mode — they never start with ``/``).
+    Order matters: editor comments drop first (they never reach
+    clients), then env substitution may live inside parameter
+    defaults, URL placeholders resolve to the tile server, and
+    root-relative refs are absolutized last (tokens must survive
+    untouched in tokenized mode — they never start with ``/``).
     """
-    resolved = deepcopy(style)
+    resolved = strip_style_comments(deepcopy(style))
     resolved = substitute_env_tree(resolved)
     if not tokenized:
         resolved = resolve_tokens(resolved, parameter_values)

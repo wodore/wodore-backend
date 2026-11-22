@@ -78,12 +78,18 @@ class _StyleSpec(pydantic.BaseModel):
 
 
 def validate_style_spec(style: Any) -> None:
-    """Validate the structural shape of an inline style document."""
+    """Validate the structural shape of an inline style document.
+
+    Editor comments (``//``-prefixed keys) strip first — they are a
+    storage-layer annotation and never part of the served contract.
+    """
+    from .resolution import strip_style_comments
+
     if not isinstance(style, dict):
         msg = "style must be a JSON object"
         raise StyleValidationError(msg)
     try:
-        _StyleSpec.model_validate(style)
+        _StyleSpec.model_validate(strip_style_comments(style))
     except pydantic.ValidationError as exc:
         raise StyleValidationError(str(exc)) from exc
 
@@ -102,8 +108,10 @@ def walk_tokens(value: Any):
 
 def unknown_tokens(style: Any) -> set[str]:
     """Parameter token slugs referenced by the style (``{{slug}}`` nodes)."""
+    from .resolution import strip_style_comments
+
     tokens: set[str] = set()
-    for node in walk_tokens(style):
+    for node in walk_tokens(strip_style_comments(style)):
         match = TOKEN_RE.match(node)
         if match:
             tokens.add(match.group(1))
@@ -591,7 +599,13 @@ def validate_subset_style(style: Any) -> None:
     (structural checks run first) restricted to the whitelists above —
     renderable by a Leaflet-class engine. Raises
     :class:`StyleValidationError` with path-precise messages.
+
+    Editor comments (``//``-prefixed keys) strip first — same
+    convention as every other validator entry point.
     """
+    from .resolution import strip_style_comments
+
+    style = strip_style_comments(style)
     validate_style_spec(style)  # version 8, sources object, layer shapes
     errors: list[str] = []
     for key in sorted(set(style) - SUBSET_TOP_LEVEL_KEYS):
@@ -710,13 +724,15 @@ def run_styl(
     ignored = set(ignored_rules or ())
     if "*" in ignored:
         return None
+    from .resolution import strip_style_comments
+
     path = ""
     try:
         with tempfile.NamedTemporaryFile(
             "w", suffix=".json", encoding="utf-8", delete=False
         ) as handle:
             path = handle.name
-            json.dump(style, handle)
+            json.dump(strip_style_comments(style), handle)
         completed = subprocess.run(
             ["styl", "validate", path],
             capture_output=True,

@@ -1,0 +1,1076 @@
+{% extends "admin/change_form.html" %}
+{% load i18n %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <link rel="stylesheet" href="https://unpkg.com/codemirror@5.65.18/lib/codemirror.css" />
+  <link rel="stylesheet" href="https://unpkg.com/codemirror@5.65.18/theme/material-darker.css" />
+  <link rel="stylesheet" href="https://unpkg.com/codemirror@5.65.18/addon/fold/foldgutter.css" />
+  <link rel="stylesheet" href="https://unpkg.com/codemirror@5.65.18/addon/hint/show-hint.css" />
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.14.0/dist/maplibre-gl.css" />
+  <style>
+    #wd-style-editor-root { display: block; }
+    .wd-style-grid {
+      display: grid; grid-template-columns: minmax(400px, 1fr) minmax(400px, 1fr);
+      gap: 10px; margin: 12px 0 8px;
+      height: calc(100vh - 240px); min-height: 480px;
+    }
+    @media (max-width: 1200px) { .wd-style-grid { grid-template-columns: 1fr; height: auto; } }
+    .wd-editor-col, .wd-map-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+    /* Equal toolbars → equal canvas heights in both columns; nowrap +
+       hidden overflow so a long status never wraps onto the canvas */
+    .wd-style-grid .wd-toolbar {
+      display: flex; gap: 8px; align-items: center; flex-wrap: nowrap;
+      overflow: hidden; font-size: 13px;
+      height: 32px; flex: 0 0 32px;
+    }
+    .wd-toolbar select, .wd-toolbar button, .wd-toolbar label.wd-btn {
+      font-size: 12px; padding: 3px 10px; border: 1px solid var(--border-color, #374151);
+      border-radius: 4px; background: var(--bg-inset, #1a1a2e); color: var(--text, #e0e0e0); cursor: pointer;
+    }
+    .wd-toolbar button:hover, .wd-toolbar label.wd-btn:hover { background: var(--bg-hover, #263238); }
+    .wd-status { font-size: 12px; opacity: 0.8; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .wd-status .ok { color: #22c55e; opacity: 1; }
+    .wd-status .err { color: #ef4444; opacity: 1; }
+    /* the zoom readout never shrinks — it is short and load-bearing */
+    #wd-zoom { flex: 0 0 auto; overflow: visible; }
+    /* CodeMirror appends INTO .wd-cm-host — the host is the flex child
+       that grows; CM fills it (height:100% = internal-scroll recipe). */
+    .wd-cm-host { flex: 1 1 0; min-height: 300px; display: flex; }
+    .wd-cm-host .CodeMirror {
+      flex: 1 1 0; height: 100%; border: 1px solid var(--border-color, #374151);
+      border-radius: 6px; font-size: 12px; line-height: 1.45;
+    }
+    .CodeMirror-gutters { background: #263238; border-right: 1px solid #374151; }
+    .CodeMirror-linenumber { color: #546e7a; }
+    .CodeMirror-foldmarker { color: #f59e0b; text-shadow: none; font-family: monospace; cursor: pointer; font-size: 15px; }
+    .cm-foldgutter-open:after, .cm-foldgutter-folded:after { color: #90a4ae; cursor: pointer; font-size: 16px; font-weight: 700; }
+    /* Parameter overrides panel (map column) */
+    .wd-params { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 6px 8px; border: 1px dashed var(--border-color, #374151); border-radius: 6px; font-size: 12px; flex: 0 0 auto; }
+    .wd-params .wd-param { display: flex; gap: 6px; align-items: center; }
+    .wd-params .wd-param label { font-family: ui-monospace, monospace; font-size: 11px; opacity: 0.85; }
+    .wd-params input { width: 90px; font-size: 12px; padding: 2px 6px; border: 1px solid var(--border-color, #374151); border-radius: 4px; background: var(--bg-inset, #1a1a2e); color: var(--text, #e0e0e0); }
+    /* Inline color swatches before every "#rrggbb" token; clicking
+       opens the native picker and rewrites the token in place. */
+    .wd-swatch {
+      display: inline-block; width: 10px; height: 10px; margin: 0 3px 0 0;
+      border: 1px solid rgba(255, 255, 255, 0.45); border-radius: 2px;
+      cursor: pointer; vertical-align: baseline;
+    }
+    .wd-swatch:hover { outline: 1px solid #f59e0b; }
+    .wd-map-canvas {
+      flex: 1 1 0; min-height: 300px; border: 1px solid var(--border-color, #374151); border-radius: 6px;
+    }
+    .wd-lint-panel {
+      max-height: 100px; overflow-y: auto; border: 1px solid var(--border-color, #374151);
+      border-radius: 6px; padding: 3px 8px; font-size: 11.5px;
+      font-family: monospace; line-height: 1.4; background: var(--bg-inset, #1a1a2e);
+    }
+    .wd-lint-panel:empty { display: none; }
+    .wd-lint-ok { color: #22c55e; padding: 2px 0; }
+    .wd-lint-item { display: flex; gap: 5px; align-items: baseline; padding: 1px 0; }
+    .wd-lint-item .src { font-size: 9.5px; padding: 0 3px; border-radius: 3px; font-weight: 600; white-space: nowrap; }
+    .wd-lint-item .src.styl { background: #c35; color: #fff; }
+    .wd-lint-item .src.subset { background: #68a; color: #fff; }
+    .wd-lint-item .src.json { background: #d73; color: #fff; }
+    .wd-lint-item .line-no { color: #64748b; min-width: 2.5em; text-align: right; }
+    .wd-lint-item.error .msg { color: #ef4444; }
+    .wd-lint-item.warning .msg { color: #d97706; }
+    .wd-lint-item.info .msg { color: #3b82f6; }
+    .wd-g-error { color: #ef4444 !important; font-weight: bold; }
+    .wd-g-warning { color: #d97706 !important; }
+    .wd-g-info { color: #3b82f6 !important; }
+    /* The raw style textarea stays visible until CodeMirror mounts (JS
+       hides it then) — if the CDN or the module fails, the classic
+       textarea remains the editing surface. */
+    /* Mobile: the 12px editor font fills ~40 chars/line and clips —
+       shrink the editor stack and let the toolbar wrap */
+    @media (max-width: 768px) {
+      .wd-cm-host .CodeMirror { font-size: 10px; line-height: 1.35; }
+      .CodeMirror-linenumber { font-size: 9px; }
+      .CodeMirror-foldmarker, .cm-foldgutter-open:after, .cm-foldgutter-folded:after { font-size: 12px; }
+      .wd-style-grid .wd-toolbar { flex-wrap: wrap; height: auto; min-height: 32px; flex: 0 0 auto; overflow: visible; }
+      .wd-swatch { width: 8px; height: 8px; }
+    }
+  </style>
+{% endblock %}
+
+{% block after_field_sets %}
+  {{ block.super }}
+
+  {% comment %}
+    Style editor root (placed by the tab-promotion script below).
+    Two equal columns (JSON editor | map) + a full-width lint strip below
+    — the lint panel must live OUTSIDE the grid or the editor column
+    ends up shorter than the map column.
+  {% endcomment %}
+  {% if object_id and original and original.style is not None %}
+  <div id="wd-style-editor-root" style="display:none">
+    <div class="wd-style-grid">
+      <div class="wd-editor-col">
+        <div class="wd-toolbar">
+          <strong>Style JSON</strong>
+          <span class="wd-status" id="wd-json-status"></span>
+          <button type="button" id="wd-collapse-btn">Layers</button>
+          <button type="button" id="wd-keys-btn">Keys</button>
+          <button type="button" id="wd-expand-btn">Expand</button>
+          <button type="button" id="wd-export-btn">Export</button>
+          <label class="wd-btn" for="wd-import-file">Import</label>
+          <input type="file" id="wd-import-file" accept=".json" style="display:none" />
+        </div>
+        {# CM appends INTO its host — the host must be the growing flex child #}
+        <div class="wd-cm-host"></div>
+        <input type="color" id="wd-color-input" style="position:fixed;left:-200px;top:0;width:1px;height:1px;opacity:0" tabindex="-1" />
+      </div>
+      <div class="wd-map-col">
+        <div class="wd-toolbar">
+          <strong>Preview</strong>
+          {% if original.role == "overlay" %}
+            <label for="wd-basemap-select">Basemap:</label>
+            <select id="wd-basemap-select"><option value="">— standalone —</option></select>
+          {% endif %}
+          <span class="wd-status" id="wd-zoom">z–</span>
+          <span class="wd-status" id="wd-preview-status"></span>
+        </div>
+        {# parameter overrides: live, no save needed #}
+        <div class="wd-params" id="wd-params" style="display:none"></div>
+        <div class="wd-map-canvas" id="wd-map-canvas"></div>
+      </div>
+    </div>
+    <div class="wd-lint-panel" id="wd-lint-panel"></div>
+  </div>
+
+  {{ wd_pretty_style|default:'{}'|json_script:"wd-style-data" }}
+  {% endif %}
+
+  {% comment %}
+    Tab promotion: Style & Config fieldset tabs → top-level Unfold tabs.
+    Runs synchronously BEFORE Alpine initializes (Alpine loads deferred), so
+    the moved containers and added nav links get bound by Alpine's first scan.
+    The Style tab gains sub-tabs (Settings | Editor) when the editor exists.
+  {% endcomment %}
+  <script>
+  (function () {
+    "use strict";
+    var nav = document.getElementById("tabs-items");
+    var fieldsetsArea = document.querySelector('div[x-data][x-show="activeTab == \'general\'"]');
+    if (!nav || !fieldsetsArea) return;
+
+    var generalLink = nav.querySelector('a[href="#general"]');
+    var styleWrap = fieldsetsArea.querySelector(".tab-wrapper.fieldset-style");
+    var configWrap = fieldsetsArea.querySelector(".tab-wrapper.fieldset-config");
+    var generalWrap = fieldsetsArea.querySelector(".tab-wrapper.fieldset-general");
+    if (!generalLink || !styleWrap || !configWrap) return;
+
+    // General: render directly, no second-level tab bar anymore
+    if (generalWrap) generalWrap.removeAttribute("x-show");
+    // Unfold's fieldset.html binds x-show="activeTab == 'general'" on
+    // every non-stacked fieldset MODULE — the promoted Style/Config
+    // tabs live outside the General tab, so their modules must drop it
+    // or they stay display:none (empty panels).
+    [styleWrap, configWrap].forEach(function (w) {
+      var module = w.querySelector(":scope > fieldset.module");
+      if (module) module.removeAttribute("x-show");
+    });
+    var oldNav = fieldsetsArea.querySelector("nav");
+    if (oldNav) oldNav.remove();
+
+    // Settings + Editor as SEPARATE top-level tabs (no second tab
+    // level) — the URL hash stays free for the map view state
+    // (#editor@lat,lng,zoom), parsed below and by the editor init.
+    var editorRoot = document.getElementById("wd-style-editor-root");
+    styleWrap.setAttribute("x-show", "activeTab == 'settings'");
+    styleWrap.id = "settings-group";
+    fieldsetsArea.parentNode.insertBefore(styleWrap, fieldsetsArea.nextSibling);
+    var editorContainer = null;
+    if (editorRoot) {
+      editorContainer = document.createElement("div");
+      // Unfold's getCurrentTab() only resolves hashes whose tab has a
+      // "<slug>-group" element (inline groups carry these natively) —
+      // without the id, #editor deep links never activate the tab
+      editorContainer.id = "editor-group";
+      editorContainer.setAttribute("x-show", "activeTab == 'editor'");
+      editorRoot.removeAttribute("x-show");
+      // Alpine no longer manages the ROOT (the wrapper carries the
+      // x-show) — drop the initial inline display:none or the root
+      // stays invisible inside the visible container
+      editorRoot.style.display = "";
+      editorRoot.dataset.wdPromoted = "1";
+      editorContainer.appendChild(editorRoot);
+      styleWrap.parentNode.insertBefore(editorContainer, styleWrap.nextSibling);
+    }
+
+    // Config container: top-level tab
+    var configContainer = document.createElement("div");
+    configContainer.id = "config-group";
+    configContainer.setAttribute("x-show", "activeTab == 'config'");
+    configWrap.removeAttribute("x-show");
+    configContainer.appendChild(configWrap);
+    (editorContainer || styleWrap).parentNode.insertBefore(
+      configContainer, (editorContainer || styleWrap).nextSibling
+    );
+
+    // Top-level nav links: General | Settings | Editor | Config | <inlines…>
+    function makeLink(label, slug) {
+      var a = document.createElement("a");
+      a.href = "#" + slug;
+      a.setAttribute("x-on:click", "activeTab = '" + slug + "'");
+      a.setAttribute("x-bind:class", "{'active': activeTab == '" + slug + "'}");
+      a.textContent = label;
+      return a;
+    }
+    var navLinks = [
+      makeLink("{% filter escapejs %}{% trans 'Settings' %}{% endfilter %}", "settings"),
+      makeLink("{% filter escapejs %}{% trans 'Editor' %}{% endfilter %}", "editor"),
+      makeLink("{% filter escapejs %}{% trans 'Config' %}{% endfilter %}", "config"),
+    ];
+    if (editorRoot) {
+      generalLink.after(navLinks[0], navLinks[1], navLinks[2]);
+    } else {
+      generalLink.after(navLinks[0], navLinks[2]);
+    }
+
+    // Map-view hash: #<tab>@lat,lng,zoom — stash the full form for
+    // the editor module, then strip the @-part so Unfold's tab
+    // detection (exact hash match) keeps working.
+    var hashMatch = /^#([a-z-]+)@/.exec(window.location.hash);
+    if (hashMatch) {
+      window.__wdMapView = window.location.hash;
+      window.location.hash = "#" + hashMatch[1];
+    }
+
+    // Surface validation errors: Unfold's own tab error badges lived on
+    // the removed nav. Switch to the first promoted tab carrying an
+    // .errorlist (hash pre-Alpine → body x-init picks it up).
+    var errTarget = null;
+    if (styleWrap.querySelector(".errorlist")) {
+      errTarget = "settings";
+    } else if (editorRoot && editorRoot.querySelector(".errorlist")) {
+      errTarget = "editor";
+    } else if (configWrap.querySelector(".errorlist")) {
+      errTarget = "config";
+    }
+    if (errTarget && !window.location.hash) {
+      window.location.hash = "#" + errTarget;
+    }
+  })();
+  </script>
+
+  {% if object_id and original and original.style is not None %}
+  <script src="https://unpkg.com/codemirror@5.65.18/lib/codemirror.js"></script>
+  <script src="https://unpkg.com/codemirror@5.65.18/mode/javascript/javascript.js"></script>
+  <script src="https://unpkg.com/codemirror@5.65.18/addon/edit/closebrackets.js"></script>
+  <script src="https://unpkg.com/codemirror@5.65.18/addon/fold/foldcode.js"></script>
+  <script src="https://unpkg.com/codemirror@5.65.18/addon/fold/foldgutter.js"></script>
+  <script src="https://unpkg.com/codemirror@5.65.18/addon/fold/brace-fold.js"></script>
+  <script src="https://unpkg.com/codemirror@5.65.18/addon/hint/show-hint.js"></script>
+
+  {% comment %}
+    MapLibre GL v6 via ESM — v5's UMD bundle lacks the full MLT tile
+    decoder ("only optional string fields are implemented"), v6 dropped
+    UMD entirely. Named imports; module scripts are deferred so the
+    classic tab-promotion script below still runs first.
+    v6 loads its tile-parsing worker from a sibling .mjs via
+    new Worker(url) — browsers refuse cross-origin workers, so the
+    self-contained worker source is fetched and re-served as a
+    same-origin blob through setWorkerUrl (CSP worker-src allows
+    blob:).
+  {% endcomment %}
+  <script type="module">
+  import { Map, NavigationControl, ScaleControl, Popup, setWorkerUrl } from "https://unpkg.com/maplibre-gl@6.14.0/dist/maplibre-gl.mjs";
+
+  // Same-origin blob worker (browsers refuse cross-origin Worker
+  // scripts). Failure is non-fatal: the map just won't render tiles —
+  // CodeMirror + lint keep working.
+  try {
+    const r = await fetch("https://unpkg.com/maplibre-gl@6.14.0/dist/maplibre-gl-worker.mjs");
+    if (!r.ok) throw new Error("worker fetch " + r.status);
+    setWorkerUrl(URL.createObjectURL(new Blob([await r.text()], {type: "text/javascript"})));
+  } catch (e) {
+    console.warn("wd style editor: map worker unavailable, map preview disabled", e);
+  }
+
+  const initEditor = function() {
+    "use strict";
+
+    var styleField = document.getElementById("id_style");
+    if (!styleField) return;
+    // The tab promotion must have run (editor promoted into the Style
+    // tab) — otherwise keep the classic textarea surface entirely.
+    var editorRoot = document.getElementById("wd-style-editor-root");
+    if (!editorRoot || editorRoot.dataset.wdPromoted !== "1") return;
+
+    var layerSlug = "{{ original.slug|escapejs }}";
+    var layerProfile = "{{ original.profile|escapejs }}";
+    var layerRole = "{{ original.role|escapejs }}";
+    var objectId = {{ original.pk|default:'null' }};
+    var previewUrl = "{% url 'admin:basemaps_maplayer_preview_live' %}";
+    var basemapSelect = document.getElementById("wd-basemap-select");
+    var lintPanel = document.getElementById("wd-lint-panel");
+    var statusEl = document.getElementById("wd-preview-status");
+    var jsonStatusEl = document.getElementById("wd-json-status");
+
+    // Prefer the form field's CURRENT value (a failed save re-renders
+    // with the user's edit, not the stored style); pretty-print it in
+    // JS. The server-provided string is only a fallback.
+    // Width-budget formatter (Opus consult): short arrays/objects go
+    // on ONE line ("[\"in\", ", 2,\", [\"var\", \"rt\"]]"), long ones
+    // break per element — the classic style-spec "pretty-compact"
+    // look. Never regex-reflows stringified text (string contents
+    // would bite); this walks the parsed tree.
+    var flatJson = function(node) {
+      if (node === null || typeof node !== "object") return JSON.stringify(node);
+      if (Array.isArray(node)) return "[" + node.map(flatJson).join(", ") + "]";
+      return "{" + Object.keys(node).map(function(k) {
+        return JSON.stringify(k) + ": " + flatJson(node[k]);
+      }).join(", ") + "}";
+    };
+    var formatStyle = function(node) {
+      var MAX = 100;
+      function fmt(n, pad, reserved) {
+        var f = flatJson(n);
+        // recursive (Opus final review): a comment key on a CHILD
+        // would land mid-line when the parent fits the budget — the
+        // line-based view transform then cuts at the wrong "//"
+        var hasCommentDeep = function(node) {
+          if (!node || typeof node !== "object") return false;
+          if (Array.isArray(node)) return node.some(hasCommentDeep);
+          return Object.keys(node).some(function(k) {
+            return (typeof k === "string" && k.indexOf("//") === 0) || hasCommentDeep(node[k]);
+          });
+        };
+        var hasComment = hasCommentDeep(n);
+        // objects carrying // comment keys NEVER inline — comment
+        // pairs must sit on their own line for the line-based view
+        // transform below
+        if (!hasComment && (f.length + pad.length + reserved <= MAX || n === null || typeof n !== "object")) return f;
+        var inner = pad + "  ";
+        if (Array.isArray(n)) {
+          return "[\n" + n.map(function(el) { return inner + fmt(el, inner, 1); }).join(",\n") + "\n" + pad + "]";
+        }
+        return "{\n" + Object.keys(n).map(function(k) {
+          return inner + JSON.stringify(k) + ": " + fmt(n[k], inner, JSON.stringify(k).length + 2);
+        }).join(",\n") + "\n" + pad + "}";
+      }
+      return fmt(node, "", 0);
+    };
+    // ── "//" comment syntax ─────────────────────────────
+    // The editor DISPLAYS stored comment keys ("//": "note",
+    // "//2": …) as line comments and lets you TYPE them: a line
+    // starting with // converts to a unique "//n": "text" member on
+    // every sync, so the form field (and the preview POST) always
+    // carry valid JSON. The backend strips // keys before serving
+    // and validating — they never reach clients.
+    var COMMENT_PAIR_RE = /^(\s*)"(\/\/[^"]*)":\s*("(?:[^"\\]|\\.)*"),?$/;
+    var LINE_COMMENT_RE = /^(\s*)\/\/ ?(.*)$/;
+    var INLINE_KEY_RE = /^(\s*)"([^"]+)":/;
+    // "//": standalone line comment; "//#key": trailing comment that
+    // renders ON the "key": line — "id": "x", // the note
+    var jsonToView = function(text) {
+      var lines = text.split("\n").map(function(line) {
+        var m = COMMENT_PAIR_RE.exec(line);
+        if (!m) return line;
+        try {
+          var val = JSON.parse(m[3]);
+          if (m[2].indexOf("//#") === 0) {
+            // attach to the FOLLOWING line carrying that key (the
+            // formatter preserves key order — the comment sits right
+            // before its key)
+            return { attach: m[2].slice(3), note: val, indent: m[1] };
+          }
+          return m[1] + "// " + val;
+        } catch (e) { return line; }
+      });
+      // PASS 1 — attach every //#key comment to its key line
+      // (forward first, then backward; same indent). Mutating lines
+      // BEFORE the output pass is the point: the output loop below
+      // would otherwise already have pushed the unmodified line.
+      for (var i = 0; i < lines.length; i++) {
+        var item = lines[i];
+        if (typeof item !== "object" || item === null || !item.attach) continue;
+        var placed = false;
+        // the key must be at the SAME indent; a line at a shallower
+        // indent is the object boundary (its opener/closer) — stop:
+        // without this the scan walks into the neighbouring object
+        // and attaches to ITS id (verified bug)
+        var boundary = function(j) {
+          if (typeof lines[j] !== "string") return false;
+          var ind = (/^(\s*)/.exec(lines[j]) || ["", ""])[1];
+          return ind.length < item.indent.length;
+        };
+        var tryLine = function(j) {
+          if (typeof lines[j] !== "string") return false;
+          var km = INLINE_KEY_RE.exec(lines[j]);
+          if (km && km[1] === item.indent && km[2] === item.attach) {
+            lines[j] = lines[j].replace(/,?$/, "") + ", // " + item.note;
+            return true;
+          }
+          return false;
+        };
+        for (var j = i + 1; j < lines.length && !placed; j++) {
+          if (boundary(j)) break;
+          placed = tryLine(j);
+        }
+        for (var j = i - 1; j >= 0 && !placed; j--) {
+          if (boundary(j)) break;
+          placed = tryLine(j);
+        }
+        if (!placed) lines[i] = item.indent + "// #" + item.attach + ": " + item.note;
+      }
+      // PASS 2 — emit (attach objects are gone or replaced by now)
+      return lines.filter(function(l) { return typeof l === "string"; }).join("\n");
+    };
+    // First "//" OUTSIDE any quoted string (Opus final review): a
+    // regex like [^/]*?// matches the // inside "https://…" values
+    // and corrupts the line on save — verified data-loss bug.
+    var scanCommentStart = function(line) {
+      var inStr = false;
+      for (var i = 0; i < line.length - 1; i++) {
+        var c = line[i];
+        if (inStr) {
+          if (c === "\\") { i++; continue; }
+          if (c === '"') inStr = false;
+          continue;
+        }
+        if (c === '"') { inStr = true; continue; }
+        if (c === "/" && line[i + 1] === "/") return i;
+      }
+      return -1;
+    };
+    var viewToJson = function(text) {
+      var lines = text.split("\n");
+      var out = [];
+      var n = 0;
+      // the next non-empty INPUT line after i — decides trailing
+      // commas for emitted comment members (no comma before a closer)
+      var commaAfter = function(i) {
+        for (var j = i + 1; j < lines.length; j++) {
+          var t = lines[j].trim();
+          if (!t) continue;
+          return (t[0] === "}" || t[0] === "]") ? "" : ",";
+        }
+        return "";
+      };
+      lines.forEach(function(line, i) {
+        var cpos = scanCommentStart(line);
+        if (cpos === -1) { out.push(line); return; }
+        var bare = line.substring(0, cpos).replace(/\s+$/, "");
+        var note = line.substring(cpos + 2).replace(/^\s+/, "");
+        if (!bare.trim()) {
+          // whole-line comment
+          n += 1;
+          out.push(line.substring(0, cpos) + '"//' + n + '": ' + JSON.stringify(note) + commaAfter(i));
+          return;
+        }
+        // TRAILING comment on a "key": value line → "//#key" member
+        var km = INLINE_KEY_RE.exec(bare);
+        if (km) {
+          out.push(bare);
+          out.push(km[1] + '"//#' + km[2] + '": ' + JSON.stringify(note) + commaAfter(i));
+        } else {
+          // a // after a non-key line (e.g. an array element) — keep
+          // it as a standalone comment member where legal, else drop
+          out.push(bare);
+        }
+      });
+      // trailing-comma normalization: attaching/removing comments can
+      // leave a dangling comma before a closer (JSONC-style views are
+      // comma-lenient; the JSON we emit is not). Line-based — a regex
+      // over the whole text could eat commas inside string values.
+      var joined = out.join("\n").split("\n");
+      for (var k = joined.length - 1; k >= 0; k--) {
+        if (!/,$/.test(joined[k])) continue;
+        for (var k2 = k + 1; k2 < joined.length; k2++) {
+          var t = joined[k2].trim();
+          if (!t) continue;
+          if (t[0] === "}" || t[0] === "]") joined[k] = joined[k].replace(/,$/, "");
+          break;
+        }
+      }
+      return joined.join("\n");
+    };
+    var prettyValue = (function () {
+      var raw = (styleField.value || "").trim();
+      var source = raw;
+      if (!source) {
+        var el = document.getElementById("wd-style-data");
+        try { source = el ? JSON.parse(el.textContent) : ""; } catch (e) { source = ""; }
+        return typeof source === "string" ? source : jsonToView(formatStyle(source));
+      }
+      try { return jsonToView(formatStyle(JSON.parse(source))); } catch (e) { return raw; }
+    })();
+
+    // ── CodeMirror ─────────────────────────────────────────────
+    var cmHost = document.querySelector(".wd-cm-host");
+    var cm = CodeMirror(cmHost, {
+      value: prettyValue,
+      mode: "javascript",
+      theme: "material-darker",
+      lineNumbers: true, autoCloseBrackets: true, lineWrapping: false,
+      foldGutter: true,
+      gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter", "wd-lint-gutter"],
+      indentUnit: 2, tabSize: 2,
+    });
+    // (the // comment helpers live above, before prettyValue —
+    // prettyValue's IIFE needs them at definition time)
+    cm.on("change", function() { styleField.value = viewToJson(cm.getValue()); });
+
+    // ── Fold placeholders: show WHAT was folded (Opus consult) ──
+    // Depth-scan of the folded range (string-aware, indentation-
+    // independent): an "id" key inside → the layer/source name;
+    // otherwise an item count; otherwise the key from the fold line.
+    // brace-fold ranges sit INSIDE the brackets — they stay visible,
+    // so the label needs no braces of its own.
+    var foldLabel = function(from, to) {
+      var text = cm.getRange(from, to);
+      var depth = 0, items = 0, sawValue = false, id = null;
+      for (var i = 0; i < text.length; i++) {
+        var c = text[i];
+        if (c === '"') {
+          var j = i + 1;
+          while (j < text.length && text[j] !== '"') j += text[j] === '\\' ? 2 : 1;
+          var tok = text.slice(i, j + 1);
+          if (depth === 0) {
+            sawValue = true;
+            if (tok === '"id"' && id === null) {
+              var m = /^\s*:\s*("(?:[^"\\]|\\.)*")/.exec(text.slice(j + 1));
+              if (m) {
+                try { id = JSON.parse(m[1]); } catch (parseErr) { id = null; }
+              }
+            }
+          }
+          i = j; continue;
+        }
+        if (c === "{" || c === "[") depth++;
+        else if (c === "}" || c === "]") depth--;
+        else if (c === "," && depth === 0) items++;
+      }
+      if (id) {
+        // an "//#id" comment inside the folded range rides along —
+        // … wd-accommodations-clusters — what it does …
+        // the editor view shows comments as TRAILING on the id line
+        // ("id": "x", // note) — match that form; the raw key form
+        // only exists pre-transform
+        var idNote = /"id":\s*"[^"]*",\s*\/\/ ?(.*)$/m.exec(text);
+        return idNote ? id + "\u0000" + idNote[1] : id;
+      }
+      var line = cm.getLine(from.line) || "";
+      if (/[{[]$/.test(line.trim())) {
+        var key = /"((?:[^"\\]|\\.)*)"\s*:\s*[{[]\s*$/.exec(line);
+        if (key) return key[1] + (sawValue ? " · " + (items + 1) + (items ? " items" : " item") : "");
+      }
+      return sawValue ? (items + 1) + (items ? " items" : " item") : "…";
+    };
+    cm.setOption("foldOptions", {
+      widget: function(from, to) {
+        var label = foldLabel(from, to);
+        var sep = label.indexOf("\u0000");
+        if (sep === -1) { return "… " + label + " …"; }
+        // DOM widget: the id inside the marker, the annotation as a
+        // muted // comment after it — reads like the expanded view
+        var node = document.createElement("span");
+        var mark = document.createElement("span");
+        mark.className = "CodeMirror-foldmarker";
+        mark.textContent = "… " + label.substring(0, sep) + " …";
+        var note = document.createElement("span");
+        note.style.cssText = "opacity:0.6;font-size:0.92em;";
+        note.textContent = "  // " + label.substring(sep + 1);
+        node.appendChild(mark);
+        node.appendChild(note);
+        return node;
+      },
+    });
+
+    // ── Color swatches + picker ─────────────────────────────
+    // A bookmark widget renders a small swatch before every
+    // "#rrggbb" string token; clicking opens the native color
+    // picker and rewrites the token (change event then syncs the
+    // form field and refreshes the map preview).
+    var colorBookmarks = [];
+    var colorInput = document.getElementById("wd-color-input");
+    var refreshColorWidgets = function() {
+      colorBookmarks.forEach(function(b) { b.clear(); });
+      colorBookmarks = [];
+      var re = /"(#[0-9a-fA-F]{3,8})"/g;
+      for (var i = 0; i < cm.lineCount(); i++) {
+        var text = cm.getLine(i);
+        if (text.indexOf("#") === -1) continue;
+        re.lastIndex = 0;
+        var m;
+        while ((m = re.exec(text))) {
+          var sw = document.createElement("span");
+          var col = m[1];
+          sw.className = "wd-swatch";
+          sw.style.background = col.length === 4
+            ? "#" + col[1] + col[1] + col[2] + col[2] + col[3] + col[3]
+            : col;
+          sw.title = col + " — click to pick";
+          var bm = cm.setBookmark({line: i, ch: m.index}, {widget: sw, insertLeft: true});
+          sw.addEventListener("mousedown", function(ev) {
+            ev.preventDefault();
+            if (!colorInput) return;
+            // anchor the native picker AT the swatch (position:fixed
+            // input — set its coords right before click)
+            var rect = sw.getBoundingClientRect();
+            colorInput.style.left = Math.max(8, Math.round(rect.left)) + "px";
+            colorInput.style.top = Math.round(rect.bottom + 6) + "px";
+            // re-resolve at click time: edits elsewhere shifted the
+            // token — the bookmark tracks, static positions would not
+            var p = bm.find();
+            if (!p) return;
+            var m2 = /^"(#[0-9a-fA-F]{3,8})"/.exec(cm.getLine(p.line).substring(p.ch));
+            if (!m2) return;
+            var cur = m2[1];
+            colorInput.value = /^#[0-9a-fA-F]{6}$/.test(cur) ? cur : "#000000";
+            colorInput.onchange = function() {
+              cm.replaceRange(
+                colorInput.value,
+                {line: p.line, ch: p.ch + 1},
+                {line: p.line, ch: p.ch + 1 + cur.length}
+              );
+              colorInput.onchange = null;
+            };
+            colorInput.click();
+          });
+          colorBookmarks.push(bm);
+        }
+      }
+    };
+    var refreshColorsDebounced = debounce(refreshColorWidgets, 500);
+    cm.on("change", refreshColorsDebounced);
+    refreshColorWidgets();
+
+    // NOW the raw textarea can step back — CodeMirror is the surface.
+    // Field-level validation errors attached to the hidden row are
+    // surfaced in the lint panel instead.
+    var styleRow = styleField.closest('.flex-container, .form-row, fieldset > div');
+    if (styleRow) styleRow.style.display = 'none';
+    var fieldErrors = [];
+    (styleRow ? styleRow.querySelectorAll('.errorlist li') : []).forEach(function (li) {
+      fieldErrors.push({source: "django", severity: "error", message: li.textContent});
+    });
+
+    // ── Lint ───────────────────────────────────────────────────
+    function setGutter(findings) {
+      cm.clearGutter("wd-lint-gutter");
+      var byLine = {};
+      findings.forEach(function(f) { if (f.line) (byLine[f.line] = byLine[f.line] || []).push(f); });
+      Object.keys(byLine).forEach(function(lineNo) {
+        var items = byLine[lineNo];
+        var worst = items.reduce(function(acc, f) {
+          var rank = {error: 0, warning: 1, info: 2};
+          return rank[f.severity] < rank[acc] ? f.severity : acc;
+        }, "info");
+        var m = document.createElement("div");
+        m.className = "wd-g-" + worst;
+        m.textContent = items.length > 1 ? items.length + "×" : "●";
+        m.title = items.map(function (f) { return (f.severity + ": " + f.message); }).join("\n");
+        cm.setGutterMarker(parseInt(lineNo, 10) - 1, "wd-lint-gutter", m);
+      });
+    }
+    function renderLint(findings) {
+      lintPanel.textContent = "";
+      var visible = findings.filter(function(f) {
+        if (f.source === "subset" && f.severity === "info" && layerProfile !== "subset") return false;
+        return true;
+      });
+      if (visible.length === 0) {
+        var ok = document.createElement("div");
+        ok.className = "wd-lint-ok"; ok.textContent = "✓ no findings";
+        lintPanel.appendChild(ok);
+        return;
+      }
+      visible.forEach(function(f) {
+        var el = document.createElement("div");
+        el.className = "wd-lint-item " + f.severity;
+        var src = document.createElement("span");
+        src.className = "src " + (f.severity === "info" ? "info" : f.source);
+        src.textContent = f.source; el.appendChild(src);
+        if (f.line) {
+          var ln = document.createElement("span");
+          ln.className = "line-no"; ln.textContent = "L" + f.line; el.appendChild(ln);
+        }
+        var msg = document.createElement("span");
+        msg.className = "msg"; msg.textContent = f.message; el.appendChild(msg);
+        lintPanel.appendChild(el);
+      });
+    }
+
+    // ── MapLibre (worker failure above leaves this dead — CodeMirror
+    //    and the lint preview still work without it) ──────────────
+    var map = null;
+    // open AT the overlay's zoom floor — a z7 country view renders
+    // nothing for close-up overlays (the 'accommodations invisible'
+    // lesson) and reviewers think the layer is broken
+    var initialZoom = Math.min(Math.max(({{ original.min_zoom|default:'9' }}) + 0.5, 9), 12);
+    var initialCenter = [8.2, 46.8];
+    // map view from the URL hash (#editor@lat,lng,zoom — the
+    // promotion script strips the @-part for Unfold's tab matching
+    // and stashes the coords for us)
+    var hashState = /^#[a-z-]+@(-?[\d.]+),(-?[\d.]+),([\d.]+)$/.exec(
+      window.__wdMapView || ""
+    );
+    if (hashState) {
+      initialCenter = [parseFloat(hashState[2]), parseFloat(hashState[1])];
+      initialZoom = parseFloat(hashState[3]);
+    }
+    try {
+      map = new Map({
+        container: "wd-map-canvas",
+        style: {version: 8, layers: [], sources: {}},
+        center: initialCenter, zoom: initialZoom,
+      });
+      map.addControl(new NavigationControl());
+      map.addControl(new ScaleControl());
+    } catch (e) {
+      console.warn("wd style editor: map unavailable", e);
+    }
+    // Debug/console affordance: window.__wdMap (used by E2E tests too)
+    window.__wdMap = map;
+
+    // MapLibre's tile eviction aborts in-flight fetches; the aborted
+    // promises surface as noisy uncaught AbortErrors in the console
+    // (raster_tile_source.ts). Benign — swallow just those.
+    window.addEventListener("unhandledrejection", function(ev) {
+      if (ev.reason && ev.reason.name === "AbortError") { ev.preventDefault(); }
+    });
+
+    // ── Live zoom level readout ───────────────────────────────
+    var zoomEl = document.getElementById("wd-zoom");
+    // hash sync: #<tab>@lat,lng,zoom (replaceState — no history spam;
+    // only while the editor tab is active)
+    var syncHash = debounce(function() {
+      if (!map) return;
+      var tab = /^#([a-z-]+)/.exec(window.location.hash);
+      if (!tab || tab[1] !== "editor") return;
+      var c = map.getCenter();
+      var next = "#editor@" + c.lat.toFixed(4) + "," + c.lng.toFixed(4) + "," + map.getZoom().toFixed(1);
+      if (next !== window.location.hash) {
+        history.replaceState(null, "", next);
+      }
+    }, 600);
+    if (map) {
+      map.on("moveend", syncHash);
+      map.on("zoomend", syncHash);
+    }
+    if (map && zoomEl) {
+      var showZoom = function() { zoomEl.textContent = "z" + Math.round(map.getZoom() * 10) / 10; };
+      map.on("zoom", showZoom);
+      map.on("move", showZoom);
+      showZoom();
+    }
+
+    // ── Click popup: every rendered feature's properties ──────
+    if (map) {
+      var esc = function(s) {
+        return String(s).replace(/[&<>"']/g, function(c) {
+          return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c];
+        });
+      };
+      map.on("click", function(e) {
+        var feats;
+        try { feats = map.queryRenderedFeatures(e.point); } catch (err) { return; }
+        if (!feats.length) return;
+        var propRow = function(k, v) {
+          // JSON-ish values (arrays/objects serialized by the tile)
+          // get a space-after-comma reformat — readable, no re-parse
+          var text = typeof v === "string" ? v : JSON.stringify(v);
+          if (/^[\[{].*[\]}]$/.test(text) && text.length > 30) {
+            text = text.replace(/,/g, ", ");
+          }
+          return '<div style="display:flex;gap:8px;padding:2px 0;' +
+            'border-bottom:1px solid rgba(128,128,128,.15)">' +
+            '<span style="flex:0 0 42%;color:#667;font-family:ui-monospace,monospace;font-size:10.5px">' + esc(k) + "</span>" +
+            '<span style="flex:1;min-width:0;word-break:break-word;font-size:11.5px">' + esc(text) + "</span></div>";
+        };
+        var parts = feats.slice(0, 3).map(function(f) {
+          var props = Object.keys(f.properties || {}).sort().map(function(k) {
+            return propRow(k, f.properties[k]);
+          }).join("");
+          return '<div style="margin-bottom:10px">' +
+            '<div style="font-weight:600;font-size:12px;margin-bottom:4px;">' + esc(f.layer && f.layer.id || "?") + "</div>" +
+            props + "</div>";
+        });
+        parts.push('<div style="opacity:0.55;font-size:10px;margin-top:4px">' + feats.length + " feature" + (feats.length > 1 ? "s" : "") + " at this point — first 3 shown</div>");
+        var popup = new Popup({maxWidth: "420px"})
+          .setLngLat(e.lngLat)
+          .setHTML('<div style="max-height:320px;overflow-y:auto;overflow-x:hidden">' + parts.join("") + "</div>")
+          .addTo(map);
+        window.__wdPopup = popup;
+      });
+    }
+
+    // ── Basemap selector ───────────────────────────────────────
+    if (basemapSelect && layerRole === "overlay") {
+      fetch("/v1/map/layers?role=basemap&fields=slug,name")
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          (data.data || []).forEach(function(entry) {
+            var o = document.createElement("option");
+            o.value = entry.slug; o.textContent = entry.name || entry.slug;
+            basemapSelect.appendChild(o);
+          });
+          basemapSelect.value = "wd-outdoor-base-mtk-hill";
+          refresh();
+        })
+        .catch(function() { refresh(); });
+      basemapSelect.addEventListener("change", function() { refresh(); });
+    }
+
+    // ── Live refresh ───────────────────────────────────────
+    var requestId = 0;
+    var paramOverrides = {};
+    var knownParams = [];
+    var paramsPanel = document.getElementById("wd-params");
+    var editorVisible = function() {
+      var el = document.getElementById('wd-style-editor-root');
+      return !!el && el.offsetWidth > 0;
+    };
+    // each debounce() call gets its OWN timer — sharing one would let
+    // the resize handler and the edit handler cancel each other
+    function debounce(fn, ms) { var t = null; return function() { clearTimeout(t); t = setTimeout(fn, ms); }; }
+    var csrfToken = (function () {
+      var inp = document.querySelector('input[name=csrfmiddlewaretoken]');
+      return inp ? inp.value : '';
+    })();
+    function refresh() {
+      // Applying a style while the container is display:none leaves
+      // MapLibre with a blank canvas (no repaint ever fires) — only
+      // refresh while the Editor sub-tab is actually visible; the
+      // visibility observer below triggers the first refresh.
+      if (!editorVisible()) return;
+      var raw = viewToJson(cm.getValue());
+      if (!raw.trim()) { jsonStatusEl.textContent = "empty"; return; }
+      jsonStatusEl.textContent = "checking…";
+      var thisRequest = ++requestId;
+      fetch(previewUrl, {
+        method: "POST",
+        headers: {"Content-Type": "application/json", "X-CSRFToken": csrfToken},
+        body: JSON.stringify({
+          style_json: raw,
+          basemap_slug: basemapSelect ? basemapSelect.value : null,
+          profile: layerProfile, slug: layerSlug, object_id: objectId,
+          parameter_values: paramOverrides,
+        }),
+      })
+        .then(function(r) {
+          if (!r.ok) {
+            if (thisRequest === requestId) {
+              jsonStatusEl.classList.remove("ok");
+              jsonStatusEl.classList.add("err");
+              jsonStatusEl.textContent = "HTTP " + r.status + (r.status === 403 ? " — reload the page" : "");
+            }
+            return null;
+          }
+          return r.json();
+        })
+        .then(function(data) {
+          if (!data || thisRequest !== requestId) return;
+          var lint = (data.lint || []).concat(fieldErrors);
+          if (data.error && !data.style) {
+            jsonStatusEl.classList.remove("ok");
+            jsonStatusEl.classList.add("err");
+            jsonStatusEl.textContent = "JSON error";
+            renderLint(lint.length ? lint : [{source: "json", severity: "error", message: String(data.error)}]);
+            setGutter(data.lint || []);
+            return;
+          }
+          jsonStatusEl.textContent = "✓"; jsonStatusEl.classList.remove("err"); jsonStatusEl.classList.add("ok");
+          renderLint(lint); setGutter(data.lint || []);
+          if (data.style && map) {
+            map.setStyle(data.style, {diff: true});
+            statusEl.textContent = (data.style.layers || []).length + " layers" + (data.basemap ? " · on " + data.basemap : "");
+          }
+          renderParamsPanel(data.parameters || []);
+        })
+        .catch(function() { if (thisRequest !== requestId) return; jsonStatusEl.textContent = "request failed"; });
+    }
+    cm.on("change", debounce(refresh, 600));
+    if (fieldErrors.length) { renderLint(fieldErrors); }
+
+    // ── Parameters panel: the row's linked parameters, editable
+    //    live — overrides win over authored/serve-time values in
+    //    the preview (no save needed). #}
+    function renderParamsPanel(params, force) {
+      if (!paramsPanel) return;
+      const changed = JSON.stringify(params) !== JSON.stringify(knownParams);
+      knownParams = params;
+      if (!params.length) { paramsPanel.style.display = "none"; return; }
+      if (!force && !changed && paramsPanel.style.display !== "none") return; // keep focus while typing
+      const collapsed = paramsPanel.dataset.collapsed === "1";
+      paramsPanel.style.display = "flex";
+      paramsPanel.textContent = "";
+      const header = document.createElement("button");
+      header.type = "button";
+      header.className = "wd-btn";
+      header.style.cssText = "border:none;background:none;color:inherit;font-size:11px;cursor:pointer;padding:0;font-weight:600";
+      header.textContent = "Parameters " + (collapsed ? "▸" : "▾");
+      header.addEventListener("click", function() {
+        paramsPanel.dataset.collapsed = collapsed ? "" : "1";
+        renderParamsPanel(knownParams, true);
+      });
+      paramsPanel.appendChild(header);
+      if (!collapsed) {
+        params.forEach(function(p) {
+        const wrap = document.createElement("div");
+        wrap.className = "wd-param";
+        const label = document.createElement("label");
+        label.textContent = "{" + "{" + p.slug + "}" + "}";
+        label.title = p.kind || "";
+        const input = document.createElement("input");
+        input.type = typeof p.value === "number" ? "number" : "text";
+        if (typeof p.value === "number") { input.step = "any"; }
+        // non-scalars (opacity curves, booleans) display as JSON and
+        // parse back on edit — a raw String() would substitute a
+        // string for the expression and invalidate the preview
+        const showVal = function(v) {
+          if (v === null || v === undefined) return "";
+          if (typeof v === "string" || typeof v === "number") return String(v);
+          return JSON.stringify(v);
+        };
+        input.value = paramOverrides[p.slug] !== undefined ? showVal(paramOverrides[p.slug]) : showVal(p.value);
+        input.addEventListener("input", function() {
+          const raw = input.value.trim();
+          if (!raw) { delete paramOverrides[p.slug]; refreshDebounced(); return; }
+          if (input.type === "number") {
+            const num = parseFloat(raw);
+            if (isNaN(num)) { delete paramOverrides[p.slug]; } else { paramOverrides[p.slug] = num; }
+          } else if (typeof p.value === "object" && p.value !== null || typeof p.value === "boolean") {
+            try { paramOverrides[p.slug] = JSON.parse(raw); }
+            catch (e) { delete paramOverrides[p.slug]; }
+          } else {
+            paramOverrides[p.slug] = raw;
+          }
+          refreshDebounced();
+        });
+        wrap.appendChild(label); wrap.appendChild(input);
+        paramsPanel.appendChild(wrap);
+      });
+      }
+    }
+    var refreshDebounced = debounce(refresh, 500);
+
+    // ── Token autocomplete: parameter slugs + env tokens. The
+    //    hint inserts slug}} right after the typed double brace.
+    cm.on("keyup", function(_cm, e) {
+      if (e.keyCode !== 123 /* { */ && e.key !== "{") return;
+      const pos = _cm.getCursor();
+      const before = _cm.getRange({line: pos.line, ch: 0}, pos);
+      if (!/\{\{$/.test(before)) return;
+      _cm.showHint({
+        hint: function(cm2) {
+          const cur = cm2.getCursor();
+          const list = knownParams.map(function(p) {
+            return {text: p.slug + "}}", displayText: "{" + "{" + p.slug + "}" + "}"};
+          });
+          list.push({text: "env:MARTIN_TILE_URL}}", displayText: "{" + "{env:MARTIN_TILE_URL}" + "}" + "}"});
+          return {list: list, from: cur, to: cur};
+        },
+        completeSingle: false,
+      });
+    });
+
+    // ── Visibility: the map must apply its style (and paint) while
+    //    visible — resize + refresh on every show of the Editor
+    //    sub-tab / Style top-level tab ──
+    var editorRoot = document.getElementById("wd-style-editor-root");
+    if (editorRoot) {
+      var ensureSize = debounce(function() {
+        if (editorRoot.offsetWidth > 0) {
+          try { if (map) map.resize(); } catch (e) {}
+          cm.refresh();
+          refresh();
+        }
+      }, 150);
+      var visObserver = new MutationObserver(ensureSize);
+      visObserver.observe(editorRoot, {attributes: true, attributeFilter: ["style"]});
+      var styleContainer = editorRoot.parentNode;
+      if (styleContainer) {
+        visObserver.observe(styleContainer, {attributes: true, attributeFilter: ["style"]});
+      }
+    }
+
+    // If the editor is ALREADY visible when the module finishes loading
+    // (~1 MB fetch), no style attribute will change to kick off the
+    // first refresh — run it directly.
+    if (editorVisible()) {
+      try { if (map) map.resize(); } catch (e) {}
+      cm.refresh();
+      refresh();
+    }
+
+    // ── Export / Import / view levels ─────────────────────
+    // Layers: image-3 view — every layer object folded, its NAME in
+    //   the placeholder, top-level keys folded too.
+    // Keys: image-2 view — layer scalars (id/type/source/minzoom)
+    //   visible, paint/layout/filter folded to [… N items …].
+    // Expand: everything open.
+    var foldAllAt = function(minIndent, maxIndent) {
+      cm.operation(function() {
+        for (var i = 0; i < cm.lineCount(); i++) {
+          var line = cm.getLine(i);
+          var indent = (line.match(/^\s*/) || [""])[0].length / 2;
+          if (indent < minIndent || indent > maxIndent) continue;
+          var pos = CodeMirror.Pos(i, 0);
+          if (CodeMirror.fold.brace && CodeMirror.fold.brace(cm, pos)) {
+            cm.foldCode(pos, CodeMirror.fold.brace, "fold");
+          }
+        }
+      });
+    };
+    document.getElementById("wd-collapse-btn").addEventListener("click", function() {
+      cm.execCommand("unfoldAll");
+      // image-3 view: each layer object folded with its NAME in the
+      // placeholder — the "layers" array itself stays EXPANDED
+      // (folding it would hide the name markers); other top-level
+      // keys (sprite/sources) fold away
+      foldAllAt(2, 2);
+      cm.operation(function() {
+        for (var i = 0; i < cm.lineCount(); i++) {
+          var line = cm.getLine(i);
+          var indent = (line.match(/^\s*/) || [""])[0].length / 2;
+          if (indent !== 1 || /^\s*"layers"/.test(line)) continue;
+          var pos = CodeMirror.Pos(i, 0);
+          if (CodeMirror.fold.brace && CodeMirror.fold.brace(cm, pos)) {
+            cm.foldCode(pos, CodeMirror.fold.brace, "fold");
+          }
+        }
+      });
+    });
+    document.getElementById("wd-keys-btn").addEventListener("click", function() {
+      cm.execCommand("unfoldAll");
+      foldAllAt(3, 3);
+    });
+    document.getElementById("wd-expand-btn").addEventListener("click", function() {
+      cm.execCommand("unfoldAll");
+    });
+    document.getElementById("wd-export-btn").addEventListener("click", function() {
+      var a = document.createElement("a");
+      var url = URL.createObjectURL(new Blob([cm.getValue()], {type: "application/json"}));
+      a.href = url;
+      a.download = layerSlug + "--" + layerProfile + ".json";
+      document.body.appendChild(a); a.click(); a.remove();
+      // revoking synchronously can cancel the download in Firefox
+      setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+    });
+    document.getElementById("wd-import-file").addEventListener("change", function(e) {
+      var file = e.target.files[0]; if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function() {
+        try { cm.setValue(formatStyle(JSON.parse(reader.result))); }
+        catch (err) { alert("Invalid JSON: " + err.message); }
+      };
+      reader.readAsText(file); e.target.value = "";
+    });
+  };
+
+  // Module scripts run before DOMContentLoaded, but the top-level await
+  // above delays this continuation past it — guard both cases.
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initEditor);
+  } else {
+    initEditor();
+  }
+  </script>
+  {% endif %}
+{% endblock %}
