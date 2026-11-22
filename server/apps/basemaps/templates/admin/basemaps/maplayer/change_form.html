@@ -329,12 +329,17 @@
       var MAX = 100;
       function fmt(n, pad, reserved) {
         var f = flatJson(n);
-        var hasComment = false;
-        if (!Array.isArray(n) && n !== null && typeof n === "object") {
-          hasComment = Object.keys(n).some(function(k) {
-            return typeof k === "string" && k.indexOf("//") === 0;
+        // recursive (Opus final review): a comment key on a CHILD
+        // would land mid-line when the parent fits the budget — the
+        // line-based view transform then cuts at the wrong "//"
+        var hasCommentDeep = function(node) {
+          if (!node || typeof node !== "object") return false;
+          if (Array.isArray(node)) return node.some(hasCommentDeep);
+          return Object.keys(node).some(function(k) {
+            return (typeof k === "string" && k.indexOf("//") === 0) || hasCommentDeep(node[k]);
           });
-        }
+        };
+        var hasComment = hasCommentDeep(n);
         // objects carrying // comment keys NEVER inline — comment
         // pairs must sit on their own line for the line-based view
         // transform below
@@ -415,6 +420,23 @@
       // PASS 2 — emit (attach objects are gone or replaced by now)
       return lines.filter(function(l) { return typeof l === "string"; }).join("\n");
     };
+    // First "//" OUTSIDE any quoted string (Opus final review): a
+    // regex like [^/]*?// matches the // inside "https://…" values
+    // and corrupts the line on save — verified data-loss bug.
+    var scanCommentStart = function(line) {
+      var inStr = false;
+      for (var i = 0; i < line.length - 1; i++) {
+        var c = line[i];
+        if (inStr) {
+          if (c === "\\") { i++; continue; }
+          if (c === '"') inStr = false;
+          continue;
+        }
+        if (c === '"') { inStr = true; continue; }
+        if (c === "/" && line[i + 1] === "/") return i;
+      }
+      return -1;
+    };
     var viewToJson = function(text) {
       var lines = text.split("\n");
       var out = [];
@@ -430,19 +452,26 @@
         return "";
       };
       lines.forEach(function(line, i) {
-        // TRAILING comment:  "key": value, // note  → emit a
-        // "//#key": "note" member right after (same object)
-        var tm = /^(\s*)"([^"]+)":[^\/]*?\/\/ ?(.*)$/.exec(line);
-        if (tm) {
-          var bare = line.replace(/\/\/ ?(.*)$/, "").replace(/\s+$/, "");
-          out.push(bare);
-          out.push(tm[1] + '"//#' + tm[2] + '": ' + JSON.stringify(tm[3].trim()) + commaAfter(i));
+        var cpos = scanCommentStart(line);
+        if (cpos === -1) { out.push(line); return; }
+        var bare = line.substring(0, cpos).replace(/\s+$/, "");
+        var note = line.substring(cpos + 2).replace(/^\s+/, "");
+        if (!bare.trim()) {
+          // whole-line comment
+          n += 1;
+          out.push(line.substring(0, cpos) + '"//' + n + '": ' + JSON.stringify(note) + commaAfter(i));
           return;
         }
-        var m = LINE_COMMENT_RE.exec(line);
-        if (!m) { out.push(line); return; }
-        n += 1;
-        out.push(m[1] + '"//' + n + '": ' + JSON.stringify(m[2].trim()) + commaAfter(i));
+        // TRAILING comment on a "key": value line → "//#key" member
+        var km = INLINE_KEY_RE.exec(bare);
+        if (km) {
+          out.push(bare);
+          out.push(km[1] + '"//#' + km[2] + '": ' + JSON.stringify(note) + commaAfter(i));
+        } else {
+          // a // after a non-key line (e.g. an array element) — keep
+          // it as a standalone comment member where legal, else drop
+          out.push(bare);
+        }
       });
       // trailing-comma normalization: attaching/removing comments can
       // leave a dangling comma before a closer (JSONC-style views are
@@ -891,11 +920,27 @@
         const input = document.createElement("input");
         input.type = typeof p.value === "number" ? "number" : "text";
         if (typeof p.value === "number") { input.step = "any"; }
-        input.value = paramOverrides[p.slug] !== undefined ? String(paramOverrides[p.slug]) : (p.value === null || p.value === undefined ? "" : String(p.value));
+        // non-scalars (opacity curves, booleans) display as JSON and
+        // parse back on edit — a raw String() would substitute a
+        // string for the expression and invalidate the preview
+        const showVal = function(v) {
+          if (v === null || v === undefined) return "";
+          if (typeof v === "string" || typeof v === "number") return String(v);
+          return JSON.stringify(v);
+        };
+        input.value = paramOverrides[p.slug] !== undefined ? showVal(paramOverrides[p.slug]) : showVal(p.value);
         input.addEventListener("input", function() {
-          const v = input.type === "number" ? parseFloat(input.value) : input.value;
-          if (isNaN(v) && input.type === "number") { delete paramOverrides[p.slug]; }
-          else { paramOverrides[p.slug] = v; }
+          const raw = input.value.trim();
+          if (!raw) { delete paramOverrides[p.slug]; refreshDebounced(); return; }
+          if (input.type === "number") {
+            const num = parseFloat(raw);
+            if (isNaN(num)) { delete paramOverrides[p.slug]; } else { paramOverrides[p.slug] = num; }
+          } else if (typeof p.value === "object" && p.value !== null || typeof p.value === "boolean") {
+            try { paramOverrides[p.slug] = JSON.parse(raw); }
+            catch (e) { delete paramOverrides[p.slug]; }
+          } else {
+            paramOverrides[p.slug] = raw;
+          }
           refreshDebounced();
         });
         wrap.appendChild(label); wrap.appendChild(input);

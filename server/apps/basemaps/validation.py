@@ -724,13 +724,15 @@ def run_styl(
     ignored = set(ignored_rules or ())
     if "*" in ignored:
         return None
+    from .resolution import strip_style_comments
+
     path = ""
     try:
         with tempfile.NamedTemporaryFile(
             "w", suffix=".json", encoding="utf-8", delete=False
         ) as handle:
             path = handle.name
-            json.dump(style, handle)
+            json.dump(strip_style_comments(style), handle)
         completed = subprocess.run(
             ["styl", "validate", path],
             capture_output=True,
