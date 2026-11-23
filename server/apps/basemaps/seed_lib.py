@@ -253,6 +253,7 @@ def _occupation_day_layer(day: int) -> dict[str, Any]:
             # voice + non-latin fallback, same Martin glyph endpoint).
             "text-font": ["Barlow Semi Condensed SemiBold", "Noto Sans Bold"],
             "icon-allow-overlap": True,
+            "icon-ignore-placement": True,  # never evict basemap labels
             "text-allow-overlap": True,
             "icon-image": [
                 "coalesce",
@@ -483,6 +484,7 @@ HUTS_STYLE: dict[str, Any] = {
                 "text-font": ["Barlow Semi Condensed SemiBold", "Noto Sans Bold"],
                 "text-anchor": "bottom",
                 "icon-allow-overlap": True,
+                "icon-ignore-placement": True,  # never evict basemap labels
                 "text-allow-overlap": False,
                 "symbol-sort-key": ["get", "type_standard_order"],
                 "icon-overlap": "always",
@@ -712,6 +714,7 @@ def _huts_style_subset() -> dict[str, Any]:
                 },
                 "layout": {
                     "icon-allow-overlap": True,
+                    "icon-ignore-placement": True,  # never evict basemap labels
                     "icon-image": "wd-sdf:mono/amenity.accommodation.unknown",
                     "icon-size": [
                         "interpolate",
@@ -1071,7 +1074,8 @@ def accommodations_style() -> dict[str, Any]:
                     # category (fully visible around z11/12 — always
                     # wins against other POIs). sort-key ASCENDING →
                     # importance negated.
-                    "icon-overlap": ["step", ["zoom"], "never", 11, "always"],
+                    "icon-overlap": "always",  # icons never yield NOR claim — labels survive
+                    "icon-ignore-placement": True,
                     "symbol-sort-key": ["-", 0, ["get", "importance"]],
                 },
                 "paint": {
@@ -1166,6 +1170,7 @@ def accommodations_style() -> dict[str, Any]:
                         multiplier="{{accommodations.icon_scale}}",
                     ),
                     "icon-allow-overlap": True,
+                    "icon-ignore-placement": True,  # never evict basemap labels
                 },
                 "paint": {
                     "icon-color": ["coalesce", ["get", "color"], "#718096"],
@@ -1209,7 +1214,8 @@ def accommodations_style() -> dict[str, Any]:
                     "text-optional": True,
                     "text-variable-anchor": ["bottom", "top", "right", "left"],
                     "text-radial-offset": 0.6,
-                    "icon-overlap": ["step", ["zoom"], "never", 11, "always"],
+                    "icon-overlap": "always",  # icons never yield NOR claim — labels survive
+                    "icon-ignore-placement": True,
                     "icon-image": icon_ladder,
                     "icon-size": [
                         "interpolate",
@@ -1331,6 +1337,7 @@ def _accommodations_style_subset() -> dict[str, Any]:
                     "icon-image": ACCOMMODATIONS_ICON_FALLBACK_SUBSET,
                     "icon-size": _size_ladder(_AMENITY_CLUSTER_ICON_SIZE_STOPS),
                     "icon-allow-overlap": True,
+                    "icon-ignore-placement": True,  # never evict basemap labels
                 },
                 "paint": {
                     "icon-color": [
@@ -1370,6 +1377,7 @@ def _accommodations_style_subset() -> dict[str, Any]:
                         1.25,
                     ],
                     "icon-allow-overlap": True,
+                    "icon-ignore-placement": True,  # never evict basemap labels
                 },
                 "paint": {
                     "icon-color": [
@@ -1831,6 +1839,7 @@ def amenity_overlay_style(spec: AmenityOverlaySpec) -> dict[str, Any]:
                     "icon-image": icon_ladder,
                     "icon-size": _cluster_icon_size(_AMENITY_ICON_SIZE_STOPS),
                     "icon-allow-overlap": True,
+                    "icon-ignore-placement": True,  # never evict basemap labels
                 },
                 "paint": {
                     "icon-color": ["coalesce", ["get", "color"], "#718096"],
@@ -1977,6 +1986,7 @@ def amenity_overlay_style_subset(spec: AmenityOverlaySpec) -> dict[str, Any]:
                     "icon-image": fallback,
                     "icon-size": ladder(_AMENITY_CLUSTER_ICON_SIZE_STOPS),
                     "icon-allow-overlap": True,
+                    "icon-ignore-placement": True,  # never evict basemap labels
                 },
                 "paint": {
                     "icon-color": [
@@ -1999,6 +2009,7 @@ def amenity_overlay_style_subset(spec: AmenityOverlaySpec) -> dict[str, Any]:
                     "icon-image": fallback,
                     "icon-size": ladder(_AMENITY_ICON_SIZE_STOPS),
                     "icon-allow-overlap": True,
+                    "icon-ignore-placement": True,  # never evict basemap labels
                 },
                 "paint": {
                     "icon-color": [
@@ -2587,6 +2598,7 @@ def _transport_style_base(colors: dict[str, str] | None = None) -> dict[str, Any
                         0.65,
                     ],
                     "icon-allow-overlap": True,
+                    "icon-ignore-placement": True,  # never evict basemap labels
                 },
             },
         ],

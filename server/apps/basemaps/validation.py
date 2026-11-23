@@ -282,6 +282,7 @@ SUBSET_LAYOUT_KEYS: dict[str, frozenset[str]] = {
             "icon-image",
             "icon-size",
             "icon-allow-overlap",
+            "icon-ignore-placement",
             "text-field",
             "text-font",
             "text-size",
