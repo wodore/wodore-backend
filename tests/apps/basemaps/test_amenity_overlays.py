@@ -270,21 +270,21 @@ class AmenityStyleContractTests(SimpleTestCase):
             assert sel_icon["layout"]["icon-allow-overlap"] is True, subtree
 
     def test_accommodations_overlap_exemption_from_z11(self) -> None:
-        """The owner exemption: accommodations always visible from z11
-        (``icon-overlap`` zoom step), everywhere else collision-aware."""
+        """Overlay icons never evict basemap labels (mobile report
+        2026-11-23): the icon bands carry icon-ignore-placement and
+        icon-overlap "always" — icons always draw AND never claim
+        collision space, so city/peak labels survive overlay zooms.
+        (The old z11 "never→always" step let regional cluster icons
+        blank the place labels.)"""
         style = lib.ACCOMMODATIONS_STYLE
         by_id = {layer["id"]: layer for layer in style["layers"]}
         for layer_id in (
             "wd-accommodations-clusters",
             "wd-accommodations",
         ):
-            assert by_id[layer_id]["layout"]["icon-overlap"] == [
-                "step",
-                ["zoom"],
-                "never",
-                11,
-                "always",
-            ], layer_id
+            layout = by_id[layer_id]["layout"]
+            assert layout["icon-overlap"] == "always", layer_id
+            assert layout["icon-ignore-placement"] is True, layer_id
 
     def test_subset_sprites_are_regular_packs(self) -> None:
         """Leaflet rasterizes sprite sheets as plain images — SDF packs
