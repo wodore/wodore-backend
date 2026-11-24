@@ -1823,10 +1823,10 @@ class TransportBasemapBlockTests(SimpleTestCase):
     def test_block_contract(self) -> None:
         from server.apps.basemaps.seed_lib import (
             TRANSPORT_BASEMAP_SPRITE_ID,
-            transport_basemap_block,
+            transport_presence_style,
         )
 
-        block = transport_basemap_block()
+        block = transport_presence_style()
         # own sprite id (add-once ids must not collide with the overlay's)
         assert block["sprite"][0]["id"] == TRANSPORT_BASEMAP_SPRITE_ID
         assert block["sprite"][0]["id"] != "wd-transport"
@@ -1845,14 +1845,17 @@ class TransportBasemapBlockTests(SimpleTestCase):
         assert names and all(
             n.startswith(TRANSPORT_BASEMAP_SPRITE_ID + ":") for n in names
         )
-        # the block rides the overlay-slot anchors — ONE mechanism for
-        # overlays and blocks (no per-basemap name lists)
-        assert block["slot"] == "routes"
+        # a PRESENCE style document: spec-legal root keys only —
+        # placement rides the label-band fallback (or a basemap's
+        # "routes" anchor when seeded); no custom root keys
+        assert "slot" not in block
+        assert block["version"] == 8
+        assert "glyphs" in block
 
     def test_compose_anchors_into_the_slot_anchor(self) -> None:
         from server.apps.basemaps.seed_lib import (
             compose_basemap_style,
-            transport_basemap_block,
+            transport_presence_style,
         )
 
         empty: dict[str, Any] = {}
@@ -1868,7 +1871,8 @@ class TransportBasemapBlockTests(SimpleTestCase):
         anchors: dict[str, Any] = {
             "routes": {"before": "road_path_oneway_symbol"},
         }
-        out = compose_basemap_style(doc, [transport_basemap_block()], anchors=anchors)
+        block = {**transport_presence_style(), "slot": "routes"}
+        out = compose_basemap_style(doc, [block], anchors=anchors)
         ids = [layer["id"] for layer in out["layers"]]
         # inserted BEFORE the slot anchor — the freed native POI slot
         assert ids == [
@@ -1883,7 +1887,7 @@ class TransportBasemapBlockTests(SimpleTestCase):
         """No anchors (anchorless basemap) → the label band."""
         from server.apps.basemaps.seed_lib import (
             compose_basemap_style,
-            transport_basemap_block,
+            transport_presence_style,
         )
 
         doc: dict[str, Any] = {
@@ -1897,7 +1901,7 @@ class TransportBasemapBlockTests(SimpleTestCase):
                 },
             ],
         }
-        out = compose_basemap_style(doc, [transport_basemap_block()])
+        out = compose_basemap_style(doc, [transport_presence_style()])
         ids = [layer["id"] for layer in out["layers"]]
         assert ids.index("wd-basemap-transit-stations") == 1
 
@@ -1905,7 +1909,7 @@ class TransportBasemapBlockTests(SimpleTestCase):
         from server.apps.basemaps.seed_lib import (
             TRANSPORT_BASEMAP_SPRITE_ID,
             compose_basemap_style,
-            transport_basemap_block,
+            transport_presence_style,
         )
 
         doc: dict[str, Any] = {
@@ -1914,7 +1918,7 @@ class TransportBasemapBlockTests(SimpleTestCase):
             "sources": {"openmaptiles": {"type": "vector"}},
             "layers": [],
         }
-        out = compose_basemap_style(doc, [transport_basemap_block()])
+        out = compose_basemap_style(doc, [transport_presence_style()])
         assert [s["id"] for s in out["sprite"]] == [
             "ofm",
             TRANSPORT_BASEMAP_SPRITE_ID,
@@ -1964,11 +1968,9 @@ class TestTransportBasemapServing:
         overlay_ids = [layer["id"] for layer in overlay.json()["layers"]]
         assert "wd-basemap-transit-stations" not in overlay_ids
 
-        # the token rotates when a contributing overlay row changes
+        # the token rotates when a contributing PRESENCE row changes
         before = Client().get("/v1/map/styles/wd-outdoor-base-ofm-hill.json")
-        row = MapLayer.objects.filter(
-            slug="transport-stops", profile=MapLayer.Profile.full
-        ).first()
+        row = MapLayer.objects.filter(slug="transport-stops-presence").first()
         assert row is not None
         row.save(update_fields=["modified"])  # bumps modified
         after = Client().get("/v1/map/styles/wd-outdoor-base-ofm-hill.json")

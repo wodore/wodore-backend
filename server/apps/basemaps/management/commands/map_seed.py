@@ -429,9 +429,6 @@ def _amenity_overlay_layers() -> list[dict[str, Any]]:
                     {"slug": spec.subtree, "use": "legend"},
                 ],
                 "config": {
-                    # while active the overlay REPLACES the basemap's own
-                    # POI/minor-label strata (major cities + peaks stay)
-                    "basemap": {"suppress": lib.AMENITY_BASEMAP_SUPPRESS},
                     "filters": [
                         {
                             "id": f"{spec.subtree}Types",
@@ -585,9 +582,6 @@ LAYERS: list[dict[str, Any]] = [
             {"slug": "accommodation", "use": "legend"},
         ],
         "config": {
-            # while active the overlay REPLACES the basemap's own
-            # POI/minor-label strata (major cities + peaks stay)
-            "basemap": {"suppress": lib.AMENITY_BASEMAP_SUPPRESS},
             "filters": [
                 {
                     "id": "accommodationTypes",
@@ -649,13 +643,6 @@ LAYERS: list[dict[str, Any]] = [
             {"slug": "transport", "use": "legend"},
         ],
         "config": {
-            # The overlay's BASEMAP presence ("my POIs, not the
-            # basemap's" — owner 2026-11-17): the style endpoint and
-            # the CI dump compose this block into every basemap at
-            # serve/dump time; the frontend hides the wd-basemap-transit-*
-            # layers while this overlay is active (always-replace by id
-            # namespace — no replaces list to maintain).
-            "basemap": lib.transport_basemap_block(),
             "filters": [
                 {
                     "id": "transportTypes",
@@ -664,20 +651,43 @@ LAYERS: list[dict[str, Any]] = [
                     "category": "map.transport",
                     "defaultValue": [],
                     "mapLayers": ["transport-stops"],
-                    # route_types_basic is Transitland's JSON-string array
-                    # ("[2, 3]" — basic GTFS types); option values are the
-                    # category identifiers. PRESENCE semantics: a stop
-                    # matches a mode when the array contains it — the
-                    # frontend's generic filter applies exact membership
-                    # on the whole property value, so this needs its
-                    # presence mode (`filterExpression: in`, currently
-                    # ignored by applyFilter) — frontend follow-up, the
-                    # catalog data is final.
-                    "mapProperty": "route_types_basic",
                     "filterExpression": "in",
                 }
-            ],
+            ]
         },
+    },
+    {
+        # ── PRESENCE row: the transport family's passive basemap
+        # presence (composed by basemap_composition() at serve time;
+        # layer ids carry the always-replace namespace the frontend
+        # hides while the interactive overlay is on).
+        "slug": "transport-stops-presence",
+        "role": MapLayer.Role.presence,
+        "slot": "routes",
+        "name": "Transport stops (basemap presence)",
+        "description": (
+            "Passive basemap presence of the transport overlay: "
+            "stations as mono icons in mode colors, z13+, labels "
+            "from z14 — collision-active, less important yields."
+        ),
+        "min_zoom": 13,
+        "style": lib.transport_presence_style(),
+        "is_active": True,
+        "attributions": ["transitland", "openstreetmap"],
+    },
+    {
+        "slug": "accommodations-presence",
+        "role": MapLayer.Role.presence,
+        "name": "Accommodations (basemap presence)",
+        "description": (
+            "Passive basemap presence of the accommodations overlay: "
+            "mono icons in category colors from z10, name labels "
+            "from z15 — collision-active with importance sorting."
+        ),
+        "min_zoom": 10,
+        "style": lib.accommodations_presence_style(),
+        "is_active": True,
+        "attributions": ["openstreetmap"],
     },
     {
         "slug": "ch.swisstopo.swisstlm3d-wanderwege",

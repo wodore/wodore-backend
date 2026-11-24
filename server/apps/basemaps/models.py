@@ -472,6 +472,16 @@ class MapLayer(TimeStampedModel):
     class Role(models.TextChoices):
         basemap = "basemap", _("basemap")
         overlay = "overlay", _("overlay")
+        #: The overlay's PASSIVE basemap presence — a subset-clean
+        #: layer row (slug = the overlay family's slug, one row, no
+        #: profile twins) composed into every basemap at serve time.
+        #: Zoomed-in only, mono icons in category colors, name labels
+        #: from high zoom, collision-active (importance sort — the
+        #: less important POI yields). Excluded from the overlay
+        #: catalog (role=overlay filter); the frontend hides the
+        #: always-replace namespace while the interactive overlay
+        #: is toggled on.
+        presence = "presence", _("presence (passive basemap layer)")
 
     class Spec(models.TextChoices):
         low = "low", _("low (weak GPU)")
@@ -776,7 +786,7 @@ class MapLayer(TimeStampedModel):
                 name="style_xor_style_url",
             ),
             models.CheckConstraint(
-                condition=models.Q(role__in=["basemap", "overlay"]),
+                condition=models.Q(role__in=["basemap", "overlay", "presence"]),
                 name="%(app_label)s_%(class)s_role_valid".replace(
                     "%(app_label)s_%(class)s", "basemaps_maplayer"
                 ),

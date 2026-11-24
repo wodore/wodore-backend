@@ -192,24 +192,6 @@ def _compose_overlay_on_basemap(
             if not str(layer.get("id", "")).startswith(overlay_prefix)
         ]
 
-    # Suppression: while this overlay is active it REPLACES the
-    # basemap's own POI/minor-label strata (config.basemap.suppress —
-    # the same list the frontend applies). Major cities + peaks stay.
-    suppress: list[str] = []
-    if isinstance(overlay_layer.config, dict):
-        block_cfg = overlay_layer.config.get("basemap")
-        if isinstance(block_cfg, dict):
-            raw = block_cfg.get("suppress") or []
-            if isinstance(raw, list):
-                suppress = [str(p) for p in raw if p]
-    if suppress:
-        for layer in basemap_doc.get("layers", []):
-            lid = str(layer.get("id", ""))
-            if any(lid.startswith(p) for p in suppress):
-                layout = dict(layer.get("layout") or {})
-                layout["visibility"] = "none"
-                layer["layout"] = layout
-
     # NOW resolve the composed basemap (env + parameter tokens + URL
     # absolutization — everything, including the block URLs)
     basemap_doc = _resolve_document(basemap_doc, basemap, tile_url)

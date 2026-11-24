@@ -2840,30 +2840,6 @@ def transport_style_subset(colors: dict[str, str] | None = None) -> dict[str, An
 TRANSPORT_STYLE: dict[str, Any] = transport_style()
 
 
-#: Basemap strata an active amenity overlay REPLACES (visibility
-#: none while the overlay is on — the frontend applies these prefixes,
-#: the admin preview composition does the same). Kept: major cities
-#: (place_point rank 1-2), ALL peak labels, the rank-1 area names,
-#: water + contour + street labels (navigation context). Suppressed:
-#: every generic/specific POI label, the wodore parking POIs, house
-#: numbers, tree symbols, and the minor settlement/area ranks — the
-#: "everything above ways except the majors" contract (owner,
-#: 2026-11-23 mobile report).
-AMENITY_BASEMAP_SUPPRESS: list[str] = [
-    "poi_",
-    "wd-parking-label",
-    "building_num_label",
-    "nature_natural_tree_texture",
-    "place_point_label_rank_3",
-    "place_point_label_rank_4",
-    "place_point_label_rank_5",
-    "place_line_label_rank_2",
-    "place_line_label_rank_3",
-    "place_line_label_rank_4",
-    "place_line_label_rank_5",
-]
-
-
 #: Sprite id for the transport overlay's BASEMAP presence. Unique vs
 #: the overlay's own ``wd-transport`` (frontend sprite ids are
 #: add-once — a shared id would let whichever pack loads first shadow
@@ -2877,7 +2853,7 @@ TRANSPORT_BASEMAP_SPRITE_ID = "wd-basemap-transport"
 _TRANSPORT_BASEMAP_PREFIX = "wd-basemap-transit"
 
 
-def transport_basemap_block(colors: dict[str, str] | None = None) -> dict[str, Any]:
+def transport_presence_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
     """The transport overlay's BASEMAP presence (config ``basemap``).
 
     "My POIs, not the basemap's" (owner 2026-11-17): stations show in
@@ -2908,20 +2884,15 @@ def transport_basemap_block(colors: dict[str, str] | None = None) -> dict[str, A
     icon_image.append(prefix + "mono/transport.transport")
 
     return {
-        # The block rides the basemap's OVERLAY-SLOT ANCHORS (one
-        # mechanism for overlays and blocks alike — owner 2026-11-18):
-        # the composer inserts before anchors["routes"].before — the
-        # freed native transit-POI slot, seeded per basemap in
-        # ``anchors`` and served through the catalog (which also
-        # supersedes the frontend's legacy anchor on the removed
-        # wd-station-label). Anchorless basemaps fall back to the
-        # label band (see compose_basemap_style).
-        "slot": "routes",
-        # The always-replace namespace, explicit for the frontend (the
-        # layer-id prefix cannot be derived from the overlay slug —
-        # hide every `${id_prefix}*` layer while this overlay is
-        # active).
-        "id_prefix": _TRANSPORT_BASEMAP_PREFIX + "-",
+        # A PRESENCE-layer style document (role=presence row, one per
+        # family, composed into every full-profile basemap): spec-legal
+        # root keys only — the layer IDS carry the always-replace
+        # namespace (wd-basemap-transport-*), and compose_basemap_style
+        # places it before the label band (the generic POI level) or
+        # the basemap's "routes" anchor when seeded.
+        "version": 8,
+        "name": "transport-stops-presence",
+        "glyphs": GLYPHS,
         "sprite": [
             {
                 "id": TRANSPORT_BASEMAP_SPRITE_ID,
@@ -2992,6 +2963,143 @@ def transport_basemap_block(colors: dict[str, str] | None = None) -> dict[str, A
                     "text-anchor": "left",
                     "text-offset": [0.9, 0],
                     "text-max-width": 9,
+                },
+                "paint": {
+                    "text-color": "hsla(220, 14%, 42%, 1)",
+                    "text-halo-blur": 0.5,
+                    "text-halo-color": "rgba(242, 247, 244, 0.9)",
+                    "text-halo-width": 1,
+                },
+            },
+        ],
+    }
+
+
+def accommodations_presence_style() -> dict[str, Any]:
+    """The accommodations family's PASSIVE basemap presence.
+
+    Owner contract (2026-11-23): zoomed-in only (z10 floor — later
+    than the interactive overlay's z5 clusters), ALWAYS the mono icon
+    in the category color (SDF tint, no per-kind icon art), name
+    labels from z15, collision-active with importance sorting — the
+    less important POI hides (and icons near major labels yield:
+    the presence inserts before the label band). The layer ids carry
+    the always-replace namespace the frontend hides while the
+    interactive overlay is toggled on.
+    """
+    prefix = "wd-basemap-accommodations-"
+    return {
+        "version": 8,
+        "name": "accommodations-presence",
+        "glyphs": GLYPHS,
+        "sprite": [
+            {
+                "id": ACCOMMODATIONS_SPRITE_ID,
+                "url": "{{env:MARTIN_TILE_URL}}/sdf_sprite/accommodation",
+            }
+        ],
+        "sources": {
+            "wd-basemap-accommodations": {
+                "type": "vector",
+                "tiles": [
+                    (
+                        "{{env:MARTIN_TILE_URL}}/geoplaces/{z}/{x}/{y}.mlt"
+                        "?category_tree=accommodation"
+                        "&fields=color,parent_color,parent_slug,"
+                        "category_identifier,importance,count,name,slug,"
+                        "elevation&max_label_zoom=11&cluster_max_zoom=7"
+                    )
+                ],
+                "encoding": "mlt",
+                "minzoom": 5,
+                "maxzoom": 14,
+            }
+        },
+        "layers": [
+            {
+                "//#id": "z10+ mono icons in the category color — "
+                "collision-active, importance-sorted (less important "
+                "yields; icons near major labels yield too)",
+                "id": f"{prefix}icons",
+                "type": "symbol",
+                "source": "wd-basemap-accommodations",
+                "source-layer": "geoplaces",
+                "minzoom": 10,
+                "filter": ["<=", ["get", "count"], 1],
+                "layout": {
+                    # mono only at every zoom (owner: "always with mono
+                    # icon") — the SDF sheet tints with icon-color
+                    "icon-image": [
+                        "coalesce",
+                        [
+                            "image",
+                            [
+                                "concat",
+                                ACCOMMODATIONS_SPRITE_ID + ":mono/amenity.",
+                                ["get", "category_identifier"],
+                            ],
+                        ],
+                        [
+                            "image",
+                            ACCOMMODATIONS_SPRITE_ID
+                            + ":mono/amenity.accommodation.unknown",
+                        ],
+                    ],
+                    "icon-size": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        10,
+                        0.22,
+                        13,
+                        0.3,
+                        16,
+                        0.38,
+                    ],
+                    # ascending sort with negated importance → the
+                    # MOST important places first → they win collision
+                    "symbol-sort-key": ["-", 0, ["get", "importance"]],
+                },
+                "paint": {
+                    "icon-color": [
+                        "coalesce",
+                        ["get", "color"],
+                        "#718096",
+                    ],
+                    "icon-halo-color": "#ffffff",
+                    "icon-halo-width": _size_ladder(_AMENITY_HALO_STOPS),
+                    "icon-halo-blur": 0,
+                },
+            },
+            {
+                "//#id": "name labels from z15 (owner: 'label only "
+                "when zoomed in a lot') — same voice as the "
+                "transport presence labels",
+                "id": f"{prefix}labels",
+                "type": "symbol",
+                "source": "wd-basemap-accommodations",
+                "source-layer": "geoplaces",
+                "minzoom": 15,
+                "filter": ["<=", ["get", "count"], 1],
+                "layout": {
+                    "text-field": ["coalesce", ["get", "name"], ""],
+                    "text-font": [
+                        "Barlow Semi Condensed Regular",
+                        "Noto Sans Regular",
+                    ],
+                    "text-size": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        15,
+                        10,
+                        17,
+                        12,
+                    ],
+                    "text-anchor": "left",
+                    "text-offset": [0.9, 0],
+                    "text-max-width": 9,
+                    "symbol-sort-key": ["-", 0, ["get", "importance"]],
                 },
                 "paint": {
                     "text-color": "hsla(220, 14%, 42%, 1)",

@@ -80,13 +80,17 @@ class Command(BaseCommand):
         out.mkdir(parents=True, exist_ok=True)
         written = 0
         skipped: list[str] = []
-        # Overlay basemap blocks (config.basemap) — the dump must write
-        # the COMPOSED basemap documents (the served shape), or the CI
-        # validators would never see the injected layers.
+        # Presence-layer styles (role=presence rows) — the dump must
+        # write the COMPOSED basemap documents (the served shape), or
+        # the CI validators would never see the injected layers. Same
+        # collector as the serve path (Opus B1/B2: one source of
+        # truth); the LAYERS list carries the presence entries.
         blocks = [
-            parent["config"]["basemap"]
-            for parent in LAYERS
-            if (parent.get("config") or {}).get("basemap")
+            entry["style"]
+            for entry in LAYERS
+            if entry.get("role") == MapLayer.Role.presence
+            and isinstance(entry.get("style"), dict)
+            and entry["style"].get("layers")
         ]
         for parent in LAYERS:
             variants = [parent, *parent.get("variants", [])]

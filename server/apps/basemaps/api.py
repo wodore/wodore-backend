@@ -887,22 +887,25 @@ class MapCatalogController(ApiController):
 def basemap_composition(
     layer: MapLayer,
 ) -> tuple[list[dict[str, Any]], list[str]]:
-    """Overlay basemap blocks for one basemap row + their version inputs.
+    """Presence-layer styles for one basemap row + their version inputs.
 
     Shared by the style endpoint, the catalog token and the cache key
     (Opus review B1/B2): ONE collector so all three agree on what a
     composed basemap contains.
 
-    * subset-profile basemap rows are NOT composed (the block's SDF
-      halo paints and operators are subset-forbidden, and the Leaflet
-      fallback cannot tint anyway);
-    * ONE block per overlay SLUG — variant rows share the parent's
-      config, so collecting per row would inject duplicate layer ids
-      (the frontend's style gate rejects duplicates); the full-profile
-      row wins, else the first active variant;
+    Presence layers (``role=presence``, slug
+    ``<family>-presence``, ONE subset-clean row per family — no
+    profile twins) are the overlay families' PASSIVE basemap presence:
+    zoomed-in only, mono icons in category colors, name labels from
+    high zoom, collision-active with importance sorting. The style
+    document doubles as the compose block (sources/sprite/layers/slot
+    root keys — ``compose_basemap_style`` reads exactly those).
+
+    * subset-profile basemap rows are NOT composed (same rationale as
+      before: the Leaflet fallback cannot tint SDF mono glyphs);
     * returns ``(blocks, inputs)`` — the inputs fold into the immutable
-      version token AND the style-body cache digest, so an overlay
-      block edit rotates URLs and bodies together.
+      version token AND the style-body cache digest, so a presence
+      edit rotates URLs and bodies together.
     """
     if (
         layer.role != MapLayer.Role.basemap
@@ -910,26 +913,24 @@ def basemap_composition(
         or layer.style is None
     ):
         return [], []
-    overlays = (
-        MapLayer.objects.filter(role=MapLayer.Role.overlay, is_active=True)
-        .only("pk", "slug", "spec", "profile", "modified", "config", "role")
-        .order_by("pk")
+    presences = (
+        MapLayer.objects.filter(role=MapLayer.Role.presence, is_active=True)
+        .select_related("slot")
+        .only("pk", "slug", "modified", "style", "slot__slug")
+        .order_by("slug")
     )
-    by_slug: dict[str, tuple[int, MapLayer, dict[str, Any]]] = {}
-    for overlay in overlays:
-        block = (overlay.config or {}).get("basemap")
-        if not (isinstance(block, dict) and block.get("layers")):
-            continue
-        rank = 0 if overlay.profile != MapLayer.Profile.subset else 1
-        current = by_slug.get(overlay.slug)
-        if current is None or rank < current[0]:
-            by_slug[overlay.slug] = (rank, overlay, block)
     blocks: list[dict[str, Any]] = []
     inputs: list[str] = []
-    for slug in sorted(by_slug):
-        _rank, overlay, block = by_slug[slug]
-        blocks.append(block)
-        inputs.append(f"basemap-block:{overlay.pk}:{overlay.modified.isoformat()}")
+    for presence in presences:
+        style = presence.style
+        if not (isinstance(style, dict) and style.get("layers")):
+            continue
+        # the stored style stays spec-clean; the SLOT rides the row's
+        # FK and is injected transiently for compose_basemap_style
+        if presence.slot is not None:
+            style = {**style, "slot": presence.slot.slug}
+        blocks.append(style)
+        inputs.append(f"presence:{presence.pk}:{presence.modified.isoformat()}")
     return blocks, inputs
 
 
