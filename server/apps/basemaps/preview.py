@@ -192,6 +192,24 @@ def _compose_overlay_on_basemap(
             if not str(layer.get("id", "")).startswith(overlay_prefix)
         ]
 
+    # Suppression: while this overlay is active it REPLACES the
+    # basemap's own POI/minor-label strata (config.basemap.suppress —
+    # the same list the frontend applies). Major cities + peaks stay.
+    suppress: list[str] = []
+    if isinstance(overlay_layer.config, dict):
+        block_cfg = overlay_layer.config.get("basemap")
+        if isinstance(block_cfg, dict):
+            raw = block_cfg.get("suppress") or []
+            if isinstance(raw, list):
+                suppress = [str(p) for p in raw if p]
+    if suppress:
+        for layer in basemap_doc.get("layers", []):
+            lid = str(layer.get("id", ""))
+            if any(lid.startswith(p) for p in suppress):
+                layout = dict(layer.get("layout") or {})
+                layout["visibility"] = "none"
+                layer["layout"] = layout
+
     # NOW resolve the composed basemap (env + parameter tokens + URL
     # absolutization — everything, including the block URLs)
     basemap_doc = _resolve_document(basemap_doc, basemap, tile_url)
@@ -265,10 +283,27 @@ def _compose_overlay_on_basemap(
                 }
             )
         basemap_doc.setdefault("sprite", []).append(sprite)
-    # Overlay layers append at the END (above everything — the frontend
-    # appends overlay layers via addLayer which places them on top)
-    for layer in overlay_doc.get("layers") or []:
-        basemap_doc.setdefault("layers", []).append(layer)
+    # Overlay layers insert BELOW the main-label strata (owner
+    # 2026-11-23: icons render BEHIND major city/peak labels — the
+    # labels paint over the icons instead of the reverse). The first
+    # keeper-label layer (place rank 1/2, peaks) marks the insertion
+    # point; appended at the end only when no keeper exists.
+    _KEEPER_LABEL_PREFIXES = (
+        "place_point_label_rank_1",
+        "place_point_label_rank_2",
+        "place_peak_label_",
+    )
+    overlay_layers = list(overlay_doc.get("layers") or [])
+    target_layers = basemap_doc.setdefault("layers", [])
+    insert_at = next(
+        (
+            i
+            for i, layer in enumerate(target_layers)
+            if str(layer.get("id", "")).startswith(_KEEPER_LABEL_PREFIXES)
+        ),
+        len(target_layers),
+    )
+    target_layers[insert_at:insert_at] = overlay_layers
     if overlay_doc.get("glyphs"):
         basemap_doc.setdefault("glyphs", overlay_doc["glyphs"])
 

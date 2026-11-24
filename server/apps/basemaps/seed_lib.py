@@ -2840,6 +2840,30 @@ def transport_style_subset(colors: dict[str, str] | None = None) -> dict[str, An
 TRANSPORT_STYLE: dict[str, Any] = transport_style()
 
 
+#: Basemap strata an active amenity overlay REPLACES (visibility
+#: none while the overlay is on — the frontend applies these prefixes,
+#: the admin preview composition does the same). Kept: major cities
+#: (place_point rank 1-2), ALL peak labels, the rank-1 area names,
+#: water + contour + street labels (navigation context). Suppressed:
+#: every generic/specific POI label, the wodore parking POIs, house
+#: numbers, tree symbols, and the minor settlement/area ranks — the
+#: "everything above ways except the majors" contract (owner,
+#: 2026-11-23 mobile report).
+AMENITY_BASEMAP_SUPPRESS: list[str] = [
+    "poi_",
+    "wd-parking-label",
+    "building_num_label",
+    "nature_natural_tree_texture",
+    "place_point_label_rank_3",
+    "place_point_label_rank_4",
+    "place_point_label_rank_5",
+    "place_line_label_rank_2",
+    "place_line_label_rank_3",
+    "place_line_label_rank_4",
+    "place_line_label_rank_5",
+]
+
+
 #: Sprite id for the transport overlay's BASEMAP presence. Unique vs
 #: the overlay's own ``wd-transport`` (frontend sprite ids are
 #: add-once — a shared id would let whichever pack loads first shadow

@@ -429,6 +429,9 @@ def _amenity_overlay_layers() -> list[dict[str, Any]]:
                     {"slug": spec.subtree, "use": "legend"},
                 ],
                 "config": {
+                    # while active the overlay REPLACES the basemap's own
+                    # POI/minor-label strata (major cities + peaks stay)
+                    "basemap": {"suppress": lib.AMENITY_BASEMAP_SUPPRESS},
                     "filters": [
                         {
                             "id": f"{spec.subtree}Types",
@@ -447,7 +450,7 @@ def _amenity_overlay_layers() -> list[dict[str, Any]]:
                             "mapProperty": "category_identifier",
                             "filterExpression": "in",
                         }
-                    ]
+                    ],
                     # NOTE: no config.clustering hint — SERVER-side
                     # clustering (count>1 features from the geoplaces
                     # function); a client-side hint would double-cluster.
@@ -582,6 +585,9 @@ LAYERS: list[dict[str, Any]] = [
             {"slug": "accommodation", "use": "legend"},
         ],
         "config": {
+            # while active the overlay REPLACES the basemap's own
+            # POI/minor-label strata (major cities + peaks stay)
+            "basemap": {"suppress": lib.AMENITY_BASEMAP_SUPPRESS},
             "filters": [
                 {
                     "id": "accommodationTypes",
@@ -600,7 +606,7 @@ LAYERS: list[dict[str, Any]] = [
                     "mapProperty": "category_identifier",
                     "filterExpression": "in",
                 }
-            ]
+            ],
             # NOTE: no config.clustering hint — the clustering is
             # SERVER-side (the geoplaces function source emits count>1
             # cluster features); a client-side hint would double-cluster.
