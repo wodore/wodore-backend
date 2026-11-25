@@ -887,6 +887,10 @@ LAYERS: list[dict[str, Any]] = [
     # saved selections keep resolving). Order drives the picker sort.
     {
         "slug": "wd-outdoor-base-mtk-hill",
+        "presence_layers": [
+            "transport-stops-presence",
+            "accommodations-presence",
+        ],
         "role": MapLayer.Role.basemap,
         "name": "Wodore Outdoor",
         "description": (
@@ -918,6 +922,10 @@ LAYERS: list[dict[str, Any]] = [
         # but active: mapcompare + fallback chains resolve it. Re-added
         # for the hillshade A/B decision (PR #375 lane).
         "slug": "wd-outdoor-base-mtk",
+        "presence_layers": [
+            "transport-stops-presence",
+            "accommodations-presence",
+        ],
         "role": MapLayer.Role.basemap,
         "name": "Wodore Outdoor (server relief)",
         "description": (
@@ -937,6 +945,10 @@ LAYERS: list[dict[str, Any]] = [
     },
     {
         "slug": "wd-outdoor-base-ofm-hill",
+        "presence_layers": [
+            "transport-stops-presence",
+            "accommodations-presence",
+        ],
         "role": MapLayer.Role.basemap,
         "name": "Wodore Outdoor (OpenFreeMap, client relief)",
         "description": "OpenFreeMap fallback with the original client hillshade.",
@@ -1392,8 +1404,36 @@ class Command(BaseCommand):
         self._sync_parameters(layer, wanted_parameters, params)
         self._sync_categories(layer, parent)
         self._sync_attributions(layer, parent, orgs)
+        self._sync_presence_layers(layer, variant, parent)
 
         return int(was_created), changed
+
+    def _sync_presence_layers(
+        self,
+        layer: MapLayer,
+        variant: dict[str, Any],
+        parent: dict[str, Any],
+    ) -> None:
+        """Set the basemap→presence M2M from the entry's slug refs.
+
+        Explicit opt-in (owner 2026-11-24): entries WITHOUT the key
+        keep their current wiring untouched (admin-edited links
+        survive re-seeds); entries WITH the key set it exactly —
+        the empty list means "no presences" (raster/external
+        basemaps stay clean).
+        """
+        wanted_slugs = variant.get("presence_layers", parent.get("presence_layers"))
+        if wanted_slugs is None:
+            return
+        current = set(layer.presence_layers.values_list("pk", flat=True))
+        targets = set(
+            MapLayer.objects.filter(
+                role=MapLayer.Role.presence, slug__in=wanted_slugs
+            ).values_list("pk", flat=True)
+        )
+        if current == targets:
+            return
+        layer.presence_layers.set(targets)
 
     def _seed_legend(self, slug: str) -> MapLegend | None:
         """Create/update the slug-level legend (shared by all variants)."""

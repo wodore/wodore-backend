@@ -103,10 +103,25 @@ class Command(BaseCommand):
                 if style is None:
                     continue
                 if parent.get("role") == MapLayer.Role.basemap and blocks:
-                    anchors = variant.get("anchors", parent.get("anchors"))
-                    style = lib.compose_basemap_style(
-                        deepcopy(style), blocks, anchors=anchors
+                    # mirror the serve path's M2M selection: the
+                    # entry's presence_layers refs (slugs) filter the
+                    # composed blocks; absent key = ALL (dev dump
+                    # convenience — the serve path is authoritative)
+                    wanted = variant.get(
+                        "presence_layers",
+                        parent.get("presence_layers"),
                     )
+                    if wanted is None:
+                        chosen = blocks
+                    else:
+                        # wanted carries the presence row SLUGS; the
+                        # style documents carry them as "name"
+                        chosen = [b for b in blocks if b.get("name") in wanted]
+                    if chosen:
+                        anchors = variant.get("anchors", parent.get("anchors"))
+                        style = lib.compose_basemap_style(
+                            deepcopy(style), chosen, anchors=anchors
+                        )
                 profile = variant.get(
                     "profile", parent.get("profile", MapLayer.Profile.full)
                 )

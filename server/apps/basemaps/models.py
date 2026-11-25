@@ -664,6 +664,20 @@ class MapLayer(TimeStampedModel):
             "(category refs by slug)"
         ),
     )
+    presence_layers = models.ManyToManyField(
+        "self",
+        symmetrical=False,
+        blank=True,
+        related_name="presence_basemaps",
+        limit_choices_to={"role": "presence"},
+        help_text=_(
+            "Basemap rows: the presence layers (role=presence) "
+            "composed into this basemap at serve time. EXPLICIT "
+            "opt-in — an empty set composes nothing (raster/external "
+            "basemaps stay clean); the seed wires the wodore vector "
+            "basemap family."
+        ),
+    )
     interaction = models.JSONField(
         null=True,
         blank=True,

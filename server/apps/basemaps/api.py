@@ -913,8 +913,12 @@ def basemap_composition(
         or layer.style is None
     ):
         return [], []
+    # Per-basemap selection is the presence_layers M2M (owner
+    # 2026-11-24): EXPLICIT opt-in — the seed wires the wodore vector
+    # basemap family; raster/external basemaps stay clean. An empty
+    # set composes nothing.
     presences = (
-        MapLayer.objects.filter(role=MapLayer.Role.presence, is_active=True)
+        layer.presence_layers.filter(is_active=True)
         .select_related("slot")
         .only("pk", "slug", "modified", "style", "slot__slug")
         .order_by("slug")
