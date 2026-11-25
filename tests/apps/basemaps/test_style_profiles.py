@@ -1933,6 +1933,36 @@ class TestTransportBasemapServing:
     (never the bare fixture), overlays stay un-composed, and the
     immutable version token folds the contributing overlay rows."""
 
+    def test_presence_rows_stay_out_of_the_public_catalog(self) -> None:
+        """Presence rows are composition internals: they leave through
+        the STYLE endpoint (basemap composition) only. The catalog
+        listing and the detail endpoint must not expose them — the
+        frontend's overlay picker treats every catalog entry as a
+        toggleable overlay and swapped an overlay's style for its
+        presence row (seen live)."""
+        from django.core.management import call_command
+        from django.test.client import Client
+
+        call_command("map_seed", verbosity=0)
+        client = Client()
+
+        slugs = {entry["slug"] for entry in client.get("/v1/map/layers").json()["data"]}
+        assert "accommodations-presence" not in slugs
+        assert "transport-stops-presence" not in slugs
+        # the interactive overlays themselves stay listed
+        assert "accommodations" in slugs
+        assert "transport-stops" in slugs
+
+        detail = client.get("/v1/map/layers/transport-stops-presence")
+        assert detail.status_code == 404
+        # …while the STYLE endpoint keeps serving the composed basemap
+        basemap = client.get("/v1/map/styles/wd-outdoor-base-mtk-hill.json")
+        assert basemap.status_code == 200
+        assert any(
+            layer["id"] == "wd-basemap-transit-stations"
+            for layer in basemap.json()["layers"]
+        )
+
     def test_basemap_style_serves_the_composed_document(self) -> None:
         from django.core.management import call_command
 

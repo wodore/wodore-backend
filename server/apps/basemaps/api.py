@@ -792,6 +792,13 @@ class MapLayersController(ApiController):
         filters: dict[str, Any] = {}
         if parsed_query.role:
             filters["role"] = parsed_query.role
+        else:
+            # Presence rows are composition internals, never
+            # client-selectable: an unfiltered listing would otherwise
+            # hand them to the overlay picker as ordinary overlays
+            # (seen live: the frontend swapped an overlay's style for
+            # its presence row on toggle).
+            filters["role__in"] = [MapLayer.Role.basemap, MapLayer.Role.overlay]
         if parsed_query.show is not None:
             filters["show"] = parsed_query.show
         with override(parsed_query.lang):
@@ -826,7 +833,9 @@ class MapLayerDetailController(ApiController):
             parsed_query.spec,
             parsed_query.profile,
         )
-        if layer is None:
+        # Presence rows leave through the STYLE endpoint only (basemap
+        # composition); the detail endpoint is the public catalog door.
+        if layer is None or layer.role == MapLayer.Role.presence:
             raise_not_found(f"No active map layer with slug {parsed_path.slug!r}.")
         with override(parsed_query.lang):
             entry = _resolved_entry(layer, parsed_query.profile)
