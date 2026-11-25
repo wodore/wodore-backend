@@ -935,6 +935,13 @@ def basemap_composition(
             style = {**style, "slot": presence.slot.slug}
         blocks.append(style)
         inputs.append(f"presence:{presence.pk}:{presence.modified.isoformat()}")
+    # The LINK set itself is a content input: linking/unlinking a
+    # presence changes the composed body without touching any row's
+    # ``modified`` — without this the style-body cache and the version
+    # token would keep serving the pre-rewire composition (seen live:
+    # the dev server served a presence-less basemap after the seed
+    # wired the M2M).
+    inputs.append("presence-links:" + ",".join(str(b["name"]) for b in blocks))
     return blocks, inputs
 
 

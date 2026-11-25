@@ -1978,3 +1978,24 @@ class TestTransportBasemapServing:
             before.headers["X-Map-Style-Version"]
             != after.headers["X-Map-Style-Version"]
         )
+
+        # …and when the basemap's presence LINK SET changes — a pure
+        # M2M unlink touches no row's ``modified`` (live bug: the dev
+        # server kept serving a presence-less body after the seed
+        # wired the links). Both the token and the BODY must rotate.
+        basemap = MapLayer.objects.filter(
+            slug="wd-outdoor-base-ofm-hill", profile=MapLayer.Profile.full
+        ).first()
+        assert basemap is not None
+        transport = MapLayer.objects.filter(slug="transport-stops-presence").first()
+        assert transport is not None
+        basemap.presence_layers.remove(transport)
+        unlinked = Client().get("/v1/map/styles/wd-outdoor-base-ofm-hill.json")
+        assert (
+            unlinked.headers["X-Map-Style-Version"]
+            != after.headers["X-Map-Style-Version"]
+        )
+        unlinked_ids = [layer["id"] for layer in unlinked.json()["layers"]]
+        assert "wd-basemap-transit-stations" not in unlinked_ids
+        assert "wd-basemap-accommodations-icons" in unlinked_ids
+        basemap.presence_layers.add(transport)  # restore for other tests
