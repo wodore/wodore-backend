@@ -2930,22 +2930,45 @@ def transport_presence_style(colors: dict[str, str] | None = None) -> dict[str, 
                         16,
                         0.45,
                     ],
-                    # Icon + name in ONE symbol: a single placement box,
-                    # so the label can never evict its own icon. (They
-                    # were separate layers — separate layers collide
-                    # against each other, and at z16 the wider label
-                    # box beat the same station's icon: owner report
-                    # "icon gone when zoomed in, label stays".) The
-                    # name shows from z14 via a zoom-driven text size
-                    # (0 below z14), keeping the icon from z13.
+                    # ICONS ALWAYS DRAW. Transitland types bus stops as
+                    # ``location_type`` 1 too — 46 "stations" within one
+                    # z14 tile around Interlaken Ost — and a
+                    # collision-active icon was culled down to 5 placed
+                    # (owner report: "icon not always visible when I
+                    # expect it", the main station losing to a bus stop).
+                    # Overlap = icons never cull each other; ignore-
+                    # placement = an icon never claims space, so nothing
+                    # (its own label included) is evicted by it. Names
+                    # still declutter — see the label layer below.
+                    "icon-allow-overlap": True,
+                    "icon-ignore-placement": True,
+                },
+                "paint": {
+                    "icon-color": _transport_color_expr(palette, subset=True),
+                    "icon-halo-color": "#ffffff",
+                    "icon-halo-width": _size_ladder(_AMENITY_HALO_STOPS),
+                    "icon-halo-blur": 0,
+                },
+            },
+            {
+                # the station NAME — decoration, never a placement claim:
+                # labels yield to icons (ignore-placement: the label
+                # takes no collision space) and still declutter each
+                # other. Rail/metro stations sort FIRST so their names
+                # win a crowded tile over bus-stop "stations".
+                "id": f"{_TRANSPORT_BASEMAP_PREFIX}-stations-label",
+                "type": "symbol",
+                "source": "wd-basemap-transitland-stops",
+                "source-layer": "stops",
+                "minzoom": 14,
+                "filter": ["==", ["get", "location_type"], 1],
+                "layout": {
                     "text-field": ["coalesce", ["get", "stop_name"], ""],
                     "text-font": ["Barlow Semi Condensed Regular", "Noto Sans Regular"],
                     "text-size": [
                         "interpolate",
                         ["linear"],
                         ["zoom"],
-                        13.99,
-                        0,
                         14,
                         10,
                         16,
@@ -2953,12 +2976,27 @@ def transport_presence_style(colors: dict[str, str] | None = None) -> dict[str, 
                     ],
                     "text-anchor": "left",
                     "text-offset": [0.9, 0],
+                    "icon-ignore-placement": True,
+                    # FULL profile only (symbol-sort-key is outside the
+                    # subset whitelist): rail (2) / metro (1) stations
+                    # before tram (0) before everything else
+                    # (a mode is "present" when ANY of its four
+                    # delimiter-position checks matches — see
+                    # _route_type_conditions)
+                    "symbol-sort-key": [
+                        "case",
+                        [
+                            "any",
+                            *_route_type_conditions(2, subset=True),
+                            *_route_type_conditions(1, subset=True),
+                        ],
+                        0,
+                        ["any", *_route_type_conditions(0, subset=True)],
+                        1,
+                        2,
+                    ],
                 },
                 "paint": {
-                    "icon-color": _transport_color_expr(palette, subset=True),
-                    "icon-halo-color": "#ffffff",
-                    "icon-halo-width": _size_ladder(_AMENITY_HALO_STOPS),
-                    "icon-halo-blur": 0,
                     "text-color": "hsla(220, 14%, 42%, 1)",
                     "text-halo-blur": 0.5,
                     "text-halo-color": "rgba(242, 247, 244, 0.9)",
@@ -3011,12 +3049,11 @@ def accommodations_presence_style() -> dict[str, Any]:
         },
         "layers": [
             {
-                "//#id": "z10+ mono icons in the category color, names "
-                "from z15 — ONE symbol (icon + text place as a single "
-                "box: a separate label layer collided with its own icon "
-                "and, zoomed in, evicted it). Collision-active, "
-                "importance-sorted (less important yields; icons near "
-                "major labels yield too)",
+                "//#id": "z10+ mono icons in the category color — "
+                "ALWAYS drawn (allow-overlap + ignore-placement: a "
+                "collision-active icon was culled by its neighbours "
+                "when zoomed in; an icon never claims space either, so "
+                "it evicts nothing). Names live in the label layer",
                 "id": f"{prefix}icons",
                 "type": "symbol",
                 "source": "wd-basemap-accommodations",
@@ -3053,29 +3090,8 @@ def accommodations_presence_style() -> dict[str, Any]:
                         16,
                         0.38,
                     ],
-                    # names only "when zoomed in a lot" (owner): a
-                    # zoom-driven text size — 0 below z15
-                    "text-field": ["coalesce", ["get", "name"], ""],
-                    "text-font": [
-                        "Barlow Semi Condensed Regular",
-                        "Noto Sans Regular",
-                    ],
-                    "text-size": [
-                        "interpolate",
-                        ["linear"],
-                        ["zoom"],
-                        14.99,
-                        0,
-                        15,
-                        10,
-                        17,
-                        12,
-                    ],
-                    "text-anchor": "left",
-                    "text-offset": [0.9, 0],
-                    # ascending sort with negated importance → the
-                    # MOST important places first → they win collision
-                    "symbol-sort-key": ["-", 0, ["get", "importance"]],
+                    "icon-allow-overlap": True,
+                    "icon-ignore-placement": True,
                 },
                 "paint": {
                     "icon-color": [
@@ -3086,6 +3102,41 @@ def accommodations_presence_style() -> dict[str, Any]:
                     "icon-halo-color": "#ffffff",
                     "icon-halo-width": _size_ladder(_AMENITY_HALO_STOPS),
                     "icon-halo-blur": 0,
+                },
+            },
+            {
+                "//#id": "names from z15 — decoration that never claims "
+                "placement (labels yield to icons and declutter each "
+                "other); importance-sorted so the notable places win",
+                "id": f"{prefix}labels",
+                "type": "symbol",
+                "source": "wd-basemap-accommodations",
+                "source-layer": "geoplaces",
+                "minzoom": 15,
+                "filter": ["<=", ["get", "count"], 1],
+                "layout": {
+                    "text-field": ["coalesce", ["get", "name"], ""],
+                    "text-font": [
+                        "Barlow Semi Condensed Regular",
+                        "Noto Sans Regular",
+                    ],
+                    "text-size": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        15,
+                        10,
+                        17,
+                        12,
+                    ],
+                    "text-anchor": "left",
+                    "text-offset": [0.9, 0],
+                    "icon-ignore-placement": True,
+                    # ascending sort with negated importance → the
+                    # MOST important places first → they win collision
+                    "symbol-sort-key": ["-", 0, ["get", "importance"]],
+                },
+                "paint": {
                     "text-color": "hsla(220, 14%, 42%, 1)",
                     "text-halo-blur": 0.5,
                     "text-halo-color": "rgba(242, 247, 244, 0.9)",

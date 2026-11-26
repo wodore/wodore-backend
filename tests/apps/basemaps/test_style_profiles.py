@@ -1830,21 +1830,39 @@ class TransportBasemapBlockTests(SimpleTestCase):
         # own sprite id (add-once ids must not collide with the overlay's)
         assert block["sprite"][0]["id"] == TRANSPORT_BASEMAP_SPRITE_ID
         assert block["sprite"][0]["id"] != "wd-transport"
-        # namespaced layer ids — the always-replace contract prefix.
-        # ONE symbol: icon + name place as a single box (a separate
-        # label layer collided with its own icon and, zoomed in,
-        # evicted it — owner report "icon gone at z16, label stays").
+        # namespaced layer ids — the always-replace contract prefix
         ids = [layer["id"] for layer in block["layers"]]
-        assert ids == ["wd-basemap-transit-stations"]
-        icon = block["layers"][0]
+        assert ids == [
+            "wd-basemap-transit-stations",
+            "wd-basemap-transit-stations-label",
+        ]
+        icon, label = block["layers"]
         # stations only, LATER than the overlay floor (z13 vs z11)
         assert icon["minzoom"] == 13
         assert icon["filter"] == ["==", ["get", "location_type"], 1]
-        # the name is part of the same symbol, sized 0 until z14
-        assert icon["layout"]["text-field"] == ["coalesce", ["get", "stop_name"], ""]
-        text_size = icon["layout"]["text-size"]
-        assert text_size[3:7] == [13.99, 0, 14, 10]  # invisible below z14
-        assert "text-color" in icon["paint"]
+        # ICONS ALWAYS DRAW. Transitland types bus stops as stations
+        # too (46 within one z14 tile at Interlaken Ost) — collision-
+        # active icons were culled to 5 placed and the main station
+        # could lose to a bus stop (owner report). Overlap: icons never
+        # cull each other. Ignore-placement: an icon claims no space.
+        assert icon["layout"]["icon-allow-overlap"] is True
+        assert icon["layout"]["icon-ignore-placement"] is True
+        # the NAME is decoration: never claims placement (cannot evict
+        # an icon), still declutters other names, and rail/metro
+        # stations sort ahead of bus-stop "stations"
+        assert label["minzoom"] == 14
+        assert label["layout"]["icon-ignore-placement"] is True
+        # case layout: [op, cond, value, cond, value, fallback]
+        sort_key = label["layout"]["symbol-sort-key"]
+        assert sort_key[0] == "case"
+        assert len(sort_key) == 6
+        assert sort_key[1][0] == "any"  # rail OR metro → value 0 (first)
+        assert sort_key[2] == 0
+        assert sort_key[3][0] == "any"  # tram → value 1
+        assert sort_key[4] == 1
+        assert sort_key[5] == 2  # everything else (bus-stop "stations") last
+        # the icon layer itself carries no text (names live in `label`)
+        assert "text-field" not in icon["layout"]
         # the icon chain uses the BASEMAP sprite prefix, not the overlay's
         names = icon["layout"]["icon-image"][2:-1:2]
         assert names and all(
@@ -1883,6 +1901,7 @@ class TransportBasemapBlockTests(SimpleTestCase):
         assert ids == [
             "background",
             "wd-basemap-transit-stations",
+            "wd-basemap-transit-stations-label",
             "road_path_oneway_symbol",
             "later",
         ]
@@ -1977,8 +1996,7 @@ class TestTransportBasemapServing:
         assert response.status_code == 200
         layers = [layer["id"] for layer in response.json()["layers"]]
         assert "wd-basemap-transit-stations" in layers
-        # single-symbol presence: no separate label layer anymore
-        assert "wd-basemap-transit-stations-label" not in layers
+        assert "wd-basemap-transit-stations-label" in layers
         # the native transit POIs are gone — ours replace them
         assert "poi_transit" not in layers
         # the injected sprite rides along
