@@ -1830,16 +1830,21 @@ class TransportBasemapBlockTests(SimpleTestCase):
         # own sprite id (add-once ids must not collide with the overlay's)
         assert block["sprite"][0]["id"] == TRANSPORT_BASEMAP_SPRITE_ID
         assert block["sprite"][0]["id"] != "wd-transport"
-        # namespaced layer ids — the always-replace contract prefix
+        # namespaced layer ids — the always-replace contract prefix.
+        # ONE symbol: icon + name place as a single box (a separate
+        # label layer collided with its own icon and, zoomed in,
+        # evicted it — owner report "icon gone at z16, label stays").
         ids = [layer["id"] for layer in block["layers"]]
-        assert ids == [
-            "wd-basemap-transit-stations",
-            "wd-basemap-transit-stations-label",
-        ]
-        # stations only, LATER than the overlay floor (z13 vs z11)
+        assert ids == ["wd-basemap-transit-stations"]
         icon = block["layers"][0]
+        # stations only, LATER than the overlay floor (z13 vs z11)
         assert icon["minzoom"] == 13
         assert icon["filter"] == ["==", ["get", "location_type"], 1]
+        # the name is part of the same symbol, sized 0 until z14
+        assert icon["layout"]["text-field"] == ["coalesce", ["get", "stop_name"], ""]
+        text_size = icon["layout"]["text-size"]
+        assert text_size[3:7] == [13.99, 0, 14, 10]  # invisible below z14
+        assert "text-color" in icon["paint"]
         # the icon chain uses the BASEMAP sprite prefix, not the overlay's
         names = icon["layout"]["icon-image"][2:-1:2]
         assert names and all(
@@ -1878,7 +1883,6 @@ class TransportBasemapBlockTests(SimpleTestCase):
         assert ids == [
             "background",
             "wd-basemap-transit-stations",
-            "wd-basemap-transit-stations-label",
             "road_path_oneway_symbol",
             "later",
         ]
@@ -1973,7 +1977,8 @@ class TestTransportBasemapServing:
         assert response.status_code == 200
         layers = [layer["id"] for layer in response.json()["layers"]]
         assert "wd-basemap-transit-stations" in layers
-        assert "wd-basemap-transit-stations-label" in layers
+        # single-symbol presence: no separate label layer anymore
+        assert "wd-basemap-transit-stations-label" not in layers
         # the native transit POIs are gone — ours replace them
         assert "poi_transit" not in layers
         # the injected sprite rides along
