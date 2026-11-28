@@ -2853,6 +2853,77 @@ TRANSPORT_BASEMAP_SPRITE_ID = "wd-basemap-transport"
 _TRANSPORT_BASEMAP_PREFIX = "wd-basemap-transit"
 
 
+def _presence_plate(
+    *,
+    layer_id: str,
+    source: str,
+    source_layer: str,
+    minzoom: int,
+    filt: list[Any],
+    ring: Any,
+    radius: tuple[float, ...],
+) -> dict[str, Any]:
+    """Selection plate of a PASSIVE presence icon (owner 2026-11-27: a
+    selected presence icon gets the same ring a selected overlay icon
+    gets — the toggle itself stays off).
+
+    The overlay plate's own contract (see the transport overlay's
+    ``_selected_plate`` and the accommodations overlay twin): white
+    circle + ring, BOTH opacities gated on ``feature-state``
+    ``selected``. The frontend's click pipeline (WdMapView
+    ``setSelectedPoi``) writes that state to whatever feature was
+    clicked — presence icons included — so the ring needs no frontend
+    change. The stroke opacity is gated separately: it defaults to 1
+    and would render for EVERY feature (the 2026-11-07 ring storm).
+    Placed directly BELOW its icon layer — the icon always draws
+    (allow-overlap) and paints over the plate.
+    """
+    return {
+        "//#id": "Selection plate: white circle + ring, opacity-gated on "
+        "feature-state selected — the same ring a selected overlay icon gets",
+        "id": layer_id,
+        "type": "circle",
+        "source": source,
+        "source-layer": source_layer,
+        "minzoom": minzoom,
+        "filter": filt,
+        "paint": {
+            "circle-blur": 0,
+            "circle-color": "#ffffff",
+            "circle-opacity": [
+                "case",
+                ["boolean", ["feature-state", "selected"], False],
+                1,
+                0,
+            ],
+            # stroke opacity MUST be gated separately — it defaults to 1
+            # and renders for EVERY feature regardless of circle-opacity
+            "circle-stroke-opacity": [
+                "case",
+                ["boolean", ["feature-state", "selected"], False],
+                1,
+                0,
+            ],
+            "circle-stroke-color": ring,
+            "circle-stroke-width": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                14,
+                1.5,
+                19,
+                2.5,
+            ],
+            "circle-radius": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                *radius,
+            ],
+        },
+    }
+
+
 def transport_presence_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
     """The transport overlay's BASEMAP presence (config ``basemap``).
 
@@ -2888,8 +2959,8 @@ def transport_presence_style(colors: dict[str, str] | None = None) -> dict[str, 
         # family, composed into every full-profile basemap): spec-legal
         # root keys only — the layer IDS carry the always-replace
         # namespace (wd-basemap-transport-*), and compose_basemap_style
-        # places it before the label band (the generic POI level) or
-        # the basemap's "routes" anchor when seeded.
+        # places it directly below the keeper-label band (or before the
+        # basemap's slot anchor, should the row ever carry one).
         "version": 8,
         "name": "transport-stops-presence",
         "glyphs": GLYPHS,
@@ -2906,18 +2977,39 @@ def transport_presence_style(colors: dict[str, str] | None = None) -> dict[str, 
                 "encoding": "mlt",
                 "minzoom": 11,
                 "maxzoom": 14,
+                # The SAME stable identity the interactive overlay
+                # promotes: a click on a passive station icon must
+                # resolve to the same place the overlay's popup opens
+                # (feature.id = onestop_id, not the geometry index).
+                "promoteId": "onestop_id",
             }
         },
         "layers": [
+            _presence_plate(
+                layer_id=f"{_TRANSPORT_BASEMAP_PREFIX}-stations-selected",
+                source="wd-basemap-transitland-stops",
+                source_layer="stops",
+                minzoom=14,
+                # the icon layer's own filter
+                filt=["==", ["get", "location_type"], 1],
+                # the overlay plate's ring and its exact radius ladder —
+                # same icon size (0.35 at z14), so the same ring
+                ring=_TRANSPORT_SELECTED_RING,
+                radius=(14, 10, 16, 12, 19, 15),
+            ),
             {
                 # stations only — the interchange hierarchy reads even
-                # without the overlay; z13+ = later than the overlay's
-                # z11 floor (owner: much later, simpler)
+                # without the overlay. Presence floors MATCH the
+                # overlay's icon band (icons z14, names z15) so a
+                # station looks the same zoomed in whether the overlay
+                # is on or off; before, the passive presence came a
+                # zoom earlier than the overlay (owner 2026-11-26:
+                # "basemap transport icons are coming too early").
                 "id": f"{_TRANSPORT_BASEMAP_PREFIX}-stations",
                 "type": "symbol",
                 "source": "wd-basemap-transitland-stops",
                 "source-layer": "stops",
-                "minzoom": 13,
+                "minzoom": 14,
                 "filter": ["==", ["get", "location_type"], 1],
                 "layout": {
                     "icon-image": icon_image,
@@ -2925,23 +3017,26 @@ def transport_presence_style(colors: dict[str, str] | None = None) -> dict[str, 
                         "interpolate",
                         ["linear"],
                         ["zoom"],
-                        13,
-                        0.3,
-                        16,
-                        0.45,
+                        14,
+                        0.35,
+                        17,
+                        0.5,
                     ],
-                    # ICONS ALWAYS DRAW. Transitland types bus stops as
-                    # ``location_type`` 1 too — 46 "stations" within one
-                    # z14 tile around Interlaken Ost — and a
-                    # collision-active icon was culled down to 5 placed
-                    # (owner report: "icon not always visible when I
-                    # expect it", the main station losing to a bus stop).
-                    # Overlap = icons never cull each other; ignore-
-                    # placement = an icon never claims space, so nothing
-                    # (its own label included) is evicted by it. Names
-                    # still declutter — see the label layer below.
+                    # ICONS ALWAYS DRAW — AND CLAIM SPACE. Transitland
+                    # types bus stops as ``location_type`` 1 too — 46
+                    # "stations" within one z14 tile around Interlaken
+                    # Ost — and a collision-active icon was culled down
+                    # to 5 placed (owner report: the main station losing
+                    # to a bus stop). allow-overlap: no icon is ever
+                    # culled, by another icon or by a label. NO
+                    # ignore-placement (owner 2026-11-27: "icon is behind
+                    # label of street"): the icon takes collision space,
+                    # so the minor labels placed after it — the block
+                    # sits right below the keeper band — yield to it,
+                    # exactly like the interactive overlay's icons. The
+                    # major city/peak labels are placed before it and
+                    # still paint over it.
                     "icon-allow-overlap": True,
-                    "icon-ignore-placement": True,
                 },
                 "paint": {
                     "icon-color": _transport_color_expr(palette, subset=True),
@@ -2951,16 +3046,22 @@ def transport_presence_style(colors: dict[str, str] | None = None) -> dict[str, 
                 },
             },
             {
-                # the station NAME — decoration, never a placement claim:
-                # labels yield to icons (ignore-placement: the label
-                # takes no collision space) and still declutter each
-                # other. Rail/metro stations sort FIRST so their names
-                # win a crowded tile over bus-stop "stations".
+                # the station NAME — decoration that still claims its
+                # space: the block sits right below the keeper band, so
+                # the minor labels (roads, water, lesser places) placed
+                # after it yield to a name too, as they do to the
+                # overlay's labels. No icon is ever evicted by a name —
+                # icons always draw (allow-overlap above). Names declutter
+                # each other; rail/metro stations sort FIRST so their
+                # names win a crowded tile over bus-stop "stations".
                 "id": f"{_TRANSPORT_BASEMAP_PREFIX}-stations-label",
                 "type": "symbol",
                 "source": "wd-basemap-transitland-stops",
                 "source-layer": "stops",
-                "minzoom": 14,
+                # names one zoom LATER than the icons, and at the
+                # overlay's label floor (owner: "show basemap transport
+                # labels later")
+                "minzoom": 15,
                 "filter": ["==", ["get", "location_type"], 1],
                 "layout": {
                     "text-field": ["coalesce", ["get", "stop_name"], ""],
@@ -2969,14 +3070,13 @@ def transport_presence_style(colors: dict[str, str] | None = None) -> dict[str, 
                         "interpolate",
                         ["linear"],
                         ["zoom"],
-                        14,
+                        15,
                         10,
-                        16,
+                        17,
                         12,
                     ],
                     "text-anchor": "left",
                     "text-offset": [0.9, 0],
-                    "icon-ignore-placement": True,
                     # FULL profile only (symbol-sort-key is outside the
                     # subset whitelist): rail (2) / metro (1) stations
                     # before tram (0) before everything else
@@ -3045,15 +3145,40 @@ def accommodations_presence_style() -> dict[str, Any]:
                 "encoding": "mlt",
                 "minzoom": 5,
                 "maxzoom": 14,
+                # same stable identity as the interactive overlay
+                "promoteId": "slug",
             }
         },
         "layers": [
+            _presence_plate(
+                layer_id=f"{prefix}selected",
+                source="wd-basemap-accommodations",
+                source_layer="geoplaces",
+                minzoom=10,
+                # the icons layer's own unclustered filter
+                filt=["<=", ["get", "count"], 1],
+                # the overlay plate's ring: the icon's category color
+                # (feature-state color), the fixed fallback
+                ring=[
+                    "case",
+                    ["boolean", ["feature-state", "color"], False],
+                    ["feature-state", "color"],
+                    "#2673bf",
+                ],
+                # the overlay plate's ladder is cut for its large icons;
+                # these icons are 0.22 → 0.38, so ~28 px per unit of
+                # icon-size (the transport plate's ratio) gives the ring
+                radius=(10, 6.5, 13, 8.5, 16, 11, 20, 13),
+            ),
             {
                 "//#id": "z10+ mono icons in the category color — "
                 "ALWAYS drawn (allow-overlap + ignore-placement: a "
                 "collision-active icon was culled by its neighbours "
                 "when zoomed in; an icon never claims space either, so "
-                "it evicts nothing). Names live in the label layer",
+                "it evicts nothing — the accommodations overlay's own "
+                "2026-11-23 exemption, mirrored; the transport presence "
+                "claims instead, like ITS overlay). Names live in the "
+                "label layer",
                 "id": f"{prefix}icons",
                 "type": "symbol",
                 "source": "wd-basemap-accommodations",
@@ -3147,6 +3272,34 @@ def accommodations_presence_style() -> dict[str, Any]:
     }
 
 
+# Basemap label layers that render OVER composed POI blocks — major
+# cities (place ranks 1–2) and ALL peak labels: the band the frontend
+# keeps interactive overlays below (its KEEPER_LABEL_PREFIXES) and the
+# admin preview inserts overlays below (owner 2026-11-23: icons render
+# BEHIND the main labels). ONE definition for every backend insertion.
+KEEPER_LABEL_PREFIXES: tuple[str, ...] = (
+    "place_point_label_rank_1",
+    "place_point_label_rank_2",
+    "place_peak_label_",
+)
+
+
+def keeper_label_index(layers: list[dict[str, Any]]) -> int | None:
+    """Index of the FIRST keeper-label layer in a style's layer list.
+
+    The bottom of the band a POI block must stay below — ``None`` when
+    the style has no keeper labels (raster/external basemaps).
+    """
+    return next(
+        (
+            index
+            for index, layer in enumerate(layers)
+            if str(layer.get("id", "")).startswith(KEEPER_LABEL_PREFIXES)
+        ),
+        None,
+    )
+
+
 def compose_basemap_style(
     doc: dict[str, Any],
     blocks: list[dict[str, Any]],
@@ -3162,8 +3315,14 @@ def compose_basemap_style(
     * each block inserts before its SLOT's anchor —
       ``anchors[block["slot"]]["before"]``, the SAME insertion-point
       system the frontend uses for overlays (one mechanism, no
-      per-basemap name lists in the block). No anchor for the slot
-      (anchorless basemap): before the first symbol layer carrying a
+      per-basemap name lists in the block). No anchor for the slot (the
+      presence rows carry none): directly BELOW the keeper-label band
+      (``KEEPER_LABEL_PREFIXES``) — where the frontend places interactive
+      overlays, so a passive presence reads like its overlay: the major
+      labels stay on top and every minor label (roads, water, parks,
+      lesser places) is placed after the icons (owner 2026-11-27: a
+      station icon hid behind a street name). No keeper labels
+      (external basemap): before the first symbol layer carrying a
       ``text-field`` (the label band — POIs belong there); no symbols
       at all: append.
 
@@ -3192,6 +3351,11 @@ def compose_basemap_style(
                 ids = [layer.get("id") for layer in doc["layers"]]
                 if slot_anchor["before"] in ids:
                     index = ids.index(slot_anchor["before"])
+        if index is None:
+            # keeper band first, then the label band (see docstring)
+            keeper = keeper_label_index(doc["layers"])
+            if keeper is not None:
+                index = keeper
         if index is None:
             # label-band fallback: first symbol layer with a text field
             for i, layer in enumerate(doc["layers"]):

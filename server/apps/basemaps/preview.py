@@ -30,7 +30,10 @@ from server.apps.basemaps.resolution import (
     resolve_tokens,
     substitute_env_tree,
 )
-from server.apps.basemaps.seed_lib import compose_basemap_style
+from server.apps.basemaps.seed_lib import (
+    KEEPER_LABEL_PREFIXES,
+    compose_basemap_style,
+)
 from server.apps.basemaps.validation import run_styl, validate_subset_style
 
 
@@ -268,20 +271,16 @@ def _compose_overlay_on_basemap(
     # Overlay layers insert BELOW the main-label strata (owner
     # 2026-11-23: icons render BEHIND major city/peak labels — the
     # labels paint over the icons instead of the reverse). The first
-    # keeper-label layer (place rank 1/2, peaks) marks the insertion
-    # point; appended at the end only when no keeper exists.
-    _KEEPER_LABEL_PREFIXES = (
-        "place_point_label_rank_1",
-        "place_point_label_rank_2",
-        "place_peak_label_",
-    )
+    # keeper-label layer (place rank 1/2, peaks — ONE definition shared
+    # with the serve-time composition) marks the insertion point;
+    # appended at the end only when no keeper exists.
     overlay_layers = list(overlay_doc.get("layers") or [])
     target_layers = basemap_doc.setdefault("layers", [])
     insert_at = next(
         (
             i
             for i, layer in enumerate(target_layers)
-            if str(layer.get("id", "")).startswith(_KEEPER_LABEL_PREFIXES)
+            if str(layer.get("id", "")).startswith(KEEPER_LABEL_PREFIXES)
         ),
         len(target_layers),
     )
