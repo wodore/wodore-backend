@@ -903,12 +903,15 @@ def basemap_composition(
     composed basemap contains.
 
     Presence layers (``role=presence``, slug
-    ``<family>-presence``, ONE subset-clean row per family — no
-    profile twins) are the overlay families' PASSIVE basemap presence:
-    zoomed-in only, mono icons in category colors, name labels from
-    high zoom, collision-active with importance sorting. The style
-    document doubles as the compose block (sources/sprite/layers/slot
-    root keys — ``compose_basemap_style`` reads exactly those).
+    ``<family>-presence``, ONE full-profile row per family — no
+    profile twins: the block carries SDF halo paints, ``promoteId`` and
+    ``symbol-sort-key``, none of which the subset whitelist admits) are
+    the overlay families' PASSIVE basemap presence: zoomed-in only,
+    mono icons in category colors, name labels from high zoom, placed
+    directly below the keeper-label band. The style document doubles
+    as the compose block (sources/sprite/layers root keys —
+    ``compose_basemap_style`` reads exactly those; a presence block
+    never carries a slot, see below).
 
     * subset-profile basemap rows are NOT composed (same rationale as
       before: the Leaflet fallback cannot tint SDF mono glyphs);
@@ -928,29 +931,34 @@ def basemap_composition(
     # set composes nothing.
     presences = (
         layer.presence_layers.filter(is_active=True)
-        .select_related("slot")
-        .only("pk", "slug", "modified", "style", "slot__slug")
+        .only("pk", "slug", "modified", "style")
         .order_by("slug")
     )
     blocks: list[dict[str, Any]] = []
     inputs: list[str] = []
+    linked: list[str] = []
     for presence in presences:
         style = presence.style
         if not (isinstance(style, dict) and style.get("layers")):
             continue
-        # the stored style stays spec-clean; the SLOT rides the row's
-        # FK and is injected transiently for compose_basemap_style
-        if presence.slot is not None:
-            style = {**style, "slot": presence.slot.slug}
+        # NO slot is injected: a presence block always takes the
+        # keeper-band placement (compose_basemap_style's anchorless
+        # path). A slot anchor would drop it below every label again —
+        # the stacking fixed on 2026-11-27. (The seed once declared
+        # ``"slot": "routes"`` for the transport presence; it was inert
+        # only because no such slot row existed.)
         blocks.append(style)
+        linked.append(presence.slug)
         inputs.append(f"presence:{presence.pk}:{presence.modified.isoformat()}")
     # The LINK set itself is a content input: linking/unlinking a
     # presence changes the composed body without touching any row's
     # ``modified`` — without this the style-body cache and the version
     # token would keep serving the pre-rewire composition (seen live:
     # the dev server served a presence-less basemap after the seed
-    # wired the M2M).
-    inputs.append("presence-links:" + ",".join(str(b["name"]) for b in blocks))
+    # wired the M2M). Keyed by the row's slug: a style document's
+    # ``name`` is optional in the style spec, and an admin edit that
+    # drops it must not 500 every basemap and catalog request.
+    inputs.append("presence-links:" + ",".join(linked))
     return blocks, inputs
 
 

@@ -1924,11 +1924,34 @@ class TransportBasemapBlockTests(SimpleTestCase):
             n.startswith(TRANSPORT_BASEMAP_SPRITE_ID + ":") for n in names
         )
         # a PRESENCE style document: spec-legal root keys only —
-        # placement is the keeper-label band (or a basemap's slot
-        # anchor, should the row carry one); no custom root keys
+        # placement is ALWAYS the keeper-label band (a presence block
+        # carries no slot); no custom root keys
         assert "slot" not in block
         assert block["version"] == 8
         assert "glyphs" in block
+
+    def test_presence_layer_prefix_is_the_one_namespace(self) -> None:
+        """Every presence layer id sits under its family's always-replace
+        prefix — the ONE namespace the frontend hides and the admin
+        preview strips by (seed_lib ``presence_layer_prefix``)."""
+        from server.apps.basemaps.seed_lib import (
+            accommodations_presence_style,
+            presence_layer_prefix,
+            transport_presence_style,
+        )
+
+        # the legacy alias: transport predates the slug-named namespace
+        assert presence_layer_prefix("transport-stops") == "wd-basemap-transit-"
+        assert presence_layer_prefix("accommodations") == "wd-basemap-accommodations-"
+        assert presence_layer_prefix("huts") == "wd-basemap-huts-"
+        assert all(
+            layer["id"].startswith("wd-basemap-transit-")
+            for layer in transport_presence_style()["layers"]
+        )
+        assert all(
+            layer["id"].startswith("wd-basemap-accommodations-")
+            for layer in accommodations_presence_style()["layers"]
+        )
 
     def test_compose_anchors_into_the_slot_anchor(self) -> None:
         from server.apps.basemaps.seed_lib import (
@@ -2173,6 +2196,87 @@ class TestTransportBasemapServing:
         assert icon["id"] == "wd-basemap-transit-stations"
         assert icon["layout"]["icon-allow-overlap"] is True
         assert "icon-ignore-placement" not in icon["layout"]
+
+    def test_presence_rows_are_seeded_without_a_slot(self) -> None:
+        """A presence block always takes the keeper-band placement. The
+        seed used to declare ``"slot": "routes"`` for the transport
+        presence — inert only because no such slot row existed; with
+        one, the block would drop below every label again."""
+        from django.core.management import call_command
+
+        from server.apps.basemaps.models import MapLayer
+
+        call_command("map_seed", verbosity=0)
+        for slug in ("transport-stops-presence", "accommodations-presence"):
+            assert MapLayer.objects.get(slug=slug).slot is None, slug
+        # the row metadata follows the real floors (icons z14)
+        assert MapLayer.objects.get(slug="transport-stops-presence").min_zoom == 14
+
+    def test_presence_ignores_a_slot_and_a_nameless_style(self) -> None:
+        """Robustness: a slot on a presence row must not move its block,
+        and a style document without the optional ``name`` must not
+        break the composition inputs — both run on every basemap and
+        catalog request."""
+        from django.core.management import call_command
+        from django.test.client import Client
+
+        from server.apps.basemaps.models import MapLayer, MapSlot
+        from server.apps.basemaps.seed_lib import KEEPER_LABEL_PREFIXES
+
+        call_command("map_seed", verbosity=0)
+        transport = MapLayer.objects.get(slug="transport-stops-presence")
+        transport.slot = MapSlot.objects.create(slug="routes", label="Routes", order=5)
+        transport.save()
+        accommodations = MapLayer.objects.get(slug="accommodations-presence")
+        # ``name`` is optional in the MapLibre style spec
+        assert accommodations.style is not None
+        accommodations.style = {
+            key: value for key, value in accommodations.style.items() if key != "name"
+        }
+        accommodations.save()
+
+        assert Client().get("/v1/map/layers").status_code == 200
+        response = Client().get("/v1/map/styles/wd-outdoor-base-mtk-hill.json")
+        assert response.status_code == 200
+        ids = [layer["id"] for layer in response.json()["layers"]]
+        keeper = next(
+            i for i, x in enumerate(ids) if x.startswith(KEEPER_LABEL_PREFIXES)
+        )
+        # the slot moved nothing: both blocks still sit directly below
+        # the band, in seed (slug) order
+        assert ids[keeper - 6 : keeper] == [
+            "wd-basemap-accommodations-selected",
+            "wd-basemap-accommodations-icons",
+            "wd-basemap-accommodations-labels",
+            "wd-basemap-transit-stations-selected",
+            "wd-basemap-transit-stations",
+            "wd-basemap-transit-stations-label",
+        ]
+
+    def test_admin_preview_replaces_the_family_presence(self) -> None:
+        """The admin live preview strips the previewed overlay's PASSIVE
+        presence from the composed basemap, as the live map does. The
+        prefix lookup used to read the since-removed ``config.basemap``
+        and had gone dead: overlay and presence drew doubled."""
+        from django.core.management import call_command
+
+        from server.apps.basemaps.models import MapLayer
+        from server.apps.basemaps.preview import _compose_overlay_on_basemap
+
+        call_command("map_seed", verbosity=0)
+        overlay = MapLayer.objects.filter(slug="transport-stops").first()
+        assert overlay is not None
+        doc, basemap_slug, _warnings = _compose_overlay_on_basemap(
+            {"version": 8, "sources": {}, "layers": []},
+            overlay,
+            "wd-outdoor-base-mtk-hill",
+            "http://tiles.test",
+        )
+        assert basemap_slug == "wd-outdoor-base-mtk-hill"
+        ids = [str(layer.get("id", "")) for layer in doc["layers"]]
+        assert not any(layer_id.startswith("wd-basemap-transit-") for layer_id in ids)
+        # the other family's presence stays
+        assert "wd-basemap-accommodations-icons" in ids
 
     def test_presence_rows_stay_out_of_the_public_catalog(self) -> None:
         """Presence rows are composition internals: they leave through

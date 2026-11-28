@@ -2850,7 +2850,21 @@ TRANSPORT_BASEMAP_SPRITE_ID = "wd-basemap-transport"
 #: contract (owner 2026-11-17): no ``replaces`` list to maintain. The
 #: frontend hides every layer matching ``wd-basemap-<slug>-*`` when
 #: the overlay is active; the ids alone carry the mapping.
-_TRANSPORT_BASEMAP_PREFIX = "wd-basemap-transit"
+#: Legacy id namespace of a presence family that differs from its slug —
+#: the transport presence predates the slug-named namespace. The frontend
+#: carries the same alias (utils/basemap-presence.ts
+#: ``PRESENCE_PREFIX_ALIASES``); the admin preview strips by it.
+_PRESENCE_PREFIX_ALIASES: dict[str, str] = {"transport-stops": "wd-basemap-transit-"}
+
+
+def presence_layer_prefix(slug: str) -> str:
+    """The ``wd-basemap-<family>-`` prefix of a POI family's passive
+    presence layers — the always-replace namespace (frontend twin:
+    ``presenceLayerPrefix`` in utils/basemap-presence.ts)."""
+    return _PRESENCE_PREFIX_ALIASES.get(slug, f"wd-basemap-{slug}-")
+
+
+_TRANSPORT_BASEMAP_PREFIX = presence_layer_prefix("transport-stops")[:-1]
 
 
 def _presence_plate(
@@ -3113,13 +3127,14 @@ def accommodations_presence_style() -> dict[str, Any]:
     Owner contract (2026-11-23): zoomed-in only (z10 floor — later
     than the interactive overlay's z5 clusters), ALWAYS the mono icon
     in the category color (SDF tint, no per-kind icon art), name
-    labels from z15, collision-active with importance sorting — the
-    less important POI hides (and icons near major labels yield:
-    the presence inserts before the label band). The layer ids carry
-    the always-replace namespace the frontend hides while the
-    interactive overlay is toggled on.
+    labels from z15. Icons always draw and never claim space — the
+    accommodations overlay's own 2026-11-23 exemption, mirrored (the
+    transport presence claims instead, like ITS overlay). The block is
+    composed directly below the keeper-label band: the major labels
+    stay on top. The layer ids carry the always-replace namespace the
+    frontend hides while the interactive overlay is toggled on.
     """
-    prefix = "wd-basemap-accommodations-"
+    prefix = presence_layer_prefix("accommodations")
     return {
         "version": 8,
         "name": "accommodations-presence",
@@ -3230,9 +3245,10 @@ def accommodations_presence_style() -> dict[str, Any]:
                 },
             },
             {
-                "//#id": "names from z15 — decoration that never claims "
-                "placement (labels yield to icons and declutter each "
-                "other); importance-sorted so the notable places win",
+                "//#id": "names from z15 — importance-sorted so the "
+                "notable places win; they claim their space (minor "
+                "labels yield) and declutter each other; no icon is "
+                "ever evicted by a name (icons always draw)",
                 "id": f"{prefix}labels",
                 "type": "symbol",
                 "source": "wd-basemap-accommodations",
@@ -3256,7 +3272,6 @@ def accommodations_presence_style() -> dict[str, Any]:
                     ],
                     "text-anchor": "left",
                     "text-offset": [0.9, 0],
-                    "icon-ignore-placement": True,
                     # ascending sort with negated importance → the
                     # MOST important places first → they win collision
                     "symbol-sort-key": ["-", 0, ["get", "importance"]],

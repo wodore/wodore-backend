@@ -33,6 +33,7 @@ from server.apps.basemaps.resolution import (
 from server.apps.basemaps.seed_lib import (
     KEEPER_LABEL_PREFIXES,
     compose_basemap_style,
+    presence_layer_prefix,
 )
 from server.apps.basemaps.validation import run_styl, validate_subset_style
 
@@ -299,11 +300,13 @@ def _compose_overlay_on_basemap(
 
 
 def _overlay_block_prefix(layer: MapLayer) -> str:
-    """The wd-basemap-<slug>-* prefix from the overlay's config.basemap."""
-    block = (layer.config or {}).get("basemap")
-    if isinstance(block, dict):
-        return str(block.get("id_prefix", ""))
-    return ""
+    """The ``wd-basemap-<family>-`` prefix of the overlay family's PASSIVE
+    presence layers (seed_lib ``presence_layer_prefix`` — the namespace
+    the frontend's always-replace contract hides while the overlay is
+    on). The preview strips it from the composed basemap so the
+    previewed overlay replaces its presence, as on the live map. A
+    family without a presence simply has no layer under its prefix."""
+    return presence_layer_prefix(layer.slug)
 
 
 @require_POST

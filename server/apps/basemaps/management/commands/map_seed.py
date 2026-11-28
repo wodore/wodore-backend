@@ -663,14 +663,15 @@ LAYERS: list[dict[str, Any]] = [
         # hides while the interactive overlay is on).
         "slug": "transport-stops-presence",
         "role": MapLayer.Role.presence,
-        "slot": "routes",
         "name": "Transport stops (basemap presence)",
         "description": (
             "Passive basemap presence of the transport overlay: "
-            "stations as mono icons in mode colors, z13+, labels "
-            "from z14 — collision-active, less important yields."
+            "stations as mono icons in mode colors from z14, names "
+            "from z15 — directly below the major labels: minor "
+            "labels yield to the icons, the major ones stay on top. "
+            "No slot: a presence always takes the keeper-band placement."
         ),
-        "min_zoom": 13,
+        "min_zoom": 14,
         "style": lib.transport_presence_style(),
         "is_active": True,
         "attributions": ["transitland", "openstreetmap"],
@@ -682,7 +683,9 @@ LAYERS: list[dict[str, Any]] = [
         "description": (
             "Passive basemap presence of the accommodations overlay: "
             "mono icons in category colors from z10, name labels "
-            "from z15 — collision-active with importance sorting."
+            "from z15 — icons always draw and never claim space (the "
+            "overlay's 2026-11-23 exemption), directly below the major "
+            "labels."
         ),
         "min_zoom": 10,
         "style": lib.accommodations_presence_style(),
