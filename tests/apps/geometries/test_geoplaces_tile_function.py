@@ -423,3 +423,148 @@ class TestTileCache:
         with connection.cursor() as cursor:
             cursor.execute("SELECT count(*) FROM geometries_tile_cache")
             assert cursor.fetchone()[0] == 0
+
+
+class TestPrimaryCategoryIsTheAnchor:
+    """geometries.0078: a place's primary category is its ANCHOR (the
+    stored ``kind``), then tree order.
+
+    A seasonal place carries one association per operating mode — a hut
+    is ``hut`` classified ``mode.standard`` and ``selfhut`` classified
+    ``mode.reduced`` — and ``kinds.py`` already resolves the kind to the
+    ``standard`` one. Both SQL functions used to rank by bare tree
+    order, where ``selfhut`` (40) sorts before ``hut`` (50): every
+    staffed hut rendered with the UNATTENDED icon (owner report,
+    Wildstrubelh\"utte SAC).
+
+    This is a DIFFERENTIAL test: it runs the live (fixed) functions,
+    then the pre-0078 bodies side by side in the SAME test. The middle
+    step is the bug reproduced on the old code — on every run, which is
+    the only proof of a regression test that holds (rolling the database
+    back outside pytest cannot show it: ``--reuse-db`` re-applies the
+    migration at session start).
+
+    Safety: ``CREATE OR REPLACE FUNCTION`` is transactional in Postgres.
+    The old bodies are installed inside a SAVEPOINT of the test's own
+    transaction and rolled back — nothing is committed, so nothing can
+    leak into the reused database. (NOT ``transaction=True`` + a restore
+    ``finally``: that commits the DDL, and a run killed between install
+    and restore would leave the OLD body in place — ``serialized_rollback``
+    restores rows only, and ``--reuse-db`` does not heal a body swapped
+    while the migration is still recorded as applied.)
+    """
+
+    pytestmark = pytest.mark.usefixtures("poi_tree")
+
+    @staticmethod
+    def _seasonal_hut(poi_tree: dict[str, Category], kind_slug: str) -> GeoPlace:
+        """A place with TWO associations — ``hut`` (mode.standard, the
+        open season) and ``selfhut`` (mode.reduced, the closed season)
+        — anchored on ``kind_slug``. Self-contained: the classifier tree
+        and ``selfhut`` are seed data, which the per-test flush and
+        ``--reuse-db`` do not guarantee."""
+        from server.apps.geometries.models import GeoPlaceCategory
+
+        mode = _category("mode")
+        standard = _category("standard", parent=mode, identifier="mode.standard")
+        reduced = _category("reduced", parent=mode, identifier="mode.reduced")
+        group = poi_tree["group"]
+        selfhut = _category("selfhut", parent=group, color="#654321")
+        hut = poi_tree["hut"]
+        # The bug needs the CLOSED-season type to sort FIRST in tree order
+        # (production: selfhut 40 < hut 50 — the seed carries these values;
+        # pinning them keeps the precondition true where the tree is seeded
+        # differently). The other way round the old ranking would already
+        # pick ``hut`` and the middle step below would prove nothing.
+        Category.objects.filter(pk=selfhut.pk).update(order=40)
+        Category.objects.filter(pk=hut.pk).update(order=50)
+        selfhut.refresh_from_db()
+        hut.refresh_from_db()
+        assert selfhut.order < hut.order, (selfhut.order, hut.order)
+
+        place = GeoPlace.objects.create(
+            name="Staffed Hut",
+            location=Point(LON, LAT, srid=4326),
+            country_code="CH",
+            importance=80,
+            is_active=True,
+            is_public=True,
+        )
+        GeoPlaceCategory.objects.create(
+            geo_place=place, category=hut, classifier=standard
+        )
+        GeoPlaceCategory.objects.create(
+            geo_place=place, category=selfhut, classifier=reduced
+        )
+        kind = hut if kind_slug == "hut" else selfhut
+        GeoPlace.objects.filter(pk=place.pk).update(kind=kind)
+        place.refresh_from_db()
+        return place
+
+    @staticmethod
+    def _resolved(slug: str) -> tuple[str, str]:
+        """(tile icon category, membership category) for one place —
+        through BOTH functions. ``cache_ttl_days: 0`` on the tile call,
+        or the second read would return the first one's cached tile and
+        hide a body swap."""
+        feature = next(
+            f
+            for f in _fetch(14, {"lang": "de", "cache_ttl_days": 0})
+            if f.get("slug") == slug
+        )
+        envelope = Point(LON, LAT, srid=4326).buffer(0.02)
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT category_slug FROM geoplaces_cluster_membership"
+                "(%s, %s, %s::jsonb) WHERE slug = %s",
+                [
+                    14,
+                    envelope.wkt,
+                    json.dumps({"category_tree": "accommodation"}),
+                    slug,
+                ],
+            )
+            row = cursor.fetchone()
+        assert row is not None, "the hut must be a member of its cell"
+        return str(feature["category_slug"]), str(row[0])
+
+    @pytest.mark.parametrize("kind_slug", ["hut", "selfhut"])
+    def test_anchor_fixes_what_tree_order_broke(
+        self, poi_tree: dict[str, Category], kind_slug: str
+    ) -> None:
+        import importlib
+
+        from django.db import transaction
+
+        migration = importlib.import_module(
+            "server.apps.geometries.migrations.0078_primary_category_is_the_anchor"
+        )
+        place = self._seasonal_hut(poi_tree, kind_slug)
+        # the category follows the STORED anchor — a "fix" that hardcoded
+        # mode.standard instead would fail the selfhut case
+        assert self._resolved(place.slug) == (kind_slug, kind_slug)
+
+        savepoint = transaction.savepoint_create()
+        with connection.cursor() as cursor:
+            # both: the tile function's clustered path calls membership
+            cursor.execute(migration.PRE_0078_MEMBERSHIP_SQL)
+            cursor.execute(migration.PRE_0078_FUNCTION_SQL)
+        try:
+            # the OLD ranking, on the OLD bodies — the bug, reproduced
+            # on every run (a fixture that stops triggering it fails here)
+            assert self._resolved(place.slug) == ("selfhut", "selfhut")
+        finally:
+            # reporting hygiene only — the test's own transaction is
+            # what keeps the database safe
+            transaction.savepoint_rollback(savepoint)
+
+        # the savepoint rollback restored the live (fixed) bodies
+        assert self._resolved(place.slug) == (kind_slug, kind_slug)
+
+    def test_place_without_classifier_keeps_tree_order(self) -> None:
+        """No seasonal associations → the anchor already IS the first
+        category by order; the ranking change is a no-op."""
+        features = _fetch(14, {"lang": "de", "cache_ttl_days": 0})
+        by_name = {f.get("name"): f for f in features}
+        assert by_name["Clusterhutte A"]["category_slug"] == "hut"
+        assert by_name["Grand Hotel"]["category_slug"] == "hotel"
