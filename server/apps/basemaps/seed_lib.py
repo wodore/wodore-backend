@@ -942,6 +942,24 @@ _AMENITY_TEXT_SIZE_STOPS: list[tuple[int, float]] = [
 ]
 
 
+#: Tile query of the accommodations geoplaces source — ONE for the
+#: interactive overlay and its passive presence: identical tiles under
+#: one URL, so toggling the overlay reuses what the presence already
+#: fetched (two URLs kept two cache entries of the same viewport).
+ACCOMMODATIONS_TILE_QUERY = (
+    "?category_tree=accommodation"
+    # flat color/parent/category_identifier props plus elevation
+    # (popups) — the `category` object and `categories` array are
+    # opt-in fields and stay off (they dominate tile size; nothing in
+    # these documents reads them)
+    "&fields=color,parent_color,parent_slug,"
+    "category_identifier,importance,count,name,slug,"
+    "elevation"
+    "&max_label_zoom=11&cluster_max_zoom=7"
+    "&cache_ttl_days=1"
+)
+
+
 def accommodations_style() -> dict[str, Any]:
     """The accommodations overlay style — the huts look on POI data.
 
@@ -1023,17 +1041,7 @@ def accommodations_style() -> dict[str, Any]:
                 "tiles": [
                     (
                         "{{env:MARTIN_TILE_URL}}/geoplaces/{z}/{x}/{y}.mlt"
-                        "?category_tree=accommodation"
-                        # flat color/parent/category_identifier props plus
-                        # elevation (popups) — the `category` object and
-                        # `categories` array are opt-in fields and stay off
-                        # (they dominate tile size; nothing in this
-                        # document reads them)
-                        "&fields=color,parent_color,parent_slug,"
-                        "category_identifier,importance,count,name,slug,"
-                        "elevation"
-                        "&max_label_zoom=11&cluster_max_zoom=7"
-                        "&cache_ttl_days=1"
+                        + ACCOMMODATIONS_TILE_QUERY
                     )
                 ],
                 "encoding": "mlt",
@@ -2939,22 +2947,26 @@ def _presence_plate(
 
 
 def transport_presence_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
-    """The transport overlay's BASEMAP presence (config ``basemap``).
+    """The transport family's PASSIVE basemap presence (``role=presence``).
 
     "My POIs, not the basemap's" (owner 2026-11-17): stations show in
-    every basemap when the overlay is OFF — later (z13 vs the overlay's
-    z11) and simpler (station mono glyph + name label, no bands, no
-    hover/selection) — replacing the basemaps' native transit POIs
-    (OFM ``poi_transit``, MTK ``wd-station*`` — both removed). The
-    style endpoint composes this block into basemap documents at SERVE
-    time (map_seed stays fixtures-only; admin edits survive) and the
+    the Wodore vector basemaps when the interactive overlay is OFF —
+    zoomed-in only (icons z14, names z15: the overlay's own icon and
+    label floors, so a station looks the same whether the overlay is
+    on or off) — replacing the basemaps' native transit POIs (OFM
+    ``poi_transit``, MTK ``wd-station*``: both removed). The style
+    endpoint composes the row's document into basemap documents at
+    SERVE time (api.basemap_composition; admin edits survive) and the
     CI dump composes the same way, so the validated document is the
     served document.
 
-    ``slot`` rides the basemap's overlay-slot anchors (one mechanism
-    for overlays and blocks — ``anchors["routes"]["before"]``, the
-    freed native transit-POI slot); :func:`compose_basemap_style`
-    falls back to the label band for anchorless basemaps.
+    Placement: directly below the keeper-label band — icons behind the
+    major city/peak labels, minor labels yielding to them. A selection
+    plate under the icon gives a selected passive station the same
+    ring a selected overlay station gets. While the overlay is on it
+    replaces the presence (the frontend hides the family's
+    ``wd-basemap-transit-*`` namespace — the legacy alias of this
+    family's prefix).
     """
     palette = {**TRANSPORT_FALLBACK_COLORS, **(colors or {})}
     prefix = TRANSPORT_BASEMAP_SPRITE_ID + ":"
@@ -2970,11 +2982,11 @@ def transport_presence_style(colors: dict[str, str] | None = None) -> dict[str, 
 
     return {
         # A PRESENCE-layer style document (role=presence row, one per
-        # family, composed into every full-profile basemap): spec-legal
+        # family, composed into the basemaps linked to it): spec-legal
         # root keys only — the layer IDS carry the always-replace
-        # namespace (wd-basemap-transport-*), and compose_basemap_style
-        # places it directly below the keeper-label band (or before the
-        # basemap's slot anchor, should the row ever carry one).
+        # namespace (wd-basemap-transit-*), and compose_basemap_style
+        # places it directly below the keeper-label band (a presence
+        # block never carries a slot).
         "version": 8,
         "name": "transport-stops-presence",
         "glyphs": GLYPHS,
@@ -3151,10 +3163,7 @@ def accommodations_presence_style() -> dict[str, Any]:
                 "tiles": [
                     (
                         "{{env:MARTIN_TILE_URL}}/geoplaces/{z}/{x}/{y}.mlt"
-                        "?category_tree=accommodation"
-                        "&fields=color,parent_color,parent_slug,"
-                        "category_identifier,importance,count,name,slug,"
-                        "elevation&max_label_zoom=11&cluster_max_zoom=7"
+                        + ACCOMMODATIONS_TILE_QUERY
                     )
                 ],
                 "encoding": "mlt",
@@ -3292,11 +3301,31 @@ def accommodations_presence_style() -> dict[str, Any]:
 # keeps interactive overlays below (its KEEPER_LABEL_PREFIXES) and the
 # admin preview inserts overlays below (owner 2026-11-23: icons render
 # BEHIND the main labels). ONE definition for every backend insertion.
+#
+# Deliberately NOT extended with Liberty-style ids (peak-rank*,
+# label_city*): the one Liberty-derived basemap (wd-outdoor-base-ofm-hill,
+# the hidden fallback) orders its labels the other way round — peaks
+# first, countries last — so "before the first keeper layer" IS the
+# bottom of its label stack. Listing those ids would move nothing for
+# presence there and would drag INTERACTIVE overlays off their anchor
+# (highway-name-path) below every label. Presence keeps the
+# first-text-layer fallback on that basemap: its icons draw under the
+# labels (known limitation, 2026-11-28).
 KEEPER_LABEL_PREFIXES: tuple[str, ...] = (
     "place_point_label_rank_1",
     "place_point_label_rank_2",
     "place_peak_label_",
 )
+
+
+#: Bump on EVERY change to how a basemap is composed from its rows —
+#: compose_basemap_style, the keeper band above, a presence style's
+#: layer structure. api.basemap_composition folds it into the style
+#: version token and the body-cache digest, so a composition change
+#: rotates ``?v=`` even when no row's data changed (otherwise an
+#: immutable URL could serve the previous stacking for up to a year).
+#: Same pattern as the tile sources' ``revision`` (tile_assets.py).
+STYLE_COMPOSITION_REVISION = 2  # 2: below the keeper band, selection plates
 
 
 def keeper_label_index(layers: list[dict[str, Any]]) -> int | None:

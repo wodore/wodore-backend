@@ -1351,10 +1351,13 @@ class Migration(migrations.Migration):
     operations = [
         # Purge BEFORE the function swap: rows written by the old
         # functions must never outlive the deploy that replaces them
-        # (0077 precedent).
+        # (0077 precedent). Its REVERSE purges too: Django replays the
+        # reversed operation list back to front, so on the way back the
+        # old bodies return first and this runs LAST, clearing the rows
+        # the new ranking wrote.
         migrations.RunSQL(
             sql=CACHE_PURGE_SQL,
-            reverse_sql=migrations.RunSQL.noop,
+            reverse_sql=CACHE_PURGE_SQL,
         ),
         migrations.RunSQL(
             sql=MEMBERSHIP_SQL,
@@ -1364,14 +1367,12 @@ class Migration(migrations.Migration):
             sql=FUNCTION_SQL,
             reverse_sql=PRE_0078_FUNCTION_SQL,
         ),
-        # The reverse restores the OLD ranking: its cached rows are
-        # stale in the other direction.
-        # (reverse order of a migrate is operations reversed — the
-        # purge below runs FIRST on `migrate geometries 0077`).
     ]
 
-    # Appended as a trailing operation so it runs LAST forwards and
-    # FIRST in reverse (Django reverses the operation list).
+    # Appended as a trailing operation so it runs LAST forwards — after
+    # the new bodies are in place (rows the old ranking wrote must not
+    # outlive the deploy). Its reverse is a no-op: on the way back the
+    # FIRST operation's reverse purges (see above).
 
     operations.append(
         migrations.RunSQL(

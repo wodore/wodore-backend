@@ -1953,6 +1953,56 @@ class TransportBasemapBlockTests(SimpleTestCase):
             for layer in accommodations_presence_style()["layers"]
         )
 
+    def test_accommodations_tile_query_is_shared(self) -> None:
+        """The interactive accommodations overlay and its passive presence
+        request the SAME tiles: one URL means one cache entry, so
+        toggling the overlay reuses what the presence already fetched."""
+        from server.apps.basemaps.seed_lib import (
+            ACCOMMODATIONS_STYLE,
+            accommodations_presence_style,
+        )
+
+        overlay = ACCOMMODATIONS_STYLE["sources"]["wd-accommodations"]["tiles"]
+        presence = accommodations_presence_style()["sources"][
+            "wd-basemap-accommodations"
+        ]["tiles"]
+        assert overlay == presence
+        assert "cache_ttl_days=1" in overlay[0]
+
+    def test_dump_presence_blocks_follow_the_serve_order(self) -> None:
+        """The CI dump composes the presence blocks the way production
+        does: ordered by slug (api.basemap_composition) and keyed by
+        slug — a style document's ``name`` is optional and must not
+        decide whether a block is validated."""
+        from server.apps.basemaps.management.commands.dump_map_styles import (
+            _presence_blocks,
+        )
+        from server.apps.basemaps.management.commands.map_seed import LAYERS
+
+        assert [slug for slug, _style in _presence_blocks(LAYERS)] == [
+            "accommodations-presence",
+            "transport-stops-presence",
+        ]
+        fake: list[dict[str, Any]] = [
+            {
+                "slug": "b-presence",
+                "role": "presence",
+                "style": {"version": 8, "layers": [{"id": "x"}]},
+            },
+            {
+                "slug": "a-presence",
+                "role": "presence",
+                "style": {"version": 8, "name": "A", "layers": [{"id": "y"}]},
+            },
+            {"slug": "overlay", "role": "overlay", "style": {"layers": [{"id": "z"}]}},
+            {"slug": "empty-presence", "role": "presence", "style": {"layers": []}},
+        ]
+        # the name-less block is still a block; overlays and empty styles are not
+        assert [slug for slug, _style in _presence_blocks(fake)] == [
+            "a-presence",
+            "b-presence",
+        ]
+
     def test_compose_anchors_into_the_slot_anchor(self) -> None:
         from server.apps.basemaps.seed_lib import (
             compose_basemap_style,
@@ -2213,10 +2263,10 @@ class TestTransportBasemapServing:
         assert MapLayer.objects.get(slug="transport-stops-presence").min_zoom == 14
 
     def test_presence_ignores_a_slot_and_a_nameless_style(self) -> None:
-        """Robustness: a slot on a presence row must not move its block,
-        and a style document without the optional ``name`` must not
-        break the composition inputs — both run on every basemap and
-        catalog request."""
+        """Robustness: a slot — on the row, or pasted into the stored
+        document — must not move a presence block, and a style document
+        without the optional ``name`` must not break the composition
+        inputs; all of it runs on every basemap and catalog request."""
         from django.core.management import call_command
         from django.test.client import Client
 
@@ -2233,6 +2283,11 @@ class TestTransportBasemapServing:
         accommodations.style = {
             key: value for key, value in accommodations.style.items() if key != "name"
         }
+        # a legacy root ``slot`` pasted into the stored document must not
+        # reach the composer either (the style spec allows unknown root
+        # keys — this basemap DOES have a `routes` anchor, so the block
+        # would visibly move)
+        accommodations.style["slot"] = "routes"
         accommodations.save()
 
         assert Client().get("/v1/map/layers").status_code == 200
@@ -2277,6 +2332,61 @@ class TestTransportBasemapServing:
         assert not any(layer_id.startswith("wd-basemap-transit-") for layer_id in ids)
         # the other family's presence stays
         assert "wd-basemap-accommodations-icons" in ids
+
+    def test_admin_preview_of_a_presence_row_has_no_duplicate_ids(self) -> None:
+        """The live editor edits a presence row's own document: the
+        composition must leave that row's stored copy out, or every layer
+        id appears twice once the editor's document is appended."""
+        from django.core.management import call_command
+
+        from server.apps.basemaps.models import MapLayer
+        from server.apps.basemaps.preview import _compose_overlay_on_basemap
+
+        call_command("map_seed", verbosity=0)
+        row = MapLayer.objects.get(slug="transport-stops-presence")
+        assert row.style is not None
+        doc, _slug, _warnings = _compose_overlay_on_basemap(
+            dict(row.style),
+            row,
+            "wd-outdoor-base-mtk-hill",
+            "http://tiles.test",
+        )
+        ids = [str(layer.get("id", "")) for layer in doc["layers"]]
+        assert len(ids) == len(set(ids)), "duplicate layer ids in the preview"
+        # its own layers exactly once; the other family untouched
+        assert ids.count("wd-basemap-transit-stations") == 1
+        assert "wd-basemap-accommodations-icons" in ids
+
+    def test_composition_revision_is_a_version_input(self) -> None:
+        """A change to the composition CODE changes every composed body
+        without touching a row: the revision must ride the version token,
+        or an immutable ``?v=`` URL would serve the old stacking for a
+        year."""
+        from unittest.mock import patch
+
+        from django.core.management import call_command
+        from django.test.client import Client
+
+        from server.apps.basemaps import api
+        from server.apps.basemaps.models import MapLayer
+        from server.apps.basemaps.seed_lib import STYLE_COMPOSITION_REVISION
+
+        call_command("map_seed", verbosity=0)
+        basemap = MapLayer.objects.get(slug="wd-outdoor-base-mtk-hill", spec="high")
+        _blocks, inputs = api.basemap_composition(basemap)
+        assert f"composition:{STYLE_COMPOSITION_REVISION}" in inputs
+        before = (
+            Client()
+            .get("/v1/map/styles/wd-outdoor-base-mtk-hill.json")
+            .headers["X-Map-Style-Version"]
+        )
+        with patch.object(api, "STYLE_COMPOSITION_REVISION", "bumped-for-the-test"):
+            after = (
+                Client()
+                .get("/v1/map/styles/wd-outdoor-base-mtk-hill.json")
+                .headers["X-Map-Style-Version"]
+            )
+        assert after != before
 
     def test_presence_rows_stay_out_of_the_public_catalog(self) -> None:
         """Presence rows are composition internals: they leave through

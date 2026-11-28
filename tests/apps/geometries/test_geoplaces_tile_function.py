@@ -568,3 +568,28 @@ class TestPrimaryCategoryIsTheAnchor:
         by_name = {f.get("name"): f for f in features}
         assert by_name["Clusterhutte A"]["category_slug"] == "hut"
         assert by_name["Grand Hotel"]["category_slug"] == "hotel"
+
+
+class Test0078ReversePurges:
+    """Rolling back 0078 restores the OLD ranking, so the rows the new
+    ranking wrote into the tile cache are stale in the other direction:
+    the reverse must purge too. Both purges used to be no-ops in reverse
+    while the comments claimed the leading one "runs FIRST" backwards —
+    Django replays the reversed operation list back to front."""
+
+    def test_reverse_of_the_leading_purge_purges(self) -> None:
+        import importlib
+
+        from django.db import migrations
+
+        migration = importlib.import_module(
+            "server.apps.geometries.migrations.0078_primary_category_is_the_anchor"
+        )
+
+        operations = migration.Migration.operations
+        # backwards this operation runs LAST (after the old bodies are
+        # back) — its reverse must purge
+        assert operations[0].reverse_sql == migration.CACHE_PURGE_SQL
+        # the trailing purge only has to run forwards
+        assert operations[-1].sql == migration.CACHE_PURGE_SQL
+        assert operations[-1].reverse_sql == migrations.RunSQL.noop

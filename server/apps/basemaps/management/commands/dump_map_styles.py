@@ -55,6 +55,22 @@ def _effective_styl_ignored(variant: dict[str, Any], parent: dict[str, Any]) -> 
     return variant.get("styl_ignored_rules", parent.get("styl_ignored_rules"))
 
 
+def _presence_blocks(layers: list[dict[str, Any]]) -> list[tuple[str, dict[str, Any]]]:
+    """The presence entries of the seed's LAYERS table as ``(slug, style)``
+    pairs — in the SERVE path's order (api.basemap_composition orders the
+    linked rows by slug) and keyed by slug: a style document's ``name`` is
+    optional in the style spec, so a block without one must not drop out
+    of the validated document, and the two families must stack exactly as
+    production stacks them."""
+    return sorted(
+        (entry["slug"], entry["style"])
+        for entry in layers
+        if entry.get("role") == MapLayer.Role.presence
+        and isinstance(entry.get("style"), dict)
+        and entry["style"].get("layers")
+    )
+
+
 class Command(BaseCommand):
     """Write every inline seed style (resolved) to an output directory."""
 
@@ -85,13 +101,7 @@ class Command(BaseCommand):
         # the CI validators would never see the injected layers. Same
         # collector as the serve path (Opus B1/B2: one source of
         # truth); the LAYERS list carries the presence entries.
-        blocks = [
-            entry["style"]
-            for entry in LAYERS
-            if entry.get("role") == MapLayer.Role.presence
-            and isinstance(entry.get("style"), dict)
-            and entry["style"].get("layers")
-        ]
+        blocks = _presence_blocks(LAYERS)
         for parent in LAYERS:
             variants = [parent, *parent.get("variants", [])]
             for variant in variants:
@@ -112,11 +122,10 @@ class Command(BaseCommand):
                         parent.get("presence_layers"),
                     )
                     if wanted is None:
-                        chosen = blocks
+                        chosen = [style for _slug, style in blocks]
                     else:
-                        # wanted carries the presence row SLUGS; the
-                        # style documents carry them as "name"
-                        chosen = [b for b in blocks if b.get("name") in wanted]
+                        # wanted carries the presence row SLUGS
+                        chosen = [style for slug, style in blocks if slug in wanted]
                     if chosen:
                         anchors = variant.get("anchors", parent.get("anchors"))
                         style = lib.compose_basemap_style(

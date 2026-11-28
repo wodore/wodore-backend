@@ -909,9 +909,9 @@ LAYERS: list[dict[str, Any]] = [
         # Overlay-slot anchors (catalog-wins over the frontend's legacy
         # map — which still anchors routes on the REMOVED wd-station-
         # label): routes at the transit-POI band, places under the
-        # rank-2 place labels. Also drives the serve-time basemap-block
-        # composition (config.basemap blocks insert at their slot's
-        # anchor — one mechanism, no per-basemap name lists).
+        # rank-2 place labels. Interactive overlays insert at these
+        # anchors; the passive presence does not use them — it is
+        # composed directly below the keeper-label band.
         "anchors": {
             "routes": {"before": "road_path_oneway_symbol"},
             "places": {"before": "place_point_label_rank_2"},

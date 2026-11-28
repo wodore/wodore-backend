@@ -472,14 +472,14 @@ class MapLayer(TimeStampedModel):
     class Role(models.TextChoices):
         basemap = "basemap", _("basemap")
         overlay = "overlay", _("overlay")
-        #: The overlay's PASSIVE basemap presence — a subset-clean
-        #: layer row (slug = the overlay family's slug, one row, no
-        #: profile twins) composed into every basemap at serve time.
-        #: Zoomed-in only, mono icons in category colors, name labels
-        #: from high zoom, collision-active (importance sort — the
-        #: less important POI yields). Excluded from the overlay
-        #: catalog (role=overlay filter); the frontend hides the
-        #: always-replace namespace while the interactive overlay
+        #: A POI family's PASSIVE basemap presence — ONE full-profile
+        #: layer row per family (slug ``<family>-presence``, no profile
+        #: twins) composed at serve time into the basemaps linked to it
+        #: (presence_layers). Zoomed-in only, mono icons in category
+        #: colors, name labels from high zoom, directly below the
+        #: keeper-label band. Excluded from the public layer catalog;
+        #: the frontend hides the family's always-replace namespace
+        #: (``wd-basemap-<family>-*``) while the interactive overlay
         #: is toggled on.
         presence = "presence", _("presence (passive basemap layer)")
 
@@ -565,7 +565,7 @@ class MapLayer(TimeStampedModel):
         choices=Role.choices,
         default=Role.overlay,
         db_index=True,
-        help_text=_("basemap or overlay"),
+        help_text=_("basemap, overlay or presence (passive basemap layer)"),
     )
     name = models.CharField(
         max_length=100,

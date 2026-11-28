@@ -80,7 +80,10 @@ from server.apps.api.controller import (
 )
 from server.apps.api.error_codes import ErrorCode
 from server.apps.api.query import dump_sparse, dump_sparse_list, sparse_fields_query
-from server.apps.basemaps.seed_lib import compose_basemap_style
+from server.apps.basemaps.seed_lib import (
+    STYLE_COMPOSITION_REVISION,
+    compose_basemap_style,
+)
 from server.apps.translations import LanguageQuery, override
 
 from .models import (
@@ -895,6 +898,7 @@ class MapCatalogController(ApiController):
 
 def basemap_composition(
     layer: MapLayer,
+    exclude_pk: int | None = None,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """Presence-layer styles for one basemap row + their version inputs.
 
@@ -917,7 +921,10 @@ def basemap_composition(
       before: the Leaflet fallback cannot tint SDF mono glyphs);
     * returns ``(blocks, inputs)`` — the inputs fold into the immutable
       version token AND the style-body cache digest, so a presence
-      edit rotates URLs and bodies together.
+      edit (or a change to the composition code itself,
+      ``STYLE_COMPOSITION_REVISION``) rotates URLs and bodies together;
+    * ``exclude_pk`` leaves one presence row out — the admin live
+      editor editing that row contributes the row's own document.
     """
     if (
         layer.role != MapLayer.Role.basemap
@@ -934,6 +941,8 @@ def basemap_composition(
         .only("pk", "slug", "modified", "style")
         .order_by("slug")
     )
+    if exclude_pk is not None:
+        presences = presences.exclude(pk=exclude_pk)
     blocks: list[dict[str, Any]] = []
     inputs: list[str] = []
     linked: list[str] = []
@@ -941,13 +950,15 @@ def basemap_composition(
         style = presence.style
         if not (isinstance(style, dict) and style.get("layers")):
             continue
-        # NO slot is injected: a presence block always takes the
-        # keeper-band placement (compose_basemap_style's anchorless
+        # NO slot reaches the composer: a presence block always takes
+        # the keeper-band placement (compose_basemap_style's anchorless
         # path). A slot anchor would drop it below every label again —
         # the stacking fixed on 2026-11-27. (The seed once declared
         # ``"slot": "routes"`` for the transport presence; it was inert
-        # only because no such slot row existed.)
-        blocks.append(style)
+        # only because no such slot row existed.) A legacy root
+        # ``slot`` pasted into the stored document is stripped here —
+        # the style spec does not reject unknown root keys.
+        blocks.append({key: value for key, value in style.items() if key != "slot"})
         linked.append(presence.slug)
         inputs.append(f"presence:{presence.pk}:{presence.modified.isoformat()}")
     # The LINK set itself is a content input: linking/unlinking a
@@ -959,6 +970,12 @@ def basemap_composition(
     # ``name`` is optional in the style spec, and an admin edit that
     # drops it must not 500 every basemap and catalog request.
     inputs.append("presence-links:" + ",".join(linked))
+    # The composition CODE is a version input too: a change to
+    # compose_basemap_style or to the keeper band changes every
+    # composed body without touching any row. Without this the token
+    # would not rotate, and an immutable URL would serve the previous
+    # stacking for up to a year.
+    inputs.append(f"composition:{STYLE_COMPOSITION_REVISION}")
     return blocks, inputs
 
 
@@ -1012,12 +1029,12 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
         response.headers["Cache-Control"] = REVALIDATE_CACHE_CONTROL
         return response
 
-    # Basemap composition (owner 2026-11-17): overlay basemap blocks
-    # (config.basemap — "my POIs, not the basemap's") merge in at SERVE
-    # time, so admin edits to either row survive and no re-seed is
-    # needed. The composed document is what gets resolved, cached,
-    # digested and ETagged; the contributing overlay rows' modified
-    # stamps fold into the immutable version token (a block change
+    # Basemap composition (owner 2026-11-17): the POI families' passive
+    # presence rows (role=presence — "my POIs, not the basemap's") merge
+    # in at SERVE time, so admin edits to either row survive. The
+    # composed document is what gets resolved, cached, digested and
+    # ETagged; the contributing rows' inputs and the composition
+    # revision fold into the immutable version token (either change
     # rotates every basemap URL that carries it).
     #
     # Subset-profile basemap rows (Leaflet fallback) are NOT composed:

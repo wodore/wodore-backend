@@ -183,12 +183,20 @@ def _compose_overlay_on_basemap(
     # as literal tokens MapLibre can't fetch)
     basemap_doc = dict(basemap.style)
 
-    all_blocks, _inputs = basemap_composition(basemap)
+    # A PRESENCE row edits its own layers: the composition must not
+    # also contribute the stored copy of that row, or every layer id
+    # appears twice once the editor's document is appended below.
+    editing_presence = overlay_layer.role == MapLayer.Role.presence
+    all_blocks, _inputs = basemap_composition(
+        basemap, exclude_pk=overlay_layer.pk if editing_presence else None
+    )
     if all_blocks:
         basemap_doc = compose_basemap_style(
             basemap_doc, all_blocks, anchors=basemap.anchors
         )
-    overlay_prefix = _overlay_block_prefix(overlay_layer)
+    # An interactive overlay replaces its family's presence (stripped by
+    # prefix); a presence row replaces itself (excluded above).
+    overlay_prefix = "" if editing_presence else _overlay_block_prefix(overlay_layer)
     if overlay_prefix:
         basemap_doc["layers"] = [
             layer
