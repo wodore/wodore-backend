@@ -22,6 +22,7 @@ Covers the openspec change ``style-profiles-subset``:
 from __future__ import annotations
 
 import io
+import itertools
 import json
 import subprocess
 from collections.abc import Generator
@@ -1814,6 +1815,20 @@ class TransportModeExtrasParityTests(SimpleTestCase):
         assert migration.GTFS_EXTRA_KEY == "gtfs_route_type"
 
 
+def _interpolated(expr: list[Any], zoom: float) -> float:
+    """Value of an ``["interpolate", ["linear"], ["zoom"], z0, v0, …]``
+    expression at ``zoom`` (clamped to the outer stops)."""
+    assert expr[:3] == ["interpolate", ["linear"], ["zoom"]]
+    stops = list(zip(expr[3::2], expr[4::2], strict=True))
+    first_z, first_v = stops[0]
+    if zoom <= first_z:
+        return float(first_v)
+    for (z0, v0), (z1, v1) in itertools.pairwise(stops):
+        if zoom <= z1:
+            return float(v0) + (float(v1) - float(v0)) * (zoom - z0) / (z1 - z0)
+    return float(stops[-1][1])
+
+
 class TransportBasemapBlockTests(SimpleTestCase):
     """The overlay's BASEMAP presence: "my POIs, not the basemap's"
     (owner 2026-11-17). config.basemap blocks compose into basemap
@@ -1823,36 +1838,194 @@ class TransportBasemapBlockTests(SimpleTestCase):
     def test_block_contract(self) -> None:
         from server.apps.basemaps.seed_lib import (
             TRANSPORT_BASEMAP_SPRITE_ID,
-            transport_basemap_block,
+            TRANSPORT_STYLE,
+            transport_presence_style,
         )
 
-        block = transport_basemap_block()
+        block = transport_presence_style()
         # own sprite id (add-once ids must not collide with the overlay's)
         assert block["sprite"][0]["id"] == TRANSPORT_BASEMAP_SPRITE_ID
         assert block["sprite"][0]["id"] != "wd-transport"
-        # namespaced layer ids — the always-replace contract prefix
+        # namespaced layer ids — the always-replace contract prefix. The
+        # selection plate comes FIRST: it sits below the icon, which
+        # always draws and paints over it.
         ids = [layer["id"] for layer in block["layers"]]
         assert ids == [
+            "wd-basemap-transit-stations-selected",
             "wd-basemap-transit-stations",
             "wd-basemap-transit-stations-label",
         ]
-        # stations only, LATER than the overlay floor (z13 vs z11)
-        icon = block["layers"][0]
-        assert icon["minzoom"] == 13
+        plate, icon, label = block["layers"]
+        # SELECTION PLATE (owner 2026-11-27): a selected passive station
+        # gets the same ring a selected overlay station gets. The overlay
+        # plate's own contract and its exact paint — white circle,
+        # FIXED-accent ring, BOTH opacities gated on feature-state
+        # selected (an ungated stroke renders for EVERY feature: the
+        # 2026-11-07 ring storm) — and its radius ladder: same icon size
+        # (0.35 at z14), so the same ring. Same source and filter as the
+        # icon, so the feature-state the click pipeline writes to the
+        # clicked station reaches the plate.
+        overlay_plate = next(
+            layer
+            for layer in TRANSPORT_STYLE["layers"]
+            if layer["id"] == "transport-stops-selected"
+        )
+        assert plate["type"] == "circle"
+        assert plate["source"] == icon["source"] == "wd-basemap-transitland-stops"
+        assert plate["filter"] == icon["filter"]
+        assert plate["minzoom"] == icon["minzoom"]
+        for key in ("circle-opacity", "circle-stroke-opacity"):
+            assert plate["paint"][key] == overlay_plate["paint"][key], key
+            assert plate["paint"][key][2:] == [1, 0], f"{key} must be gated"
+        for key in (
+            "circle-color",
+            "circle-stroke-color",
+            "circle-stroke-width",
+            "circle-radius",
+        ):
+            assert plate["paint"][key] == overlay_plate["paint"][key], key
+        # stations only, LATER than the overlay floor (z14 vs z11). The
+        # presence is the zoomed-in backdrop, not an early POI layer
+        # (owner 2026-11-26: station icons showed too early).
+        assert icon["minzoom"] == 14
         assert icon["filter"] == ["==", ["get", "location_type"], 1]
+        # ICONS ALWAYS DRAW — AND CLAIM SPACE. Transitland types bus
+        # stops as stations too (46 within one z14 tile at Interlaken
+        # Ost) — collision-active icons were culled to 5 placed and the
+        # main station could lose to a bus stop (owner report).
+        # allow-overlap: icons never cull each other. NO ignore-
+        # placement (owner 2026-11-27: "icon is behind label of
+        # street"): the icon claims space, so the minor labels placed
+        # after it yield — like the interactive overlay's icons.
+        assert icon["layout"]["icon-allow-overlap"] is True
+        assert "icon-ignore-placement" not in icon["layout"]
+        # the NAME claims its space too (text placement defaults; this
+        # layer carries no icon, so an icon-* placement prop would be
+        # a no-op), still declutters other names, and rail/metro
+        # stations sort ahead of bus-stop "stations"; names one zoom
+        # LATER than the icons (owner 2026-11-26: labels too early)
+        assert label["minzoom"] == 15
+        assert "icon-ignore-placement" not in label["layout"]
+        assert label["layout"].get("text-ignore-placement", False) is False
+        # case layout: [op, cond, value, cond, value, fallback]
+        sort_key = label["layout"]["symbol-sort-key"]
+        assert sort_key[0] == "case"
+        assert len(sort_key) == 6
+        assert sort_key[1][0] == "any"  # rail OR metro → value 0 (first)
+        assert sort_key[2] == 0
+        assert sort_key[3][0] == "any"  # tram → value 1
+        assert sort_key[4] == 1
+        assert sort_key[5] == 2  # everything else (bus-stop "stations") last
+        # the icon layer itself carries no text (names live in `label`)
+        assert "text-field" not in icon["layout"]
         # the icon chain uses the BASEMAP sprite prefix, not the overlay's
         names = icon["layout"]["icon-image"][2:-1:2]
         assert names and all(
             n.startswith(TRANSPORT_BASEMAP_SPRITE_ID + ":") for n in names
         )
-        # the block rides the overlay-slot anchors — ONE mechanism for
-        # overlays and blocks (no per-basemap name lists)
-        assert block["slot"] == "routes"
+        # a PRESENCE style document: spec-legal root keys only —
+        # placement is ALWAYS the keeper-label band (a presence block
+        # carries no slot); no custom root keys
+        assert "slot" not in block
+        assert block["version"] == 8
+        assert "glyphs" in block
+
+    def test_presence_layer_prefix_is_the_one_namespace(self) -> None:
+        """Every presence layer id sits under its family's always-replace
+        prefix — the ONE namespace the frontend hides and the admin
+        preview strips by (seed_lib ``presence_layer_prefix``)."""
+        from server.apps.basemaps.seed_lib import (
+            accommodations_presence_style,
+            presence_layer_prefix,
+            transport_presence_style,
+        )
+
+        # the legacy alias: transport predates the slug-named namespace
+        assert presence_layer_prefix("transport-stops") == "wd-basemap-transit-"
+        assert presence_layer_prefix("accommodations") == "wd-basemap-accommodations-"
+        assert presence_layer_prefix("huts") == "wd-basemap-huts-"
+        assert all(
+            layer["id"].startswith("wd-basemap-transit-")
+            for layer in transport_presence_style()["layers"]
+        )
+        assert all(
+            layer["id"].startswith("wd-basemap-accommodations-")
+            for layer in accommodations_presence_style()["layers"]
+        )
+
+    def test_accommodations_tile_query_is_shared(self) -> None:
+        """The interactive accommodations overlay and its passive presence
+        request the SAME tiles: one URL means one cache entry, so
+        toggling the overlay reuses what the presence already fetched."""
+        from server.apps.basemaps.seed_lib import (
+            ACCOMMODATIONS_STYLE,
+            accommodations_presence_style,
+        )
+
+        overlay = ACCOMMODATIONS_STYLE["sources"]["wd-accommodations"]["tiles"]
+        presence = accommodations_presence_style()["sources"][
+            "wd-basemap-accommodations"
+        ]["tiles"]
+        assert overlay == presence
+        assert "cache_ttl_days=1" in overlay[0]
+
+    def test_dump_presence_blocks_follow_the_serve_order(self) -> None:
+        """The CI dump composes the presence blocks the way production
+        does: ordered by slug (api.basemap_composition) and keyed by
+        slug — a style document's ``name`` is optional and must not
+        decide whether a block is validated."""
+        from server.apps.basemaps.management.commands.dump_map_styles import (
+            _presence_blocks,
+        )
+        from server.apps.basemaps.management.commands.map_seed import LAYERS
+
+        assert [slug for slug, _style in _presence_blocks(LAYERS)] == [
+            "accommodations-presence",
+            "transport-stops-presence",
+        ]
+        fake: list[dict[str, Any]] = [
+            {
+                "slug": "b-presence",
+                "role": "presence",
+                "style": {"version": 8, "layers": [{"id": "x"}]},
+            },
+            {
+                "slug": "a-presence",
+                "role": "presence",
+                "style": {"version": 8, "name": "A", "layers": [{"id": "y"}]},
+            },
+            {"slug": "overlay", "role": "overlay", "style": {"layers": [{"id": "z"}]}},
+            {"slug": "empty-presence", "role": "presence", "style": {"layers": []}},
+        ]
+        # the name-less block is still a block; overlays and empty styles are not
+        assert [slug for slug, _style in _presence_blocks(fake)] == [
+            "a-presence",
+            "b-presence",
+        ]
+
+    def test_a_revision_less_tile_source_keeps_its_hash(self) -> None:
+        """A function-body revision is a version input only for the tile
+        sources that HAVE one: appending ``revision:0`` for all the others
+        rotated every tile version — and with it every overlay's style
+        token — once on deploy, for nothing but a cold CDN cache."""
+        import hashlib
+        from unittest.mock import patch
+
+        from server.apps.basemaps import tile_assets
+
+        fake: dict[str, dict[str, Any]] = {
+            "plain": {"deps": []},
+            "bumped": {"deps": [], "revision": 3},
+        }
+        with patch.dict(tile_assets.VERSIONED_TILE_SOURCES, fake, clear=True):
+            versions = tile_assets._computed_tile_versions()
+        assert versions["plain"] == hashlib.sha256(b"").hexdigest()[:16]
+        assert versions["bumped"] == hashlib.sha256(b"revision:3").hexdigest()[:16]
 
     def test_compose_anchors_into_the_slot_anchor(self) -> None:
         from server.apps.basemaps.seed_lib import (
             compose_basemap_style,
-            transport_basemap_block,
+            transport_presence_style,
         )
 
         empty: dict[str, Any] = {}
@@ -1868,11 +2041,13 @@ class TransportBasemapBlockTests(SimpleTestCase):
         anchors: dict[str, Any] = {
             "routes": {"before": "road_path_oneway_symbol"},
         }
-        out = compose_basemap_style(doc, [transport_basemap_block()], anchors=anchors)
+        block = {**transport_presence_style(), "slot": "routes"}
+        out = compose_basemap_style(doc, [block], anchors=anchors)
         ids = [layer["id"] for layer in out["layers"]]
         # inserted BEFORE the slot anchor — the freed native POI slot
         assert ids == [
             "background",
+            "wd-basemap-transit-stations-selected",
             "wd-basemap-transit-stations",
             "wd-basemap-transit-stations-label",
             "road_path_oneway_symbol",
@@ -1883,7 +2058,7 @@ class TransportBasemapBlockTests(SimpleTestCase):
         """No anchors (anchorless basemap) → the label band."""
         from server.apps.basemaps.seed_lib import (
             compose_basemap_style,
-            transport_basemap_block,
+            transport_presence_style,
         )
 
         doc: dict[str, Any] = {
@@ -1897,15 +2072,139 @@ class TransportBasemapBlockTests(SimpleTestCase):
                 },
             ],
         }
-        out = compose_basemap_style(doc, [transport_basemap_block()])
+        out = compose_basemap_style(doc, [transport_presence_style()])
         ids = [layer["id"] for layer in out["layers"]]
-        assert ids.index("wd-basemap-transit-stations") == 1
+        # the whole block, plate first, starts at the label band
+        assert ids.index("wd-basemap-transit-stations-selected") == 1
+        assert ids.index("wd-basemap-transit-stations") == 2
+
+    def test_compose_falls_back_below_the_keeper_band(self) -> None:
+        """Presence rows carry no slot: the block lands directly BELOW
+        the keeper-label band — where the frontend places interactive
+        overlays — not at the bottom of the label band (owner
+        2026-11-27: a station icon hid behind a street name)."""
+        from server.apps.basemaps.seed_lib import (
+            compose_basemap_style,
+            keeper_label_index,
+            transport_presence_style,
+        )
+
+        doc: dict[str, Any] = {
+            "version": 8,
+            "layers": [
+                {"id": "bg", "type": "background"},
+                {
+                    "id": "road_minor_label",
+                    "type": "symbol",
+                    "layout": {"text-field": "x"},
+                },
+                {
+                    "id": "water_area_label_rank_5",
+                    "type": "symbol",
+                    "layout": {"text-field": "x"},
+                },
+                {
+                    "id": "place_peak_label_rank_3",
+                    "type": "symbol",
+                    "layout": {"text-field": "x"},
+                },
+                {
+                    "id": "place_line_label_rank_3",
+                    "type": "symbol",
+                    "layout": {"text-field": "x"},
+                },
+                {
+                    "id": "place_point_label_rank_1",
+                    "type": "symbol",
+                    "layout": {"text-field": "x"},
+                },
+            ],
+        }
+        # compose_basemap_style MUTATES the document it is given (the
+        # caller passes a copy) — keep the input to assert on it
+        original = list(doc["layers"])
+        out = compose_basemap_style(doc, [transport_presence_style()])
+        assert [layer["id"] for layer in out["layers"]] == [
+            "bg",
+            "road_minor_label",
+            "water_area_label_rank_5",
+            "wd-basemap-transit-stations-selected",
+            "wd-basemap-transit-stations",
+            "wd-basemap-transit-stations-label",
+            "place_peak_label_rank_3",
+            "place_line_label_rank_3",
+            "place_point_label_rank_1",
+        ]
+        # the anchor helper: the FIRST keeper in style order
+        assert keeper_label_index(original) == 3
+        assert keeper_label_index([{"id": "bg"}]) is None
+
+    def test_each_presence_mirrors_its_own_overlay(self) -> None:
+        """The two families mirror their OWN overlay (owner 2026-11-27:
+        "are they not on the same layer?"). The accommodations overlay's
+        icons never claim space (2026-11-23 exemption) — so its presence
+        doesn't either. The transport overlay's icons do — so the
+        transport presence claims (test_block_contract)."""
+        from server.apps.basemaps.seed_lib import (
+            ACCOMMODATIONS_STYLE,
+            TRANSPORT_STYLE,
+            accommodations_presence_style,
+        )
+
+        def icon_layouts(style: dict[str, Any]) -> list[dict[str, Any]]:
+            return [
+                layer["layout"]
+                for layer in style["layers"]
+                if layer["type"] == "symbol" and "icon-image" in layer["layout"]
+            ]
+
+        layers = accommodations_presence_style()["layers"]
+        plate, presence_icon = layers[0], layers[1]
+        assert plate["id"] == "wd-basemap-accommodations-selected"
+        # its selection plate: the accommodations overlay plate's contract
+        # — category ring from feature-state color with the fixed
+        # fallback, BOTH opacities gated (every hut icon sits on this
+        # source: an ungated stroke would ring them all) — on the icons
+        # layer's own source and filter, below the icon
+        overlay_plate = next(
+            layer
+            for layer in ACCOMMODATIONS_STYLE["layers"]
+            if layer["id"] == "wd-accommodations-selected"
+        )
+        assert plate["type"] == "circle"
+        assert plate["source"] == presence_icon["source"]
+        assert plate["filter"] == presence_icon["filter"]
+        for key in ("circle-opacity", "circle-stroke-opacity", "circle-stroke-color"):
+            assert plate["paint"][key] == overlay_plate["paint"][key], key
+        # the ring is cut for the SMALLER presence icons (icon-size 0.22 →
+        # 0.38): ~28 px per unit of icon-size — the transport plate's
+        # ratio — instead of the overlay plate's (its stop values are
+        # scaled expressions for the overlay's large icons)
+        radius = plate["paint"]["circle-radius"]
+        assert radius[:3] == ["interpolate", ["linear"], ["zoom"]]
+        assert radius[3:] == [10, 6.5, 13, 8.5, 16, 11, 20, 13]
+        assert [_interpolated(radius, zoom) for zoom in (10, 13, 16, 20)] == [
+            6.5,
+            8.5,
+            11,
+            13,
+        ]
+        assert presence_icon["layout"]["icon-allow-overlap"] is True
+        assert presence_icon["layout"]["icon-ignore-placement"] is True
+        assert all(
+            layout["icon-ignore-placement"] is True
+            for layout in icon_layouts(ACCOMMODATIONS_STYLE)
+        )
+        # the transport overlay's icon bands up to z16 are collision-
+        # active AND claim space (only the z17 detail band is exempt)
+        overlay_bands = icon_layouts(TRANSPORT_STYLE)
+        assert any("icon-ignore-placement" not in layout for layout in overlay_bands)
 
     def test_compose_merges_sprite_and_sources_without_collisions(self) -> None:
         from server.apps.basemaps.seed_lib import (
             TRANSPORT_BASEMAP_SPRITE_ID,
             compose_basemap_style,
-            transport_basemap_block,
+            transport_presence_style,
         )
 
         doc: dict[str, Any] = {
@@ -1914,7 +2213,7 @@ class TransportBasemapBlockTests(SimpleTestCase):
             "sources": {"openmaptiles": {"type": "vector"}},
             "layers": [],
         }
-        out = compose_basemap_style(doc, [transport_basemap_block()])
+        out = compose_basemap_style(doc, [transport_presence_style()])
         assert [s["id"] for s in out["sprite"]] == [
             "ofm",
             TRANSPORT_BASEMAP_SPRITE_ID,
@@ -1928,6 +2227,278 @@ class TestTransportBasemapServing:
     """Serve-time composition: the endpoint serves the composed basemap
     (never the bare fixture), overlays stay un-composed, and the
     immutable version token folds the contributing overlay rows."""
+
+    def test_presence_sits_directly_below_the_keeper_band(self) -> None:
+        """The passive presence reads like its interactive overlay (owner
+        2026-11-27: "icon is behind label of street … are they not on
+        the same layer?"): composed directly BELOW the keeper band, so
+        the minor labels (roads, water, parks, lesser places) are placed
+        after the icons and yield to them, while the major city/peak
+        labels stay on top."""
+        from django.core.management import call_command
+
+        from server.apps.basemaps.seed_lib import KEEPER_LABEL_PREFIXES
+
+        call_command("map_seed", verbosity=0)
+        response = Client().get("/v1/map/styles/wd-outdoor-base-mtk-hill.json")
+        assert response.status_code == 200
+        layers = response.json()["layers"]
+        ids = [layer["id"] for layer in layers]
+        keeper = next(
+            i for i, x in enumerate(ids) if x.startswith(KEEPER_LABEL_PREFIXES)
+        )
+        # both blocks land at the band: accommodations first (slug
+        # order), then transport — no longer interleaved by the old
+        # first-text-layer fallback. Each block: selection plate, icon,
+        # name (the plate sits below its icon).
+        assert ids[keeper - 6 : keeper] == [
+            "wd-basemap-accommodations-selected",
+            "wd-basemap-accommodations-icons",
+            "wd-basemap-accommodations-labels",
+            "wd-basemap-transit-stations-selected",
+            "wd-basemap-transit-stations",
+            "wd-basemap-transit-stations-label",
+        ]
+        # a street name is BELOW the block: it yields to a station icon
+        assert ids.index("road_minor_label") < keeper - 6
+        icon = layers[keeper - 2]
+        assert icon["id"] == "wd-basemap-transit-stations"
+        assert icon["layout"]["icon-allow-overlap"] is True
+        assert "icon-ignore-placement" not in icon["layout"]
+
+    def test_presence_rows_are_seeded_without_a_slot(self) -> None:
+        """A presence block always takes the keeper-band placement. The
+        seed used to declare ``"slot": "routes"`` for the transport
+        presence — inert only because no such slot row existed; with
+        one, the block would drop below every label again."""
+        from django.core.management import call_command
+
+        from server.apps.basemaps.models import MapLayer
+
+        call_command("map_seed", verbosity=0)
+        for slug in ("transport-stops-presence", "accommodations-presence"):
+            assert MapLayer.objects.get(slug=slug).slot is None, slug
+        # the row metadata follows the real floors (icons z14)
+        assert MapLayer.objects.get(slug="transport-stops-presence").min_zoom == 14
+
+    def test_presence_ignores_a_slot_and_a_nameless_style(self) -> None:
+        """Robustness: a slot — on the row, or pasted into the stored
+        document — must not move a presence block, and a style document
+        without the optional ``name`` must not break the composition
+        inputs; all of it runs on every basemap and catalog request."""
+        from django.core.management import call_command
+        from django.test.client import Client
+
+        from server.apps.basemaps.models import MapLayer, MapSlot
+        from server.apps.basemaps.seed_lib import KEEPER_LABEL_PREFIXES
+
+        call_command("map_seed", verbosity=0)
+        transport = MapLayer.objects.get(slug="transport-stops-presence")
+        transport.slot = MapSlot.objects.create(slug="routes", label="Routes", order=5)
+        transport.save()
+        accommodations = MapLayer.objects.get(slug="accommodations-presence")
+        # ``name`` is optional in the MapLibre style spec
+        assert accommodations.style is not None
+        accommodations.style = {
+            key: value for key, value in accommodations.style.items() if key != "name"
+        }
+        # a legacy root ``slot`` pasted into the stored document must not
+        # reach the composer either (the style spec allows unknown root
+        # keys — this basemap DOES have a `routes` anchor, so the block
+        # would visibly move)
+        accommodations.style["slot"] = "routes"
+        accommodations.save()
+
+        assert Client().get("/v1/map/layers").status_code == 200
+        response = Client().get("/v1/map/styles/wd-outdoor-base-mtk-hill.json")
+        assert response.status_code == 200
+        ids = [layer["id"] for layer in response.json()["layers"]]
+        keeper = next(
+            i for i, x in enumerate(ids) if x.startswith(KEEPER_LABEL_PREFIXES)
+        )
+        # the slot moved nothing: both blocks still sit directly below
+        # the band, in seed (slug) order
+        assert ids[keeper - 6 : keeper] == [
+            "wd-basemap-accommodations-selected",
+            "wd-basemap-accommodations-icons",
+            "wd-basemap-accommodations-labels",
+            "wd-basemap-transit-stations-selected",
+            "wd-basemap-transit-stations",
+            "wd-basemap-transit-stations-label",
+        ]
+
+    def test_admin_preview_replaces_the_family_presence(self) -> None:
+        """The admin live preview strips the previewed overlay's PASSIVE
+        presence from the composed basemap, as the live map does. The
+        prefix lookup used to read the since-removed ``config.basemap``
+        and had gone dead: overlay and presence drew doubled."""
+        from django.core.management import call_command
+
+        from server.apps.basemaps.models import MapLayer
+        from server.apps.basemaps.preview import _compose_overlay_on_basemap
+
+        call_command("map_seed", verbosity=0)
+        overlay = MapLayer.objects.filter(slug="transport-stops").first()
+        assert overlay is not None
+        doc, basemap_slug, _warnings = _compose_overlay_on_basemap(
+            {"version": 8, "sources": {}, "layers": []},
+            overlay,
+            "wd-outdoor-base-mtk-hill",
+            "http://tiles.test",
+        )
+        assert basemap_slug == "wd-outdoor-base-mtk-hill"
+        ids = [str(layer.get("id", "")) for layer in doc["layers"]]
+        assert not any(layer_id.startswith("wd-basemap-transit-") for layer_id in ids)
+        # the other family's presence stays
+        assert "wd-basemap-accommodations-icons" in ids
+
+    def test_admin_preview_of_a_presence_row_has_no_duplicate_ids(self) -> None:
+        """The live editor edits a presence row's own document: the
+        composition must leave that row's stored copy out, or every layer
+        id appears twice once the editor's document is appended."""
+        from django.core.management import call_command
+
+        from server.apps.basemaps.models import MapLayer
+        from server.apps.basemaps.preview import _compose_overlay_on_basemap
+
+        call_command("map_seed", verbosity=0)
+        row = MapLayer.objects.get(slug="transport-stops-presence")
+        assert row.style is not None
+        doc, _slug, _warnings = _compose_overlay_on_basemap(
+            dict(row.style),
+            row,
+            "wd-outdoor-base-mtk-hill",
+            "http://tiles.test",
+        )
+        ids = [str(layer.get("id", "")) for layer in doc["layers"]]
+        assert len(ids) == len(set(ids)), "duplicate layer ids in the preview"
+        # its own layers exactly once; the other family untouched
+        assert ids.count("wd-basemap-transit-stations") == 1
+        assert "wd-basemap-accommodations-icons" in ids
+
+    def test_composition_revision_is_a_version_input(self) -> None:
+        """A change to the composition CODE changes every composed body
+        without touching a row: the revision must ride the version token,
+        or an immutable ``?v=`` URL would serve the old stacking for a
+        year."""
+        from unittest.mock import patch
+
+        from django.core.management import call_command
+        from django.test.client import Client
+
+        from server.apps.basemaps import api
+        from server.apps.basemaps.models import MapLayer
+        from server.apps.basemaps.seed_lib import STYLE_COMPOSITION_REVISION
+
+        call_command("map_seed", verbosity=0)
+        basemap = MapLayer.objects.get(slug="wd-outdoor-base-mtk-hill", spec="high")
+        _blocks, inputs = api.basemap_composition(basemap)
+        assert f"composition:{STYLE_COMPOSITION_REVISION}" in inputs
+        before = (
+            Client()
+            .get("/v1/map/styles/wd-outdoor-base-mtk-hill.json")
+            .headers["X-Map-Style-Version"]
+        )
+        with patch.object(api, "STYLE_COMPOSITION_REVISION", "bumped-for-the-test"):
+            after = (
+                Client()
+                .get("/v1/map/styles/wd-outdoor-base-mtk-hill.json")
+                .headers["X-Map-Style-Version"]
+            )
+        assert after != before
+
+    def test_token_folds_the_presence_blocks_asset_versions(self) -> None:
+        """The served body bakes the presence blocks' tile URLs — their
+        ``&v=<asset version>`` included — into the basemap document. A
+        tile-source revision bump must therefore rotate the BASMAP's token
+        too; before, only the body cache moved and the immutable URL kept
+        serving the old body (with the stale tile version) for up to a
+        year."""
+        from unittest.mock import patch
+
+        from django.core.cache import cache
+        from django.core.management import call_command
+        from django.test.client import Client
+
+        from server.apps.basemaps import tile_assets
+
+        call_command("map_seed", verbosity=0)
+        before = (
+            Client()
+            .get("/v1/map/styles/wd-outdoor-base-mtk-hill.json")
+            .headers["X-Map-Style-Version"]
+        )
+        with patch.dict(
+            tile_assets.VERSIONED_TILE_SOURCES["geoplaces"], {"revision": 99}
+        ):
+            cache.delete(tile_assets.ASSET_VERSIONS_CACHE_KEY)
+            after = (
+                Client()
+                .get("/v1/map/styles/wd-outdoor-base-mtk-hill.json")
+                .headers["X-Map-Style-Version"]
+            )
+        cache.delete(tile_assets.ASSET_VERSIONS_CACHE_KEY)
+        assert after != before
+
+    def test_an_edited_presence_row_previews_in_serve_order(self) -> None:
+        """Editing a presence row in the live editor: its layers stack
+        where the serve path puts them — slug order below the keeper band
+        (accommodations below transport) — not simply on top of the other
+        family."""
+        from django.core.management import call_command
+
+        from server.apps.basemaps.models import MapLayer
+        from server.apps.basemaps.preview import _compose_overlay_on_basemap
+
+        call_command("map_seed", verbosity=0)
+        cases = (
+            # edited row, the OTHER family's icon layer, is the edited one below it?
+            ("accommodations-presence", "wd-basemap-transit-stations", True),
+            ("transport-stops-presence", "wd-basemap-accommodations-icons", False),
+        )
+        for edited, other_icon, edited_below in cases:
+            row = MapLayer.objects.get(slug=edited)
+            assert row.style is not None
+            doc, _slug, _warnings = _compose_overlay_on_basemap(
+                dict(row.style), row, "wd-outdoor-base-mtk-hill", "http://tiles.test"
+            )
+            ids = [str(layer.get("id", "")) for layer in doc["layers"]]
+            assert len(ids) == len(set(ids)), edited
+            own = ids.index(row.style["layers"][0]["id"])
+            other = ids.index(other_icon)
+            # a LOWER index is lower in the stack (MapLibre draws the
+            # later layer on top)
+            assert (own < other) is edited_below, (edited, own, other)
+
+    def test_presence_rows_stay_out_of_the_public_catalog(self) -> None:
+        """Presence rows are composition internals: they leave through
+        the STYLE endpoint (basemap composition) only. The catalog
+        listing and the detail endpoint must not expose them — the
+        frontend's overlay picker treats every catalog entry as a
+        toggleable overlay and swapped an overlay's style for its
+        presence row (seen live)."""
+        from django.core.management import call_command
+        from django.test.client import Client
+
+        call_command("map_seed", verbosity=0)
+        client = Client()
+
+        slugs = {entry["slug"] for entry in client.get("/v1/map/layers").json()["data"]}
+        assert "accommodations-presence" not in slugs
+        assert "transport-stops-presence" not in slugs
+        # the interactive overlays themselves stay listed
+        assert "accommodations" in slugs
+        assert "transport-stops" in slugs
+
+        detail = client.get("/v1/map/layers/transport-stops-presence")
+        assert detail.status_code == 404
+        # …while the STYLE endpoint keeps serving the composed basemap
+        basemap = client.get("/v1/map/styles/wd-outdoor-base-mtk-hill.json")
+        assert basemap.status_code == 200
+        assert any(
+            layer["id"] == "wd-basemap-transit-stations"
+            for layer in basemap.json()["layers"]
+        )
 
     def test_basemap_style_serves_the_composed_document(self) -> None:
         from django.core.management import call_command
@@ -1964,11 +2535,9 @@ class TestTransportBasemapServing:
         overlay_ids = [layer["id"] for layer in overlay.json()["layers"]]
         assert "wd-basemap-transit-stations" not in overlay_ids
 
-        # the token rotates when a contributing overlay row changes
+        # the token rotates when a contributing PRESENCE row changes
         before = Client().get("/v1/map/styles/wd-outdoor-base-ofm-hill.json")
-        row = MapLayer.objects.filter(
-            slug="transport-stops", profile=MapLayer.Profile.full
-        ).first()
+        row = MapLayer.objects.filter(slug="transport-stops-presence").first()
         assert row is not None
         row.save(update_fields=["modified"])  # bumps modified
         after = Client().get("/v1/map/styles/wd-outdoor-base-ofm-hill.json")
@@ -1976,3 +2545,24 @@ class TestTransportBasemapServing:
             before.headers["X-Map-Style-Version"]
             != after.headers["X-Map-Style-Version"]
         )
+
+        # …and when the basemap's presence LINK SET changes — a pure
+        # M2M unlink touches no row's ``modified`` (live bug: the dev
+        # server kept serving a presence-less body after the seed
+        # wired the links). Both the token and the BODY must rotate.
+        basemap = MapLayer.objects.filter(
+            slug="wd-outdoor-base-ofm-hill", profile=MapLayer.Profile.full
+        ).first()
+        assert basemap is not None
+        transport = MapLayer.objects.filter(slug="transport-stops-presence").first()
+        assert transport is not None
+        basemap.presence_layers.remove(transport)
+        unlinked = Client().get("/v1/map/styles/wd-outdoor-base-ofm-hill.json")
+        assert (
+            unlinked.headers["X-Map-Style-Version"]
+            != after.headers["X-Map-Style-Version"]
+        )
+        unlinked_ids = [layer["id"] for layer in unlinked.json()["layers"]]
+        assert "wd-basemap-transit-stations" not in unlinked_ids
+        assert "wd-basemap-accommodations-icons" in unlinked_ids
+        basemap.presence_layers.add(transport)  # restore for other tests

@@ -80,7 +80,10 @@ from server.apps.api.controller import (
 )
 from server.apps.api.error_codes import ErrorCode
 from server.apps.api.query import dump_sparse, dump_sparse_list, sparse_fields_query
-from server.apps.basemaps.seed_lib import compose_basemap_style
+from server.apps.basemaps.seed_lib import (
+    STYLE_COMPOSITION_REVISION,
+    compose_basemap_style,
+)
 from server.apps.translations import LanguageQuery, override
 
 from .models import (
@@ -415,7 +418,7 @@ def _style_url(
         url = style_endpoint_url(layer.slug, layer.spec, profile=profile)
         if token is None:
             _blocks, block_inputs = basemap_composition(layer)
-            token = style_version(layer, extra_inputs=block_inputs)
+            token = style_version(layer, extra_inputs=block_inputs, blocks=_blocks)
         if token:
             separator = "&" if "?" in url else "?"
             url = f"{url}{separator}v={token}"
@@ -432,6 +435,7 @@ def style_version(
     epoch: str | None = None,
     now: datetime | None = None,
     extra_inputs: list[str] | None = None,
+    blocks: list[dict[str, Any]] | None = None,
 ) -> str | None:
     """URL version token for one layer's style documents (``?v=``).
 
@@ -448,6 +452,11 @@ def style_version(
     they are distinct URLs (``mode`` query) with distinct cache
     entries, re-keyed by the same inputs.
 
+    ``blocks`` are the presence blocks composed into this basemap's
+    body (``basemap_composition``): their asset URLs — tile versions
+    included — are baked into the same served document, so the asset
+    versions they consume are inputs of the token too.
+
     Must be computed from the same memoized ``versions``/``epoch`` as
     the body render in a request (see ``get_map_style``) so an
     immutable stamp can never pair a token with a body it does not
@@ -463,6 +472,17 @@ def style_version(
     if epoch is None:
         epoch = _style_bodies_epoch()
     consumed = consumed_versions(layer.style, versions)
+    # The composed body bakes the presence blocks' tile URLs — their
+    # ``&v=<asset version>`` included — into the same document, so the
+    # blocks' consumed asset versions are inputs of that body too. Folded
+    # as a list: a block's sprite/font slot must not mask the basemap's
+    # own. (Before: a tile-source revision rotated the body cache but not
+    # the token, and the immutable URL kept serving the old body.)
+    if blocks:
+        consumed = {
+            **consumed,
+            "blocks": [consumed_versions(block, versions) for block in blocks],
+        }
     serve_time = layer.serve_time_parameter_values(now)
     if serve_time:
         consumed = {**consumed, **serve_time}
@@ -491,7 +511,7 @@ def _resolved_entry(layer: MapLayer, profile: str | None = None) -> dict[str, An
     own ``profile``/``version``.
     """
     _blocks, block_inputs = basemap_composition(layer)
-    token = style_version(layer, extra_inputs=block_inputs)
+    token = style_version(layer, extra_inputs=block_inputs, blocks=_blocks)
     coverage_bbox = None
     if layer.coverage and layer.coverage.bbox:
         coverage_bbox = list(layer.coverage.bbox)
@@ -792,6 +812,13 @@ class MapLayersController(ApiController):
         filters: dict[str, Any] = {}
         if parsed_query.role:
             filters["role"] = parsed_query.role
+        else:
+            # Presence rows are composition internals, never
+            # client-selectable: an unfiltered listing would otherwise
+            # hand them to the overlay picker as ordinary overlays
+            # (seen live: the frontend swapped an overlay's style for
+            # its presence row on toggle).
+            filters["role__in"] = [MapLayer.Role.basemap, MapLayer.Role.overlay]
         if parsed_query.show is not None:
             filters["show"] = parsed_query.show
         with override(parsed_query.lang):
@@ -826,7 +853,9 @@ class MapLayerDetailController(ApiController):
             parsed_query.spec,
             parsed_query.profile,
         )
-        if layer is None:
+        # Presence rows leave through the STYLE endpoint only (basemap
+        # composition); the detail endpoint is the public catalog door.
+        if layer is None or layer.role == MapLayer.Role.presence:
             raise_not_found(f"No active map layer with slug {parsed_path.slug!r}.")
         with override(parsed_query.lang):
             entry = _resolved_entry(layer, parsed_query.profile)
@@ -886,23 +915,33 @@ class MapCatalogController(ApiController):
 
 def basemap_composition(
     layer: MapLayer,
+    exclude_pk: int | None = None,
 ) -> tuple[list[dict[str, Any]], list[str]]:
-    """Overlay basemap blocks for one basemap row + their version inputs.
+    """Presence-layer styles for one basemap row + their version inputs.
 
     Shared by the style endpoint, the catalog token and the cache key
     (Opus review B1/B2): ONE collector so all three agree on what a
     composed basemap contains.
 
-    * subset-profile basemap rows are NOT composed (the block's SDF
-      halo paints and operators are subset-forbidden, and the Leaflet
-      fallback cannot tint anyway);
-    * ONE block per overlay SLUG — variant rows share the parent's
-      config, so collecting per row would inject duplicate layer ids
-      (the frontend's style gate rejects duplicates); the full-profile
-      row wins, else the first active variant;
+    Presence layers (``role=presence``, slug
+    ``<family>-presence``, ONE full-profile row per family — no
+    profile twins: the block carries SDF halo paints, ``promoteId`` and
+    ``symbol-sort-key``, none of which the subset whitelist admits) are
+    the overlay families' PASSIVE basemap presence: zoomed-in only,
+    mono icons in category colors, name labels from high zoom, placed
+    directly below the keeper-label band. The style document doubles
+    as the compose block (sources/sprite/layers root keys —
+    ``compose_basemap_style`` reads exactly those; a presence block
+    never carries a slot, see below).
+
+    * subset-profile basemap rows are NOT composed (same rationale as
+      before: the Leaflet fallback cannot tint SDF mono glyphs);
     * returns ``(blocks, inputs)`` — the inputs fold into the immutable
-      version token AND the style-body cache digest, so an overlay
-      block edit rotates URLs and bodies together.
+      version token AND the style-body cache digest, so a presence
+      edit (or a change to the composition code itself,
+      ``STYLE_COMPOSITION_REVISION``) rotates URLs and bodies together;
+    * ``exclude_pk`` leaves one presence row out — the admin live
+      editor editing that row contributes the row's own document.
     """
     if (
         layer.role != MapLayer.Role.basemap
@@ -910,26 +949,50 @@ def basemap_composition(
         or layer.style is None
     ):
         return [], []
-    overlays = (
-        MapLayer.objects.filter(role=MapLayer.Role.overlay, is_active=True)
-        .only("pk", "slug", "spec", "profile", "modified", "config", "role")
-        .order_by("pk")
+    # Per-basemap selection is the presence_layers M2M (owner
+    # 2026-11-24): EXPLICIT opt-in — the seed wires the wodore vector
+    # basemap family; raster/external basemaps stay clean. An empty
+    # set composes nothing.
+    presences = (
+        layer.presence_layers.filter(is_active=True)
+        .only("pk", "slug", "modified", "style")
+        .order_by("slug")
     )
-    by_slug: dict[str, tuple[int, MapLayer, dict[str, Any]]] = {}
-    for overlay in overlays:
-        block = (overlay.config or {}).get("basemap")
-        if not (isinstance(block, dict) and block.get("layers")):
-            continue
-        rank = 0 if overlay.profile != MapLayer.Profile.subset else 1
-        current = by_slug.get(overlay.slug)
-        if current is None or rank < current[0]:
-            by_slug[overlay.slug] = (rank, overlay, block)
+    if exclude_pk is not None:
+        presences = presences.exclude(pk=exclude_pk)
     blocks: list[dict[str, Any]] = []
     inputs: list[str] = []
-    for slug in sorted(by_slug):
-        _rank, overlay, block = by_slug[slug]
-        blocks.append(block)
-        inputs.append(f"basemap-block:{overlay.pk}:{overlay.modified.isoformat()}")
+    linked: list[str] = []
+    for presence in presences:
+        style = presence.style
+        if not (isinstance(style, dict) and style.get("layers")):
+            continue
+        # NO slot reaches the composer: a presence block always takes
+        # the keeper-band placement (compose_basemap_style's anchorless
+        # path). A slot anchor would drop it below every label again —
+        # the stacking fixed on 2026-11-27. (The seed once declared
+        # ``"slot": "routes"`` for the transport presence; it was inert
+        # only because no such slot row existed.) A legacy root
+        # ``slot`` pasted into the stored document is stripped here —
+        # the style spec does not reject unknown root keys.
+        blocks.append({key: value for key, value in style.items() if key != "slot"})
+        linked.append(presence.slug)
+        inputs.append(f"presence:{presence.pk}:{presence.modified.isoformat()}")
+    # The LINK set itself is a content input: linking/unlinking a
+    # presence changes the composed body without touching any row's
+    # ``modified`` — without this the style-body cache and the version
+    # token would keep serving the pre-rewire composition (seen live:
+    # the dev server served a presence-less basemap after the seed
+    # wired the M2M). Keyed by the row's slug: a style document's
+    # ``name`` is optional in the style spec, and an admin edit that
+    # drops it must not 500 every basemap and catalog request.
+    inputs.append("presence-links:" + ",".join(linked))
+    # The composition CODE is a version input too: a change to
+    # compose_basemap_style or to the keeper band changes every
+    # composed body without touching any row. Without this the token
+    # would not rotate, and an immutable URL would serve the previous
+    # stacking for up to a year.
+    inputs.append(f"composition:{STYLE_COMPOSITION_REVISION}")
     return blocks, inputs
 
 
@@ -983,12 +1046,12 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
         response.headers["Cache-Control"] = REVALIDATE_CACHE_CONTROL
         return response
 
-    # Basemap composition (owner 2026-11-17): overlay basemap blocks
-    # (config.basemap — "my POIs, not the basemap's") merge in at SERVE
-    # time, so admin edits to either row survive and no re-seed is
-    # needed. The composed document is what gets resolved, cached,
-    # digested and ETagged; the contributing overlay rows' modified
-    # stamps fold into the immutable version token (a block change
+    # Basemap composition (owner 2026-11-17): the POI families' passive
+    # presence rows (role=presence — "my POIs, not the basemap's") merge
+    # in at SERVE time, so admin edits to either row survive. The
+    # composed document is what gets resolved, cached, digested and
+    # ETagged; the contributing rows' inputs and the composition
+    # revision fold into the immutable version token (either change
     # rotates every basemap URL that carries it).
     #
     # Subset-profile basemap rows (Leaflet fallback) are NOT composed:
@@ -1048,7 +1111,11 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
     # does not describe. Stale/missing token: current content under the
     # bounded-staleness catalog policy (s-maxage=60), never immutable.
     token = style_version(
-        layer, versions=versions, epoch=epoch, extra_inputs=block_inputs
+        layer,
+        versions=versions,
+        epoch=epoch,
+        extra_inputs=block_inputs,
+        blocks=blocks,
     )
     versioned = token is not None and request.GET.get("v") == token
     cache_control = (

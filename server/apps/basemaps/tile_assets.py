@@ -112,10 +112,20 @@ VERSIONED_TILE_SOURCES: dict[str, dict[str, Any]] = {
         ),
     },
     # Every table ``get_geoplaces_for_tiles`` joins (migration
-    # ``geometries.0076`` FUNCTION_SQL) except ``geometries_tile_cache``
-    # — a derived cache, not source data (its rows change on every
-    # miss; rotating on them would be noise).
+    # ``geometries.0077``, which superseded 0076's FUNCTION_SQL) except
+    # ``geometries_tile_cache`` — a derived cache, not source data
+    # (its rows change on every miss; rotating on them would be noise).
     "geoplaces": {
+        # Bump when a MIGRATION changes what the tile FUNCTIONS compute
+        # (a function body is not a table row: the data aggregates below
+        # do not move, so without this the ``?v=`` would stay put and
+        # every CDN edge / browser kept the old tiles — silently,
+        # until an unrelated data edit rotated the hash).
+        #   2 — geometries.0078: primary category = the place's stored
+        #       kind (season ``mode.standard`` associations win over
+        #       ``mode.reduced``) in BOTH the tile function and the
+        #       membership function behind ``/v1/geoplaces/near``.
+        "revision": 2,
         "deps": (
             "geometries.GeoPlace",
             "geometries.GeoPlaceCategory",
@@ -142,6 +152,14 @@ def _computed_tile_versions() -> dict[str, str]:
             agg = model.objects.aggregate(m=Max("modified"), c=Count("*"))
             stamp = agg["m"].isoformat() if agg["m"] else "-"
             parts.append(f"{label}:{agg['c']}:{stamp}")
+        # A function-body revision is a content input too (see the
+        # geoplaces spec) — and only for a source that HAS one: a
+        # revision-less source keeps its pre-revision hash byte for byte.
+        # (Appending ``revision:0`` everywhere rotated every tile version
+        # — and with it every overlay's style token — once on deploy, for
+        # nothing but a cold CDN cache.)
+        if spec.get("revision"):
+            parts.append(f"revision:{spec['revision']}")
         versions[source] = hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
     return versions
 

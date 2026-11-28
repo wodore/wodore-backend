@@ -10,6 +10,7 @@ import subprocess
 from importlib.util import find_spec
 from typing import TYPE_CHECKING
 
+from server.settings.components import config
 from server.settings.components.common import (
     DATABASES,
     DJANGO_TRUSTED_DOMAINS,
@@ -105,6 +106,21 @@ if LOCAL_IP:
     if len(ip_parts) == 4:
         subnet_pattern = r"^https?://" + r"\.".join(ip_parts[:3]) + r"\.\d+:\d+$"
         CORS_ALLOWED_ORIGIN_REGEXES.append(subnet_pattern)
+
+# Tailscale / LAN hostnames: a frontend dev server browsed as
+# http://<machine-name>:<port> (instead of localhost) sends that origin —
+# without a matching rule every API call dies in the CORS preflight and
+# the map shows nothing. `home` is already in ALLOWED_HOSTS above; its
+# origin needs admitting here too. Extra hostnames ride an env var
+# (comma-separated) so other machines need no code change.
+CORS_ALLOWED_ORIGIN_REGEXES += [
+    r"^https?://home:\d+$",
+    *[
+        rf"^https?://{re.escape(host.strip())}:\d+$"
+        for host in config("DEV_CORS_HOSTNAMES", "").split(",")
+        if host.strip()
+    ],
+]
 
 # Installed apps for development only:
 

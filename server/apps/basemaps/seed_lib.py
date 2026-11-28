@@ -253,6 +253,7 @@ def _occupation_day_layer(day: int) -> dict[str, Any]:
             # voice + non-latin fallback, same Martin glyph endpoint).
             "text-font": ["Barlow Semi Condensed SemiBold", "Noto Sans Bold"],
             "icon-allow-overlap": True,
+            "icon-ignore-placement": True,  # never evict basemap labels
             "text-allow-overlap": True,
             "icon-image": [
                 "coalesce",
@@ -483,6 +484,7 @@ HUTS_STYLE: dict[str, Any] = {
                 "text-font": ["Barlow Semi Condensed SemiBold", "Noto Sans Bold"],
                 "text-anchor": "bottom",
                 "icon-allow-overlap": True,
+                "icon-ignore-placement": True,  # never evict basemap labels
                 "text-allow-overlap": False,
                 "symbol-sort-key": ["get", "type_standard_order"],
                 "icon-overlap": "always",
@@ -712,6 +714,7 @@ def _huts_style_subset() -> dict[str, Any]:
                 },
                 "layout": {
                     "icon-allow-overlap": True,
+                    "icon-ignore-placement": True,  # never evict basemap labels
                     "icon-image": "wd-sdf:mono/amenity.accommodation.unknown",
                     "icon-size": [
                         "interpolate",
@@ -939,6 +942,24 @@ _AMENITY_TEXT_SIZE_STOPS: list[tuple[int, float]] = [
 ]
 
 
+#: Tile query of the accommodations geoplaces source — ONE for the
+#: interactive overlay and its passive presence: identical tiles under
+#: one URL, so toggling the overlay reuses what the presence already
+#: fetched (two URLs kept two cache entries of the same viewport).
+ACCOMMODATIONS_TILE_QUERY = (
+    "?category_tree=accommodation"
+    # flat color/parent/category_identifier props plus elevation
+    # (popups) — the `category` object and `categories` array are
+    # opt-in fields and stay off (they dominate tile size; nothing in
+    # these documents reads them)
+    "&fields=color,parent_color,parent_slug,"
+    "category_identifier,importance,count,name,slug,"
+    "elevation"
+    "&max_label_zoom=11&cluster_max_zoom=7"
+    "&cache_ttl_days=1"
+)
+
+
 def accommodations_style() -> dict[str, Any]:
     """The accommodations overlay style — the huts look on POI data.
 
@@ -1020,17 +1041,7 @@ def accommodations_style() -> dict[str, Any]:
                 "tiles": [
                     (
                         "{{env:MARTIN_TILE_URL}}/geoplaces/{z}/{x}/{y}.mlt"
-                        "?category_tree=accommodation"
-                        # flat color/parent/category_identifier props plus
-                        # elevation (popups) — the `category` object and
-                        # `categories` array are opt-in fields and stay off
-                        # (they dominate tile size; nothing in this
-                        # document reads them)
-                        "&fields=color,parent_color,parent_slug,"
-                        "category_identifier,importance,count,name,slug,"
-                        "elevation"
-                        "&max_label_zoom=11&cluster_max_zoom=7"
-                        "&cache_ttl_days=1"
+                        + ACCOMMODATIONS_TILE_QUERY
                     )
                 ],
                 "encoding": "mlt",
@@ -1071,7 +1082,8 @@ def accommodations_style() -> dict[str, Any]:
                     # category (fully visible around z11/12 — always
                     # wins against other POIs). sort-key ASCENDING →
                     # importance negated.
-                    "icon-overlap": ["step", ["zoom"], "never", 11, "always"],
+                    "icon-overlap": "always",  # icons never yield NOR claim — labels survive
+                    "icon-ignore-placement": True,
                     "symbol-sort-key": ["-", 0, ["get", "importance"]],
                 },
                 "paint": {
@@ -1166,6 +1178,7 @@ def accommodations_style() -> dict[str, Any]:
                         multiplier="{{accommodations.icon_scale}}",
                     ),
                     "icon-allow-overlap": True,
+                    "icon-ignore-placement": True,  # never evict basemap labels
                 },
                 "paint": {
                     "icon-color": ["coalesce", ["get", "color"], "#718096"],
@@ -1209,7 +1222,8 @@ def accommodations_style() -> dict[str, Any]:
                     "text-optional": True,
                     "text-variable-anchor": ["bottom", "top", "right", "left"],
                     "text-radial-offset": 0.6,
-                    "icon-overlap": ["step", ["zoom"], "never", 11, "always"],
+                    "icon-overlap": "always",  # icons never yield NOR claim — labels survive
+                    "icon-ignore-placement": True,
                     "icon-image": icon_ladder,
                     "icon-size": [
                         "interpolate",
@@ -1331,6 +1345,7 @@ def _accommodations_style_subset() -> dict[str, Any]:
                     "icon-image": ACCOMMODATIONS_ICON_FALLBACK_SUBSET,
                     "icon-size": _size_ladder(_AMENITY_CLUSTER_ICON_SIZE_STOPS),
                     "icon-allow-overlap": True,
+                    "icon-ignore-placement": True,  # never evict basemap labels
                 },
                 "paint": {
                     "icon-color": [
@@ -1370,6 +1385,7 @@ def _accommodations_style_subset() -> dict[str, Any]:
                         1.25,
                     ],
                     "icon-allow-overlap": True,
+                    "icon-ignore-placement": True,  # never evict basemap labels
                 },
                 "paint": {
                     "icon-color": [
@@ -1831,6 +1847,7 @@ def amenity_overlay_style(spec: AmenityOverlaySpec) -> dict[str, Any]:
                     "icon-image": icon_ladder,
                     "icon-size": _cluster_icon_size(_AMENITY_ICON_SIZE_STOPS),
                     "icon-allow-overlap": True,
+                    "icon-ignore-placement": True,  # never evict basemap labels
                 },
                 "paint": {
                     "icon-color": ["coalesce", ["get", "color"], "#718096"],
@@ -1977,6 +1994,7 @@ def amenity_overlay_style_subset(spec: AmenityOverlaySpec) -> dict[str, Any]:
                     "icon-image": fallback,
                     "icon-size": ladder(_AMENITY_CLUSTER_ICON_SIZE_STOPS),
                     "icon-allow-overlap": True,
+                    "icon-ignore-placement": True,  # never evict basemap labels
                 },
                 "paint": {
                     "icon-color": [
@@ -1999,6 +2017,7 @@ def amenity_overlay_style_subset(spec: AmenityOverlaySpec) -> dict[str, Any]:
                     "icon-image": fallback,
                     "icon-size": ladder(_AMENITY_ICON_SIZE_STOPS),
                     "icon-allow-overlap": True,
+                    "icon-ignore-placement": True,  # never evict basemap labels
                 },
                 "paint": {
                     "icon-color": [
@@ -2587,6 +2606,7 @@ def _transport_style_base(colors: dict[str, str] | None = None) -> dict[str, Any
                         0.65,
                     ],
                     "icon-allow-overlap": True,
+                    "icon-ignore-placement": True,  # never evict basemap labels
                 },
             },
         ],
@@ -2838,26 +2858,120 @@ TRANSPORT_BASEMAP_SPRITE_ID = "wd-basemap-transport"
 #: contract (owner 2026-11-17): no ``replaces`` list to maintain. The
 #: frontend hides every layer matching ``wd-basemap-<slug>-*`` when
 #: the overlay is active; the ids alone carry the mapping.
-_TRANSPORT_BASEMAP_PREFIX = "wd-basemap-transit"
+#: Legacy id namespace of a presence family that differs from its slug —
+#: the transport presence predates the slug-named namespace. The frontend
+#: carries the same alias (utils/basemap-presence.ts
+#: ``PRESENCE_PREFIX_ALIASES``); the admin preview strips by it.
+_PRESENCE_PREFIX_ALIASES: dict[str, str] = {"transport-stops": "wd-basemap-transit-"}
 
 
-def transport_basemap_block(colors: dict[str, str] | None = None) -> dict[str, Any]:
-    """The transport overlay's BASEMAP presence (config ``basemap``).
+def presence_layer_prefix(slug: str) -> str:
+    """The ``wd-basemap-<family>-`` prefix of a POI family's passive
+    presence layers — the always-replace namespace (frontend twin:
+    ``presenceLayerPrefix`` in utils/basemap-presence.ts). Takes the
+    family's slug (``transport-stops``) or its presence row's
+    (``transport-stops-presence``)."""
+    family = slug.removesuffix("-presence")
+    return _PRESENCE_PREFIX_ALIASES.get(family, f"wd-basemap-{family}-")
+
+
+_TRANSPORT_BASEMAP_PREFIX = presence_layer_prefix("transport-stops")[:-1]
+
+
+def _presence_plate(
+    *,
+    layer_id: str,
+    source: str,
+    source_layer: str,
+    minzoom: int,
+    filt: list[Any],
+    ring: Any,
+    radius: tuple[float, ...],
+) -> dict[str, Any]:
+    """Selection plate of a PASSIVE presence icon (owner 2026-11-27: a
+    selected presence icon gets the same ring a selected overlay icon
+    gets — the toggle itself stays off).
+
+    The overlay plate's own contract (see the transport overlay's
+    ``_selected_plate`` and the accommodations overlay twin): white
+    circle + ring, BOTH opacities gated on ``feature-state``
+    ``selected``. The frontend's click pipeline (WdMapView
+    ``setSelectedPoi``) writes that state to whatever feature was
+    clicked — presence icons included — so the ring needs no frontend
+    change. The stroke opacity is gated separately: it defaults to 1
+    and would render for EVERY feature (the 2026-11-07 ring storm).
+    Placed directly BELOW its icon layer — the icon always draws
+    (allow-overlap) and paints over the plate.
+    """
+    return {
+        "//#id": "Selection plate: white circle + ring, opacity-gated on "
+        "feature-state selected — the same ring a selected overlay icon gets",
+        "id": layer_id,
+        "type": "circle",
+        "source": source,
+        "source-layer": source_layer,
+        "minzoom": minzoom,
+        "filter": filt,
+        "paint": {
+            "circle-blur": 0,
+            "circle-color": "#ffffff",
+            "circle-opacity": [
+                "case",
+                ["boolean", ["feature-state", "selected"], False],
+                1,
+                0,
+            ],
+            # stroke opacity MUST be gated separately — it defaults to 1
+            # and renders for EVERY feature regardless of circle-opacity
+            "circle-stroke-opacity": [
+                "case",
+                ["boolean", ["feature-state", "selected"], False],
+                1,
+                0,
+            ],
+            "circle-stroke-color": ring,
+            "circle-stroke-width": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                14,
+                1.5,
+                19,
+                2.5,
+            ],
+            "circle-radius": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                *radius,
+            ],
+        },
+    }
+
+
+def transport_presence_style(colors: dict[str, str] | None = None) -> dict[str, Any]:
+    """The transport family's PASSIVE basemap presence (``role=presence``).
 
     "My POIs, not the basemap's" (owner 2026-11-17): stations show in
-    every basemap when the overlay is OFF — later (z13 vs the overlay's
-    z11) and simpler (station mono glyph + name label, no bands, no
-    hover/selection) — replacing the basemaps' native transit POIs
-    (OFM ``poi_transit``, MTK ``wd-station*`` — both removed). The
-    style endpoint composes this block into basemap documents at SERVE
-    time (map_seed stays fixtures-only; admin edits survive) and the
+    the Wodore vector basemaps when the interactive overlay is OFF —
+    zoomed-in only (icons z14, names z15: the overlay's own icon and
+    label floors, so a station looks the same whether the overlay is
+    on or off) — replacing the basemaps' native transit POIs (OFM
+    ``poi_transit``, MTK ``wd-station*``: both removed). The style
+    endpoint composes the row's document into basemap documents at
+    SERVE time (api.basemap_composition; admin edits survive) and the
     CI dump composes the same way, so the validated document is the
     served document.
 
-    ``slot`` rides the basemap's overlay-slot anchors (one mechanism
-    for overlays and blocks — ``anchors["routes"]["before"]``, the
-    freed native transit-POI slot); :func:`compose_basemap_style`
-    falls back to the label band for anchorless basemaps.
+    Placement: directly below the keeper-label band — icons behind
+    every label from the first keeper layer up (place and peak labels
+    from rank 3, water labels from rank 3); road, park, contour and
+    rank-4/5 place/water labels yield to them. A selection
+    plate under the icon gives a selected passive station the same
+    ring a selected overlay station gets. While the overlay is on it
+    replaces the presence (the frontend hides the family's
+    ``wd-basemap-transit-*`` namespace — the legacy alias of this
+    family's prefix).
     """
     palette = {**TRANSPORT_FALLBACK_COLORS, **(colors or {})}
     prefix = TRANSPORT_BASEMAP_SPRITE_ID + ":"
@@ -2872,20 +2986,15 @@ def transport_basemap_block(colors: dict[str, str] | None = None) -> dict[str, A
     icon_image.append(prefix + "mono/transport.transport")
 
     return {
-        # The block rides the basemap's OVERLAY-SLOT ANCHORS (one
-        # mechanism for overlays and blocks alike — owner 2026-11-18):
-        # the composer inserts before anchors["routes"].before — the
-        # freed native transit-POI slot, seeded per basemap in
-        # ``anchors`` and served through the catalog (which also
-        # supersedes the frontend's legacy anchor on the removed
-        # wd-station-label). Anchorless basemaps fall back to the
-        # label band (see compose_basemap_style).
-        "slot": "routes",
-        # The always-replace namespace, explicit for the frontend (the
-        # layer-id prefix cannot be derived from the overlay slug —
-        # hide every `${id_prefix}*` layer while this overlay is
-        # active).
-        "id_prefix": _TRANSPORT_BASEMAP_PREFIX + "-",
+        # A PRESENCE-layer style document (role=presence row, one per
+        # family, composed into the basemaps linked to it): spec-legal
+        # root keys only — the layer IDS carry the always-replace
+        # namespace (wd-basemap-transit-*), and compose_basemap_style
+        # places it directly below the keeper-label band (a presence
+        # block never carries a slot).
+        "version": 8,
+        "name": "transport-stops-presence",
+        "glyphs": GLYPHS,
         "sprite": [
             {
                 "id": TRANSPORT_BASEMAP_SPRITE_ID,
@@ -2899,18 +3008,39 @@ def transport_basemap_block(colors: dict[str, str] | None = None) -> dict[str, A
                 "encoding": "mlt",
                 "minzoom": 11,
                 "maxzoom": 14,
+                # The SAME stable identity the interactive overlay
+                # promotes: a click on a passive station icon must
+                # resolve to the same place the overlay's popup opens
+                # (feature.id = onestop_id, not the geometry index).
+                "promoteId": "onestop_id",
             }
         },
         "layers": [
+            _presence_plate(
+                layer_id=f"{_TRANSPORT_BASEMAP_PREFIX}-stations-selected",
+                source="wd-basemap-transitland-stops",
+                source_layer="stops",
+                minzoom=14,
+                # the icon layer's own filter
+                filt=["==", ["get", "location_type"], 1],
+                # the overlay plate's ring and its exact radius ladder —
+                # same icon size (0.35 at z14), so the same ring
+                ring=_TRANSPORT_SELECTED_RING,
+                radius=(14, 10, 16, 12, 19, 15),
+            ),
             {
                 # stations only — the interchange hierarchy reads even
-                # without the overlay; z13+ = later than the overlay's
-                # z11 floor (owner: much later, simpler)
+                # without the overlay. Presence floors MATCH the
+                # overlay's icon band (icons z14, names z15) so a
+                # station looks the same zoomed in whether the overlay
+                # is on or off; before, the passive presence came a
+                # zoom earlier than the overlay (owner 2026-11-26:
+                # "basemap transport icons are coming too early").
                 "id": f"{_TRANSPORT_BASEMAP_PREFIX}-stations",
                 "type": "symbol",
                 "source": "wd-basemap-transitland-stops",
                 "source-layer": "stops",
-                "minzoom": 13,
+                "minzoom": 14,
                 "filter": ["==", ["get", "location_type"], 1],
                 "layout": {
                     "icon-image": icon_image,
@@ -2918,11 +3048,26 @@ def transport_basemap_block(colors: dict[str, str] | None = None) -> dict[str, A
                         "interpolate",
                         ["linear"],
                         ["zoom"],
-                        13,
-                        0.3,
-                        16,
-                        0.45,
+                        14,
+                        0.35,
+                        17,
+                        0.5,
                     ],
+                    # ICONS ALWAYS DRAW — AND CLAIM SPACE. Transitland
+                    # types bus stops as ``location_type`` 1 too — 46
+                    # "stations" within one z14 tile around Interlaken
+                    # Ost — and a collision-active icon was culled down
+                    # to 5 placed (owner report: the main station losing
+                    # to a bus stop). allow-overlap: no icon is ever
+                    # culled, by another icon or by a label. NO
+                    # ignore-placement (owner 2026-11-27: "icon is behind
+                    # label of street"): the icon takes collision space,
+                    # so the minor labels placed after it — the block
+                    # sits right below the keeper band — yield to it,
+                    # exactly like the interactive overlay's icons. The
+                    # major city/peak labels are placed before it and
+                    # still paint over it.
+                    "icon-allow-overlap": True,
                 },
                 "paint": {
                     "icon-color": _transport_color_expr(palette, subset=True),
@@ -2932,14 +3077,22 @@ def transport_basemap_block(colors: dict[str, str] | None = None) -> dict[str, A
                 },
             },
             {
-                # name label from z14, mirroring the OFM POI label
-                # conventions (anchor left, offset, Barlow+Noto, pale
-                # halo) — "close to what the OSM layer did"
+                # the station NAME — decoration that still claims its
+                # space: the block sits right below the keeper band, so
+                # the minor labels (roads, water, lesser places) placed
+                # after it yield to a name too, as they do to the
+                # overlay's labels. No icon is ever evicted by a name —
+                # icons always draw (allow-overlap above). Names declutter
+                # each other; rail/metro stations sort FIRST so their
+                # names win a crowded tile over bus-stop "stations".
                 "id": f"{_TRANSPORT_BASEMAP_PREFIX}-stations-label",
                 "type": "symbol",
                 "source": "wd-basemap-transitland-stops",
                 "source-layer": "stops",
-                "minzoom": 14,
+                # names one zoom LATER than the icons, and at the
+                # overlay's label floor (owner: "show basemap transport
+                # labels later")
+                "minzoom": 15,
                 "filter": ["==", ["get", "location_type"], 1],
                 "layout": {
                     "text-field": ["coalesce", ["get", "stop_name"], ""],
@@ -2948,14 +3101,31 @@ def transport_basemap_block(colors: dict[str, str] | None = None) -> dict[str, A
                         "interpolate",
                         ["linear"],
                         ["zoom"],
-                        14,
+                        15,
                         10,
-                        16,
+                        17,
                         12,
                     ],
                     "text-anchor": "left",
                     "text-offset": [0.9, 0],
-                    "text-max-width": 9,
+                    # FULL profile only (symbol-sort-key is outside the
+                    # subset whitelist): rail (2) / metro (1) stations
+                    # before tram (0) before everything else
+                    # (a mode is "present" when ANY of its four
+                    # delimiter-position checks matches — see
+                    # _route_type_conditions)
+                    "symbol-sort-key": [
+                        "case",
+                        [
+                            "any",
+                            *_route_type_conditions(2, subset=True),
+                            *_route_type_conditions(1, subset=True),
+                        ],
+                        0,
+                        ["any", *_route_type_conditions(0, subset=True)],
+                        1,
+                        2,
+                    ],
                 },
                 "paint": {
                     "text-color": "hsla(220, 14%, 42%, 1)",
@@ -2966,6 +3136,219 @@ def transport_basemap_block(colors: dict[str, str] | None = None) -> dict[str, A
             },
         ],
     }
+
+
+def accommodations_presence_style() -> dict[str, Any]:
+    """The accommodations family's PASSIVE basemap presence.
+
+    Owner contract (2026-11-23): zoomed-in only (z10 floor — later
+    than the interactive overlay's z5 clusters), ALWAYS the mono icon
+    in the category color (SDF tint, no per-kind icon art), name
+    labels from z15. Icons always draw and never claim space — the
+    accommodations overlay's own 2026-11-23 exemption, mirrored (the
+    transport presence claims instead, like ITS overlay). The block is
+    composed directly below the keeper-label band — labels from the
+    first keeper layer up stay on top, the rest yield (see
+    compose_basemap_style). The layer ids carry the always-replace
+    namespace the
+    frontend hides while the interactive overlay is toggled on.
+    """
+    prefix = presence_layer_prefix("accommodations")
+    return {
+        "version": 8,
+        "name": "accommodations-presence",
+        "glyphs": GLYPHS,
+        "sprite": [
+            {
+                "id": ACCOMMODATIONS_SPRITE_ID,
+                "url": "{{env:MARTIN_TILE_URL}}/sdf_sprite/accommodation",
+            }
+        ],
+        "sources": {
+            "wd-basemap-accommodations": {
+                "type": "vector",
+                "tiles": [
+                    (
+                        "{{env:MARTIN_TILE_URL}}/geoplaces/{z}/{x}/{y}.mlt"
+                        + ACCOMMODATIONS_TILE_QUERY
+                    )
+                ],
+                "encoding": "mlt",
+                "minzoom": 5,
+                "maxzoom": 14,
+                # same stable identity as the interactive overlay
+                "promoteId": "slug",
+            }
+        },
+        "layers": [
+            _presence_plate(
+                layer_id=f"{prefix}selected",
+                source="wd-basemap-accommodations",
+                source_layer="geoplaces",
+                minzoom=10,
+                # the icons layer's own unclustered filter
+                filt=["<=", ["get", "count"], 1],
+                # the overlay plate's ring: the icon's category color
+                # (feature-state color), the fixed fallback
+                ring=[
+                    "case",
+                    ["boolean", ["feature-state", "color"], False],
+                    ["feature-state", "color"],
+                    "#2673bf",
+                ],
+                # the overlay plate's ladder is cut for its large icons;
+                # these icons are 0.22 → 0.38, so ~28 px per unit of
+                # icon-size (the transport plate's ratio) gives the ring
+                radius=(10, 6.5, 13, 8.5, 16, 11, 20, 13),
+            ),
+            {
+                "//#id": "z10+ mono icons in the category color — "
+                "ALWAYS drawn (allow-overlap + ignore-placement: a "
+                "collision-active icon was culled by its neighbours "
+                "when zoomed in; an icon never claims space either, so "
+                "it evicts nothing — the accommodations overlay's own "
+                "2026-11-23 exemption, mirrored; the transport presence "
+                "claims instead, like ITS overlay). Names live in the "
+                "label layer",
+                "id": f"{prefix}icons",
+                "type": "symbol",
+                "source": "wd-basemap-accommodations",
+                "source-layer": "geoplaces",
+                "minzoom": 10,
+                "filter": ["<=", ["get", "count"], 1],
+                "layout": {
+                    # mono only at every zoom (owner: "always with mono
+                    # icon") — the SDF sheet tints with icon-color
+                    "icon-image": [
+                        "coalesce",
+                        [
+                            "image",
+                            [
+                                "concat",
+                                ACCOMMODATIONS_SPRITE_ID + ":mono/amenity.",
+                                ["get", "category_identifier"],
+                            ],
+                        ],
+                        [
+                            "image",
+                            ACCOMMODATIONS_SPRITE_ID
+                            + ":mono/amenity.accommodation.unknown",
+                        ],
+                    ],
+                    "icon-size": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        10,
+                        0.22,
+                        13,
+                        0.3,
+                        16,
+                        0.38,
+                    ],
+                    "icon-allow-overlap": True,
+                    "icon-ignore-placement": True,
+                },
+                "paint": {
+                    "icon-color": [
+                        "coalesce",
+                        ["get", "color"],
+                        "#718096",
+                    ],
+                    "icon-halo-color": "#ffffff",
+                    "icon-halo-width": _size_ladder(_AMENITY_HALO_STOPS),
+                    "icon-halo-blur": 0,
+                },
+            },
+            {
+                "//#id": "names from z15 — importance-sorted so the "
+                "notable places win; they claim their space (minor "
+                "labels yield) and declutter each other; no icon is "
+                "ever evicted by a name (icons always draw)",
+                "id": f"{prefix}labels",
+                "type": "symbol",
+                "source": "wd-basemap-accommodations",
+                "source-layer": "geoplaces",
+                "minzoom": 15,
+                "filter": ["<=", ["get", "count"], 1],
+                "layout": {
+                    "text-field": ["coalesce", ["get", "name"], ""],
+                    "text-font": [
+                        "Barlow Semi Condensed Regular",
+                        "Noto Sans Regular",
+                    ],
+                    "text-size": [
+                        "interpolate",
+                        ["linear"],
+                        ["zoom"],
+                        15,
+                        10,
+                        17,
+                        12,
+                    ],
+                    "text-anchor": "left",
+                    "text-offset": [0.9, 0],
+                    # ascending sort with negated importance → the
+                    # MOST important places first → they win collision
+                    "symbol-sort-key": ["-", 0, ["get", "importance"]],
+                },
+                "paint": {
+                    "text-color": "hsla(220, 14%, 42%, 1)",
+                    "text-halo-blur": 0.5,
+                    "text-halo-color": "rgba(242, 247, 244, 0.9)",
+                    "text-halo-width": 1,
+                },
+            },
+        ],
+    }
+
+
+# Basemap label layers that render OVER composed POI blocks — major
+# cities (place ranks 1–2) and ALL peak labels: the band the frontend
+# keeps interactive overlays below (its KEEPER_LABEL_PREFIXES) and the
+# admin preview inserts overlays below (owner 2026-11-23: icons render
+# BEHIND the main labels). ONE definition for every backend insertion.
+#
+# Deliberately NOT extended with Liberty-style ids (peak-rank*,
+# label_city*): the one Liberty-derived basemap (wd-outdoor-base-ofm-hill,
+# the hidden fallback) orders its labels the other way round — peaks
+# first, countries last — so "before the first keeper layer" IS the
+# bottom of its label stack. Listing those ids would move nothing for
+# presence there and would drag INTERACTIVE overlays off their anchor
+# (highway-name-path) below every label. Presence keeps the
+# first-text-layer fallback on that basemap: its icons draw under the
+# labels (known limitation, 2026-11-28).
+KEEPER_LABEL_PREFIXES: tuple[str, ...] = (
+    "place_point_label_rank_1",
+    "place_point_label_rank_2",
+    "place_peak_label_",
+)
+
+
+#: Bump on EVERY change to how a basemap is composed from its rows —
+#: compose_basemap_style, the keeper band above, a presence style's
+#: layer structure. api.basemap_composition folds it into the style
+#: version token and the body-cache digest, so a composition change
+#: rotates ``?v=`` even when no row's data changed (otherwise an
+#: immutable URL could serve the previous stacking for up to a year).
+#: Same pattern as the tile sources' ``revision`` (tile_assets.py).
+STYLE_COMPOSITION_REVISION = 2  # 2: below the keeper band, selection plates
+
+
+def keeper_label_index(layers: list[dict[str, Any]]) -> int | None:
+    """Index of the FIRST keeper-label layer in a style's layer list.
+
+    The bottom of the band a POI block must stay below — ``None`` when
+    the style has no keeper labels (raster/external basemaps).
+    """
+    return next(
+        (
+            index
+            for index, layer in enumerate(layers)
+            if str(layer.get("id", "")).startswith(KEEPER_LABEL_PREFIXES)
+        ),
+        None,
+    )
 
 
 def compose_basemap_style(
@@ -2983,8 +3366,18 @@ def compose_basemap_style(
     * each block inserts before its SLOT's anchor —
       ``anchors[block["slot"]]["before"]``, the SAME insertion-point
       system the frontend uses for overlays (one mechanism, no
-      per-basemap name lists in the block). No anchor for the slot
-      (anchorless basemap): before the first symbol layer carrying a
+      per-basemap name lists in the block). No anchor for the slot (the
+      presence rows carry none): directly BELOW the keeper-label band
+      (``KEEPER_LABEL_PREFIXES``) — where the frontend places interactive
+      overlays, so a passive presence reads like its overlay (owner
+      2026-11-27: a station icon hid behind a street name). The band
+      starts at the FIRST keeper layer in style order — in the MTK
+      basemaps ``place_peak_label_rank_3``: everything above that index
+      (place and peak labels from rank 3 up, there also the water labels
+      from rank 3 up) is placed before the icons and stays on top;
+      everything in between moves below them — roads, paths, parks,
+      contour labels, place and water ranks 4–5. No keeper labels
+      (external basemap): before the first symbol layer carrying a
       ``text-field`` (the label band — POIs belong there); no symbols
       at all: append.
 
@@ -3013,6 +3406,11 @@ def compose_basemap_style(
                 ids = [layer.get("id") for layer in doc["layers"]]
                 if slot_anchor["before"] in ids:
                     index = ids.index(slot_anchor["before"])
+        if index is None:
+            # keeper band first, then the label band (see docstring)
+            keeper = keeper_label_index(doc["layers"])
+            if keeper is not None:
+                index = keeper
         if index is None:
             # label-band fallback: first symbol layer with a text field
             for i, layer in enumerate(doc["layers"]):

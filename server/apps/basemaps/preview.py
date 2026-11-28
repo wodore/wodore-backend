@@ -30,7 +30,11 @@ from server.apps.basemaps.resolution import (
     resolve_tokens,
     substitute_env_tree,
 )
-from server.apps.basemaps.seed_lib import compose_basemap_style
+from server.apps.basemaps.seed_lib import (
+    KEEPER_LABEL_PREFIXES,
+    compose_basemap_style,
+    presence_layer_prefix,
+)
 from server.apps.basemaps.validation import run_styl, validate_subset_style
 
 
@@ -179,12 +183,20 @@ def _compose_overlay_on_basemap(
     # as literal tokens MapLibre can't fetch)
     basemap_doc = dict(basemap.style)
 
-    all_blocks, _inputs = basemap_composition(basemap)
+    # A PRESENCE row edits its own layers: the composition must not
+    # also contribute the stored copy of that row, or every layer id
+    # appears twice once the editor's document is appended below.
+    editing_presence = overlay_layer.role == MapLayer.Role.presence
+    all_blocks, _inputs = basemap_composition(
+        basemap, exclude_pk=overlay_layer.pk if editing_presence else None
+    )
     if all_blocks:
         basemap_doc = compose_basemap_style(
             basemap_doc, all_blocks, anchors=basemap.anchors
         )
-    overlay_prefix = _overlay_block_prefix(overlay_layer)
+    # An interactive overlay replaces its family's presence (stripped by
+    # prefix); a presence row replaces itself (excluded above).
+    overlay_prefix = "" if editing_presence else _overlay_block_prefix(overlay_layer)
     if overlay_prefix:
         basemap_doc["layers"] = [
             layer
@@ -265,10 +277,45 @@ def _compose_overlay_on_basemap(
                 }
             )
         basemap_doc.setdefault("sprite", []).append(sprite)
-    # Overlay layers append at the END (above everything — the frontend
-    # appends overlay layers via addLayer which places them on top)
-    for layer in overlay_doc.get("layers") or []:
-        basemap_doc.setdefault("layers", []).append(layer)
+    # Overlay layers insert BELOW the main-label strata (owner
+    # 2026-11-23: icons render BEHIND major city/peak labels — the
+    # labels paint over the icons instead of the reverse). The first
+    # keeper-label layer (place rank 1/2, peaks — ONE definition shared
+    # with the serve-time composition) marks the insertion point;
+    # appended at the end only when no keeper exists.
+    overlay_layers = list(overlay_doc.get("layers") or [])
+    target_layers = basemap_doc.setdefault("layers", [])
+    insert_at = next(
+        (
+            i
+            for i, layer in enumerate(target_layers)
+            if str(layer.get("id", "")).startswith(KEEPER_LABEL_PREFIXES)
+        ),
+        len(target_layers),
+    )
+    if editing_presence:
+        # Serve order is slug order: the edited row's layers go BELOW the
+        # composed families whose slug sorts after it (editing the
+        # accommodations presence puts it under transport, as served) and
+        # above the rest — not simply on top of the other family.
+        later = list(
+            basemap.presence_layers.filter(is_active=True)
+            .exclude(pk=overlay_layer.pk)
+            .filter(slug__gt=overlay_layer.slug)
+            .values_list("slug", flat=True)
+        )
+        insert_at = min(
+            (
+                i
+                for i, layer in enumerate(target_layers)
+                if any(
+                    str(layer.get("id", "")).startswith(presence_layer_prefix(slug))
+                    for slug in later
+                )
+            ),
+            default=insert_at,
+        )
+    target_layers[insert_at:insert_at] = overlay_layers
     if overlay_doc.get("glyphs"):
         basemap_doc.setdefault("glyphs", overlay_doc["glyphs"])
 
@@ -283,11 +330,13 @@ def _compose_overlay_on_basemap(
 
 
 def _overlay_block_prefix(layer: MapLayer) -> str:
-    """The wd-basemap-<slug>-* prefix from the overlay's config.basemap."""
-    block = (layer.config or {}).get("basemap")
-    if isinstance(block, dict):
-        return str(block.get("id_prefix", ""))
-    return ""
+    """The ``wd-basemap-<family>-`` prefix of the overlay family's PASSIVE
+    presence layers (seed_lib ``presence_layer_prefix`` — the namespace
+    the frontend's always-replace contract hides while the overlay is
+    on). The preview strips it from the composed basemap so the
+    previewed overlay replaces its presence, as on the live map. A
+    family without a presence simply has no layer under its prefix."""
+    return presence_layer_prefix(layer.slug)
 
 
 @require_POST

@@ -447,7 +447,7 @@ def _amenity_overlay_layers() -> list[dict[str, Any]]:
                             "mapProperty": "category_identifier",
                             "filterExpression": "in",
                         }
-                    ]
+                    ],
                     # NOTE: no config.clustering hint — SERVER-side
                     # clustering (count>1 features from the geoplaces
                     # function); a client-side hint would double-cluster.
@@ -600,7 +600,7 @@ LAYERS: list[dict[str, Any]] = [
                     "mapProperty": "category_identifier",
                     "filterExpression": "in",
                 }
-            ]
+            ],
             # NOTE: no config.clustering hint — the clustering is
             # SERVER-side (the geoplaces function source emits count>1
             # cluster features); a client-side hint would double-cluster.
@@ -643,13 +643,6 @@ LAYERS: list[dict[str, Any]] = [
             {"slug": "transport", "use": "legend"},
         ],
         "config": {
-            # The overlay's BASEMAP presence ("my POIs, not the
-            # basemap's" — owner 2026-11-17): the style endpoint and
-            # the CI dump compose this block into every basemap at
-            # serve/dump time; the frontend hides the wd-basemap-transit-*
-            # layers while this overlay is active (always-replace by id
-            # namespace — no replaces list to maintain).
-            "basemap": lib.transport_basemap_block(),
             "filters": [
                 {
                     "id": "transportTypes",
@@ -658,20 +651,46 @@ LAYERS: list[dict[str, Any]] = [
                     "category": "map.transport",
                     "defaultValue": [],
                     "mapLayers": ["transport-stops"],
-                    # route_types_basic is Transitland's JSON-string array
-                    # ("[2, 3]" — basic GTFS types); option values are the
-                    # category identifiers. PRESENCE semantics: a stop
-                    # matches a mode when the array contains it — the
-                    # frontend's generic filter applies exact membership
-                    # on the whole property value, so this needs its
-                    # presence mode (`filterExpression: in`, currently
-                    # ignored by applyFilter) — frontend follow-up, the
-                    # catalog data is final.
-                    "mapProperty": "route_types_basic",
                     "filterExpression": "in",
                 }
-            ],
+            ]
         },
+    },
+    {
+        # ── PRESENCE row: the transport family's passive basemap
+        # presence (composed by basemap_composition() at serve time;
+        # layer ids carry the always-replace namespace the frontend
+        # hides while the interactive overlay is on).
+        "slug": "transport-stops-presence",
+        "role": MapLayer.Role.presence,
+        "name": "Transport stops (basemap presence)",
+        "description": (
+            "Passive basemap presence of the transport overlay: "
+            "stations as mono icons in mode colors from z14, names "
+            "from z15 — directly below the major labels: minor "
+            "labels yield to the icons, the major ones stay on top. "
+            "No slot: a presence always takes the keeper-band placement."
+        ),
+        "min_zoom": 14,
+        "style": lib.transport_presence_style(),
+        "is_active": True,
+        "attributions": ["transitland", "openstreetmap"],
+    },
+    {
+        "slug": "accommodations-presence",
+        "role": MapLayer.Role.presence,
+        "name": "Accommodations (basemap presence)",
+        "description": (
+            "Passive basemap presence of the accommodations overlay: "
+            "mono icons in category colors from z10, name labels "
+            "from z15 — icons always draw and never claim space (the "
+            "overlay's 2026-11-23 exemption), directly below the major "
+            "labels."
+        ),
+        "min_zoom": 10,
+        "style": lib.accommodations_presence_style(),
+        "is_active": True,
+        "attributions": ["openstreetmap"],
     },
     {
         "slug": "ch.swisstopo.swisstlm3d-wanderwege",
@@ -871,6 +890,10 @@ LAYERS: list[dict[str, Any]] = [
     # saved selections keep resolving). Order drives the picker sort.
     {
         "slug": "wd-outdoor-base-mtk-hill",
+        "presence_layers": [
+            "transport-stops-presence",
+            "accommodations-presence",
+        ],
         "role": MapLayer.Role.basemap,
         "name": "Wodore Outdoor",
         "description": (
@@ -886,9 +909,9 @@ LAYERS: list[dict[str, Any]] = [
         # Overlay-slot anchors (catalog-wins over the frontend's legacy
         # map — which still anchors routes on the REMOVED wd-station-
         # label): routes at the transit-POI band, places under the
-        # rank-2 place labels. Also drives the serve-time basemap-block
-        # composition (config.basemap blocks insert at their slot's
-        # anchor — one mechanism, no per-basemap name lists).
+        # rank-2 place labels. Interactive overlays insert at these
+        # anchors; the passive presence does not use them — it is
+        # composed directly below the keeper-label band.
         "anchors": {
             "routes": {"before": "road_path_oneway_symbol"},
             "places": {"before": "place_point_label_rank_2"},
@@ -902,6 +925,10 @@ LAYERS: list[dict[str, Any]] = [
         # but active: mapcompare + fallback chains resolve it. Re-added
         # for the hillshade A/B decision (PR #375 lane).
         "slug": "wd-outdoor-base-mtk",
+        "presence_layers": [
+            "transport-stops-presence",
+            "accommodations-presence",
+        ],
         "role": MapLayer.Role.basemap,
         "name": "Wodore Outdoor (server relief)",
         "description": (
@@ -921,6 +948,10 @@ LAYERS: list[dict[str, Any]] = [
     },
     {
         "slug": "wd-outdoor-base-ofm-hill",
+        "presence_layers": [
+            "transport-stops-presence",
+            "accommodations-presence",
+        ],
         "role": MapLayer.Role.basemap,
         "name": "Wodore Outdoor (OpenFreeMap, client relief)",
         "description": "OpenFreeMap fallback with the original client hillshade.",
@@ -1376,8 +1407,36 @@ class Command(BaseCommand):
         self._sync_parameters(layer, wanted_parameters, params)
         self._sync_categories(layer, parent)
         self._sync_attributions(layer, parent, orgs)
+        self._sync_presence_layers(layer, variant, parent)
 
         return int(was_created), changed
+
+    def _sync_presence_layers(
+        self,
+        layer: MapLayer,
+        variant: dict[str, Any],
+        parent: dict[str, Any],
+    ) -> None:
+        """Set the basemap→presence M2M from the entry's slug refs.
+
+        Explicit opt-in (owner 2026-11-24): entries WITHOUT the key
+        keep their current wiring untouched (admin-edited links
+        survive re-seeds); entries WITH the key set it exactly —
+        the empty list means "no presences" (raster/external
+        basemaps stay clean).
+        """
+        wanted_slugs = variant.get("presence_layers", parent.get("presence_layers"))
+        if wanted_slugs is None:
+            return
+        current = set(layer.presence_layers.values_list("pk", flat=True))
+        targets = set(
+            MapLayer.objects.filter(
+                role=MapLayer.Role.presence, slug__in=wanted_slugs
+            ).values_list("pk", flat=True)
+        )
+        if current == targets:
+            return
+        layer.presence_layers.set(targets)
 
     def _seed_legend(self, slug: str) -> MapLegend | None:
         """Create/update the slug-level legend (shared by all variants)."""

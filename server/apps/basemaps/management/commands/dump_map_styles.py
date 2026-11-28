@@ -55,6 +55,22 @@ def _effective_styl_ignored(variant: dict[str, Any], parent: dict[str, Any]) -> 
     return variant.get("styl_ignored_rules", parent.get("styl_ignored_rules"))
 
 
+def _presence_blocks(layers: list[dict[str, Any]]) -> list[tuple[str, dict[str, Any]]]:
+    """The presence entries of the seed's LAYERS table as ``(slug, style)``
+    pairs — in the SERVE path's order (api.basemap_composition orders the
+    linked rows by slug) and keyed by slug: a style document's ``name`` is
+    optional in the style spec, so a block without one must not drop out
+    of the validated document, and the two families must stack exactly as
+    production stacks them."""
+    return sorted(
+        (entry["slug"], entry["style"])
+        for entry in layers
+        if entry.get("role") == MapLayer.Role.presence
+        and isinstance(entry.get("style"), dict)
+        and entry["style"].get("layers")
+    )
+
+
 class Command(BaseCommand):
     """Write every inline seed style (resolved) to an output directory."""
 
@@ -80,14 +96,12 @@ class Command(BaseCommand):
         out.mkdir(parents=True, exist_ok=True)
         written = 0
         skipped: list[str] = []
-        # Overlay basemap blocks (config.basemap) — the dump must write
-        # the COMPOSED basemap documents (the served shape), or the CI
-        # validators would never see the injected layers.
-        blocks = [
-            parent["config"]["basemap"]
-            for parent in LAYERS
-            if (parent.get("config") or {}).get("basemap")
-        ]
+        # Presence-layer styles (role=presence rows) — the dump must
+        # write the COMPOSED basemap documents (the served shape), or
+        # the CI validators would never see the injected layers. Same
+        # collector as the serve path (Opus B1/B2: one source of
+        # truth); the LAYERS list carries the presence entries.
+        blocks = _presence_blocks(LAYERS)
         for parent in LAYERS:
             variants = [parent, *parent.get("variants", [])]
             for variant in variants:
@@ -99,10 +113,24 @@ class Command(BaseCommand):
                 if style is None:
                     continue
                 if parent.get("role") == MapLayer.Role.basemap and blocks:
-                    anchors = variant.get("anchors", parent.get("anchors"))
-                    style = lib.compose_basemap_style(
-                        deepcopy(style), blocks, anchors=anchors
+                    # mirror the serve path's M2M selection: the
+                    # entry's presence_layers refs (slugs) filter the
+                    # composed blocks; absent key = ALL (dev dump
+                    # convenience — the serve path is authoritative)
+                    wanted = variant.get(
+                        "presence_layers",
+                        parent.get("presence_layers"),
                     )
+                    if wanted is None:
+                        chosen = [style for _slug, style in blocks]
+                    else:
+                        # wanted carries the presence row SLUGS
+                        chosen = [style for slug, style in blocks if slug in wanted]
+                    if chosen:
+                        anchors = variant.get("anchors", parent.get("anchors"))
+                        style = lib.compose_basemap_style(
+                            deepcopy(style), chosen, anchors=anchors
+                        )
                 profile = variant.get(
                     "profile", parent.get("profile", MapLayer.Profile.full)
                 )

@@ -472,6 +472,16 @@ class MapLayer(TimeStampedModel):
     class Role(models.TextChoices):
         basemap = "basemap", _("basemap")
         overlay = "overlay", _("overlay")
+        #: A POI family's PASSIVE basemap presence — ONE full-profile
+        #: layer row per family (slug ``<family>-presence``, no profile
+        #: twins) composed at serve time into the basemaps linked to it
+        #: (presence_layers). Zoomed-in only, mono icons in category
+        #: colors, name labels from high zoom, directly below the
+        #: keeper-label band. Excluded from the public layer catalog;
+        #: the frontend hides the family's always-replace namespace
+        #: (``wd-basemap-<family>-*``) while the interactive overlay
+        #: is toggled on.
+        presence = "presence", _("presence (passive basemap layer)")
 
     class Spec(models.TextChoices):
         low = "low", _("low (weak GPU)")
@@ -555,7 +565,7 @@ class MapLayer(TimeStampedModel):
         choices=Role.choices,
         default=Role.overlay,
         db_index=True,
-        help_text=_("basemap or overlay"),
+        help_text=_("basemap, overlay or presence (passive basemap layer)"),
     )
     name = models.CharField(
         max_length=100,
@@ -652,6 +662,20 @@ class MapLayer(TimeStampedModel):
         help_text=_(
             "Overlay config layout: filters, legend sections, links "
             "(category refs by slug)"
+        ),
+    )
+    presence_layers = models.ManyToManyField(
+        "self",
+        symmetrical=False,
+        blank=True,
+        related_name="presence_basemaps",
+        limit_choices_to={"role": "presence"},
+        help_text=_(
+            "Basemap rows: the presence layers (role=presence) "
+            "composed into this basemap at serve time. EXPLICIT "
+            "opt-in — an empty set composes nothing (raster/external "
+            "basemaps stay clean); the seed wires the wodore vector "
+            "basemap family."
         ),
     )
     interaction = models.JSONField(
@@ -776,7 +800,7 @@ class MapLayer(TimeStampedModel):
                 name="style_xor_style_url",
             ),
             models.CheckConstraint(
-                condition=models.Q(role__in=["basemap", "overlay"]),
+                condition=models.Q(role__in=["basemap", "overlay", "presence"]),
                 name="%(app_label)s_%(class)s_role_valid".replace(
                     "%(app_label)s_%(class)s", "basemaps_maplayer"
                 ),
