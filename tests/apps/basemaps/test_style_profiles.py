@@ -2003,6 +2003,25 @@ class TransportBasemapBlockTests(SimpleTestCase):
             "b-presence",
         ]
 
+    def test_a_revision_less_tile_source_keeps_its_hash(self) -> None:
+        """A function-body revision is a version input only for the tile
+        sources that HAVE one: appending ``revision:0`` for all the others
+        rotated every tile version — and with it every overlay's style
+        token — once on deploy, for nothing but a cold CDN cache."""
+        import hashlib
+        from unittest.mock import patch
+
+        from server.apps.basemaps import tile_assets
+
+        fake: dict[str, dict[str, Any]] = {
+            "plain": {"deps": []},
+            "bumped": {"deps": [], "revision": 3},
+        }
+        with patch.dict(tile_assets.VERSIONED_TILE_SOURCES, fake, clear=True):
+            versions = tile_assets._computed_tile_versions()
+        assert versions["plain"] == hashlib.sha256(b"").hexdigest()[:16]
+        assert versions["bumped"] == hashlib.sha256(b"revision:3").hexdigest()[:16]
+
     def test_compose_anchors_into_the_slot_anchor(self) -> None:
         from server.apps.basemaps.seed_lib import (
             compose_basemap_style,
@@ -2387,6 +2406,69 @@ class TestTransportBasemapServing:
                 .headers["X-Map-Style-Version"]
             )
         assert after != before
+
+    def test_token_folds_the_presence_blocks_asset_versions(self) -> None:
+        """The served body bakes the presence blocks' tile URLs — their
+        ``&v=<asset version>`` included — into the basemap document. A
+        tile-source revision bump must therefore rotate the BASMAP's token
+        too; before, only the body cache moved and the immutable URL kept
+        serving the old body (with the stale tile version) for up to a
+        year."""
+        from unittest.mock import patch
+
+        from django.core.cache import cache
+        from django.core.management import call_command
+        from django.test.client import Client
+
+        from server.apps.basemaps import tile_assets
+
+        call_command("map_seed", verbosity=0)
+        before = (
+            Client()
+            .get("/v1/map/styles/wd-outdoor-base-mtk-hill.json")
+            .headers["X-Map-Style-Version"]
+        )
+        with patch.dict(
+            tile_assets.VERSIONED_TILE_SOURCES["geoplaces"], {"revision": 99}
+        ):
+            cache.delete(tile_assets.ASSET_VERSIONS_CACHE_KEY)
+            after = (
+                Client()
+                .get("/v1/map/styles/wd-outdoor-base-mtk-hill.json")
+                .headers["X-Map-Style-Version"]
+            )
+        cache.delete(tile_assets.ASSET_VERSIONS_CACHE_KEY)
+        assert after != before
+
+    def test_an_edited_presence_row_previews_in_serve_order(self) -> None:
+        """Editing a presence row in the live editor: its layers stack
+        where the serve path puts them — slug order below the keeper band
+        (accommodations below transport) — not simply on top of the other
+        family."""
+        from django.core.management import call_command
+
+        from server.apps.basemaps.models import MapLayer
+        from server.apps.basemaps.preview import _compose_overlay_on_basemap
+
+        call_command("map_seed", verbosity=0)
+        cases = (
+            # edited row, the OTHER family's icon layer, is the edited one below it?
+            ("accommodations-presence", "wd-basemap-transit-stations", True),
+            ("transport-stops-presence", "wd-basemap-accommodations-icons", False),
+        )
+        for edited, other_icon, edited_below in cases:
+            row = MapLayer.objects.get(slug=edited)
+            assert row.style is not None
+            doc, _slug, _warnings = _compose_overlay_on_basemap(
+                dict(row.style), row, "wd-outdoor-base-mtk-hill", "http://tiles.test"
+            )
+            ids = [str(layer.get("id", "")) for layer in doc["layers"]]
+            assert len(ids) == len(set(ids)), edited
+            own = ids.index(row.style["layers"][0]["id"])
+            other = ids.index(other_icon)
+            # a LOWER index is lower in the stack (MapLibre draws the
+            # later layer on top)
+            assert (own < other) is edited_below, (edited, own, other)
 
     def test_presence_rows_stay_out_of_the_public_catalog(self) -> None:
         """Presence rows are composition internals: they leave through

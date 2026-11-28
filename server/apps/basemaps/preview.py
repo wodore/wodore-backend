@@ -293,6 +293,28 @@ def _compose_overlay_on_basemap(
         ),
         len(target_layers),
     )
+    if editing_presence:
+        # Serve order is slug order: the edited row's layers go BELOW the
+        # composed families whose slug sorts after it (editing the
+        # accommodations presence puts it under transport, as served) and
+        # above the rest — not simply on top of the other family.
+        later = list(
+            basemap.presence_layers.filter(is_active=True)
+            .exclude(pk=overlay_layer.pk)
+            .filter(slug__gt=overlay_layer.slug)
+            .values_list("slug", flat=True)
+        )
+        insert_at = min(
+            (
+                i
+                for i, layer in enumerate(target_layers)
+                if any(
+                    str(layer.get("id", "")).startswith(presence_layer_prefix(slug))
+                    for slug in later
+                )
+            ),
+            default=insert_at,
+        )
     target_layers[insert_at:insert_at] = overlay_layers
     if overlay_doc.get("glyphs"):
         basemap_doc.setdefault("glyphs", overlay_doc["glyphs"])

@@ -418,7 +418,7 @@ def _style_url(
         url = style_endpoint_url(layer.slug, layer.spec, profile=profile)
         if token is None:
             _blocks, block_inputs = basemap_composition(layer)
-            token = style_version(layer, extra_inputs=block_inputs)
+            token = style_version(layer, extra_inputs=block_inputs, blocks=_blocks)
         if token:
             separator = "&" if "?" in url else "?"
             url = f"{url}{separator}v={token}"
@@ -435,6 +435,7 @@ def style_version(
     epoch: str | None = None,
     now: datetime | None = None,
     extra_inputs: list[str] | None = None,
+    blocks: list[dict[str, Any]] | None = None,
 ) -> str | None:
     """URL version token for one layer's style documents (``?v=``).
 
@@ -451,6 +452,11 @@ def style_version(
     they are distinct URLs (``mode`` query) with distinct cache
     entries, re-keyed by the same inputs.
 
+    ``blocks`` are the presence blocks composed into this basemap's
+    body (``basemap_composition``): their asset URLs — tile versions
+    included — are baked into the same served document, so the asset
+    versions they consume are inputs of the token too.
+
     Must be computed from the same memoized ``versions``/``epoch`` as
     the body render in a request (see ``get_map_style``) so an
     immutable stamp can never pair a token with a body it does not
@@ -466,6 +472,17 @@ def style_version(
     if epoch is None:
         epoch = _style_bodies_epoch()
     consumed = consumed_versions(layer.style, versions)
+    # The composed body bakes the presence blocks' tile URLs — their
+    # ``&v=<asset version>`` included — into the same document, so the
+    # blocks' consumed asset versions are inputs of that body too. Folded
+    # as a list: a block's sprite/font slot must not mask the basemap's
+    # own. (Before: a tile-source revision rotated the body cache but not
+    # the token, and the immutable URL kept serving the old body.)
+    if blocks:
+        consumed = {
+            **consumed,
+            "blocks": [consumed_versions(block, versions) for block in blocks],
+        }
     serve_time = layer.serve_time_parameter_values(now)
     if serve_time:
         consumed = {**consumed, **serve_time}
@@ -494,7 +511,7 @@ def _resolved_entry(layer: MapLayer, profile: str | None = None) -> dict[str, An
     own ``profile``/``version``.
     """
     _blocks, block_inputs = basemap_composition(layer)
-    token = style_version(layer, extra_inputs=block_inputs)
+    token = style_version(layer, extra_inputs=block_inputs, blocks=_blocks)
     coverage_bbox = None
     if layer.coverage and layer.coverage.bbox:
         coverage_bbox = list(layer.coverage.bbox)
@@ -1094,7 +1111,11 @@ def get_map_style(request: HttpRequest, slug: str) -> HttpResponse:
     # does not describe. Stale/missing token: current content under the
     # bounded-staleness catalog policy (s-maxage=60), never immutable.
     token = style_version(
-        layer, versions=versions, epoch=epoch, extra_inputs=block_inputs
+        layer,
+        versions=versions,
+        epoch=epoch,
+        extra_inputs=block_inputs,
+        blocks=blocks,
     )
     versioned = token is not None and request.GET.get("v") == token
     cache_control = (

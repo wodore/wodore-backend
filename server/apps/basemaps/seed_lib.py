@@ -2868,8 +2868,11 @@ _PRESENCE_PREFIX_ALIASES: dict[str, str] = {"transport-stops": "wd-basemap-trans
 def presence_layer_prefix(slug: str) -> str:
     """The ``wd-basemap-<family>-`` prefix of a POI family's passive
     presence layers — the always-replace namespace (frontend twin:
-    ``presenceLayerPrefix`` in utils/basemap-presence.ts)."""
-    return _PRESENCE_PREFIX_ALIASES.get(slug, f"wd-basemap-{slug}-")
+    ``presenceLayerPrefix`` in utils/basemap-presence.ts). Takes the
+    family's slug (``transport-stops``) or its presence row's
+    (``transport-stops-presence``)."""
+    family = slug.removesuffix("-presence")
+    return _PRESENCE_PREFIX_ALIASES.get(family, f"wd-basemap-{family}-")
 
 
 _TRANSPORT_BASEMAP_PREFIX = presence_layer_prefix("transport-stops")[:-1]
@@ -2960,8 +2963,10 @@ def transport_presence_style(colors: dict[str, str] | None = None) -> dict[str, 
     CI dump composes the same way, so the validated document is the
     served document.
 
-    Placement: directly below the keeper-label band — icons behind the
-    major city/peak labels, minor labels yielding to them. A selection
+    Placement: directly below the keeper-label band — icons behind
+    every label from the first keeper layer up (place and peak labels
+    from rank 3, water labels from rank 3); road, park, contour and
+    rank-4/5 place/water labels yield to them. A selection
     plate under the icon gives a selected passive station the same
     ring a selected overlay station gets. While the overlay is on it
     replaces the presence (the frontend hides the family's
@@ -3142,8 +3147,10 @@ def accommodations_presence_style() -> dict[str, Any]:
     labels from z15. Icons always draw and never claim space — the
     accommodations overlay's own 2026-11-23 exemption, mirrored (the
     transport presence claims instead, like ITS overlay). The block is
-    composed directly below the keeper-label band: the major labels
-    stay on top. The layer ids carry the always-replace namespace the
+    composed directly below the keeper-label band — labels from the
+    first keeper layer up stay on top, the rest yield (see
+    compose_basemap_style). The layer ids carry the always-replace
+    namespace the
     frontend hides while the interactive overlay is toggled on.
     """
     prefix = presence_layer_prefix("accommodations")
@@ -3362,10 +3369,14 @@ def compose_basemap_style(
       per-basemap name lists in the block). No anchor for the slot (the
       presence rows carry none): directly BELOW the keeper-label band
       (``KEEPER_LABEL_PREFIXES``) — where the frontend places interactive
-      overlays, so a passive presence reads like its overlay: the major
-      labels stay on top and every minor label (roads, water, parks,
-      lesser places) is placed after the icons (owner 2026-11-27: a
-      station icon hid behind a street name). No keeper labels
+      overlays, so a passive presence reads like its overlay (owner
+      2026-11-27: a station icon hid behind a street name). The band
+      starts at the FIRST keeper layer in style order — in the MTK
+      basemaps ``place_peak_label_rank_3``: everything above that index
+      (place and peak labels from rank 3 up, there also the water labels
+      from rank 3 up) is placed before the icons and stays on top;
+      everything in between moves below them — roads, paths, parks,
+      contour labels, place and water ranks 4–5. No keeper labels
       (external basemap): before the first symbol layer carrying a
       ``text-field`` (the label band — POIs belong there); no symbols
       at all: append.

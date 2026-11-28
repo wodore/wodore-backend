@@ -121,7 +121,7 @@ VERSIONED_TILE_SOURCES: dict[str, dict[str, Any]] = {
         # do not move, so without this the ``?v=`` would stay put and
         # every CDN edge / browser kept the old tiles — silently,
         # until an unrelated data edit rotated the hash).
-        #   2 — geoplaces.0078: primary category = the place's stored
+        #   2 — geometries.0078: primary category = the place's stored
         #       kind (season ``mode.standard`` associations win over
         #       ``mode.reduced``) in BOTH the tile function and the
         #       membership function behind ``/v1/geoplaces/near``.
@@ -153,9 +153,13 @@ def _computed_tile_versions() -> dict[str, str]:
             stamp = agg["m"].isoformat() if agg["m"] else "-"
             parts.append(f"{label}:{agg['c']}:{stamp}")
         # A function-body revision is a content input too (see the
-        # geoplaces spec) — absent key = 0, so every other source's
-        # hash is byte-identical to before.
-        parts.append(f"revision:{spec.get('revision', 0)}")
+        # geoplaces spec) — and only for a source that HAS one: a
+        # revision-less source keeps its pre-revision hash byte for byte.
+        # (Appending ``revision:0`` everywhere rotated every tile version
+        # — and with it every overlay's style token — once on deploy, for
+        # nothing but a cold CDN cache.)
+        if spec.get("revision"):
+            parts.append(f"revision:{spec['revision']}")
         versions[source] = hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
     return versions
 
